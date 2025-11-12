@@ -1,0 +1,136 @@
+"""
+Job Models
+
+Database models for analysis jobs and results.
+"""
+
+from datetime import datetime
+from enum import Enum
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+
+
+class JobStatus(str, Enum):
+    """Job status enumeration."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class AnalysisOptions(BaseModel):
+    """Analysis options configuration."""
+    # Main operation modes
+    collect: bool = False
+    gandalf: bool = False
+    reorganise: bool = False
+    process: bool = False
+
+    # Analysis options
+    analysis: bool = False
+    extract_iocs: bool = False
+    keywords_file: Optional[str] = None
+    yara_dir: Optional[str] = None
+
+    # Collection options
+    collect_files: bool = False
+    collect_files_filter: Optional[str] = None
+    vss: bool = False
+    symlinks: bool = False
+    userprofiles: bool = False
+
+    # Processing options
+    timeline: bool = False
+    memory: bool = False
+    memory_timeline: bool = False
+    imageinfo: bool = False
+
+    # Speed/Quality modes
+    auto: bool = False
+    brisk: bool = False
+    exhaustive: bool = False
+    quick: bool = False
+    super_quick: bool = False
+
+    # Output options
+    splunk: bool = False
+    elastic: bool = False
+    navigator: bool = False
+
+    # Security scanning
+    clamav: bool = False
+
+    # Hash comparison
+    nsrl: bool = False
+    metacollected: bool = False
+
+    # Post-processing
+    delete: bool = False
+    archive: bool = False
+
+    # Mount options
+    unmount: bool = False
+
+    # Display
+    lotr: bool = False
+
+
+class JobCreate(BaseModel):
+    """Job creation request."""
+    case_number: str = Field(..., description="Investigation/Case/Incident Number")
+    source_paths: list[str] = Field(..., description="List of source paths to disk/memory images")
+    destination_path: Optional[str] = Field(None, description="Destination directory for output")
+    options: AnalysisOptions = Field(default_factory=AnalysisOptions)
+
+
+class Job(BaseModel):
+    """Analysis job."""
+    id: str = Field(..., description="Unique job ID")
+    case_number: str
+    source_paths: list[str]
+    destination_path: Optional[str]
+    options: AnalysisOptions
+    status: JobStatus = JobStatus.PENDING
+    progress: int = Field(0, ge=0, le=100, description="Progress percentage")
+    log: list[str] = Field(default_factory=list, description="Job log messages")
+    result: Optional[Dict[str, Any]] = Field(None, description="Job results")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    created_at: datetime = Field(default_factory=datetime.now)
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+
+class JobUpdate(BaseModel):
+    """Job update request."""
+    status: Optional[JobStatus] = None
+    progress: Optional[int] = Field(None, ge=0, le=100)
+    log_message: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+class JobListResponse(BaseModel):
+    """Job list response."""
+    jobs: list[Job]
+    total: int
+
+
+class FileSystemItem(BaseModel):
+    """File system item (file or directory)."""
+    name: str
+    path: str
+    is_directory: bool
+    size: Optional[int] = None
+    modified: Optional[datetime] = None
+    is_image: bool = False
+
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }

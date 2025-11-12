@@ -1,0 +1,22 @@
+{
+  "name": "elrond-web-tests",
+  "version": "1.0.0",
+  "description": "Playwright tests for Elrond Web Application",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:chromium": "playwright test --project=chromium",
+    "test:firefox": "playwright test --project=firefox",
+    "test:webkit": "playwright test --project=webkit",
+    "test:mobile": "playwright test --project='Mobile Chrome' --project='Mobile Safari'",
+    "test:e2e": "playwright test e2e/",
+    "test:api": "playwright test api/",
+    "report": "playwright show-report test-results/html",
+    "install": "playwright install --with-deps"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
