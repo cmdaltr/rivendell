@@ -50,6 +50,21 @@ class TechniqueMapper:
             ('T1546.003', 0.95), # WMI Event Subscription
             ('T1047', 0.9),      # Windows Management Instrumentation
         ],
+        'wmi_event_consumer': [
+            ('T1546.003', 0.95), # WMI Event Subscription
+            ('T1047', 0.9),      # Windows Management Instrumentation
+        ],
+        'wmi_event_filter': [
+            ('T1546.003', 0.95), # WMI Event Subscription
+            ('T1047', 0.9),      # Windows Management Instrumentation
+        ],
+        'wmi_binding': [
+            ('T1546.003', 0.95), # WMI Event Subscription
+            ('T1047', 0.9),      # Windows Management Instrumentation
+        ],
+        'wmi_namespace': [
+            ('T1047', 0.85),     # Windows Management Instrumentation
+        ],
         'scheduled_tasks': [
             ('T1053.005', 0.95), # Scheduled Task
             ('T1053', 0.9),      # Scheduled Task/Job
@@ -144,6 +159,52 @@ class TechniqueMapper:
             ('T1098.004', 0.9),  # SSH Authorized Keys
             ('T1098', 0.85),     # Account Manipulation
         ],
+        # Linux Enhanced Artifacts (Feature 3)
+        'systemd_journal': [
+            ('T1070.002', 0.7),  # Clear Linux or Mac System Logs
+        ],
+        'audit_execve': [
+            ('T1059', 0.9),      # Command and Scripting Interpreter
+            ('T1059.004', 0.85), # Unix Shell
+        ],
+        'audit_user': [
+            ('T1136', 0.85),     # Create Account
+            ('T1087', 0.8),      # Account Discovery
+        ],
+        'audit_auth': [
+            ('T1078', 0.85),     # Valid Accounts
+            ('T1110', 0.7),      # Brute Force
+        ],
+        'audit_file': [
+            ('T1005', 0.7),      # Data from Local System
+            ('T1083', 0.75),     # File and Directory Discovery
+        ],
+        'audit_network': [
+            ('T1049', 0.75),     # System Network Connections Discovery
+        ],
+        'docker_container': [
+            ('T1610', 0.9),      # Deploy Container
+            ('T1613', 0.85),     # Container Discovery
+            ('T1611', 0.7),      # Escape to Host
+        ],
+        'docker_image': [
+            ('T1610', 0.85),     # Deploy Container
+        ],
+        'docker_volume': [
+            ('T1610', 0.7),      # Deploy Container
+        ],
+        'zsh_history': [
+            ('T1059.004', 0.95), # Unix Shell
+            ('T1059', 0.9),      # Command and Scripting Interpreter
+        ],
+        'python_history': [
+            ('T1059.006', 0.9),  # Python
+            ('T1059', 0.85),     # Command and Scripting Interpreter
+        ],
+        'package_install': [
+            ('T1072', 0.85),     # Software Deployment
+            ('T1105', 0.75),     # Ingress Tool Transfer
+        ],
 
         # ===== macOS Artifacts =====
 
@@ -161,6 +222,30 @@ class TechniqueMapper:
         ],
         'plist_files': [
             ('T1647', 0.75),     # Plist File Modification
+        ],
+        # macOS Enhanced Artifacts (Feature 3)
+        'unified_log': [
+            ('T1070.002', 0.7),  # Clear Linux or Mac System Logs
+        ],
+        'coreduet_app_usage': [
+            ('T1083', 0.75),     # File and Directory Discovery
+            ('T1087', 0.7),      # Account Discovery
+        ],
+        'coreduet_app_install': [
+            ('T1105', 0.8),      # Ingress Tool Transfer
+        ],
+        'tcc_permission': [
+            ('T1123', 0.9),      # Audio Capture
+            ('T1125', 0.9),      # Video Capture
+            ('T1005', 0.85),     # Data from Local System
+        ],
+        'fsevent': [
+            ('T1083', 0.7),      # File and Directory Discovery
+            ('T1070.004', 0.75), # File Deletion
+        ],
+        'quarantine_event': [
+            ('T1105', 0.85),     # Ingress Tool Transfer
+            ('T1566', 0.6),      # Phishing
         ],
 
         # ===== Network Artifacts =====
@@ -206,6 +291,18 @@ class TechniqueMapper:
         'reconnaissance': {
             'patterns': [r'net user', r'net group', r'net localgroup', r'whoami /all'],
             'techniques': [('T1087', 0.2), ('T1069', 0.2)],  # Account Discovery, Permission Groups Discovery
+        },
+        'wmi_commands': {
+            'patterns': [r'get-wmiobject', r'gwmi', r'invoke-wmimethod', r'register-wmievent', r'set-wmiinstance'],
+            'techniques': [('T1047', 0.25), ('T1546.003', 0.2)],  # WMI, WMI Event Subscription
+        },
+        'docker_commands': {
+            'patterns': [r'docker run', r'docker exec', r'docker create', r'docker-compose'],
+            'techniques': [('T1610', 0.2)],  # Deploy Container
+        },
+        'persistence_commands': {
+            'patterns': [r'crontab', r'at\s+', r'systemctl enable', r'launchctl load'],
+            'techniques': [('T1053', 0.2)],  # Scheduled Task/Job
         },
     }
 
@@ -448,11 +545,19 @@ class TechniqueMapper:
             Confidence threshold (0.0-1.0)
         """
         # High-fidelity artifacts
-        if artifact_type in ['powershell_history', 'scheduled_tasks', 'wmi_consumers']:
+        if artifact_type in [
+            'powershell_history', 'scheduled_tasks', 'wmi_consumers',
+            'wmi_event_consumer', 'wmi_event_filter', 'wmi_binding',
+            'audit_execve', 'docker_container', 'tcc_permission'
+        ]:
             return 0.7
 
         # Medium-fidelity artifacts
-        elif artifact_type in ['prefetch', 'registry_modification']:
+        elif artifact_type in [
+            'prefetch', 'registry_modification',
+            'coreduet_app_install', 'quarantine_event', 'package_install',
+            'systemd_journal', 'audit_user', 'audit_auth'
+        ]:
             return 0.6
 
         # Lower-fidelity artifacts

@@ -24,6 +24,7 @@ function New-Directories {
     New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts -ItemType Directory > $null
     New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts\raw -ItemType Directory > $null
     New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts\raw\wmi -ItemType Directory > $null
+    New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts\raw\powershell -ItemType Directory > $null
     New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts\raw\memory -ItemType Directory > $null
     New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts\raw\registry -ItemType Directory > $null
     New-Item -Path $OutputDirectory\$Hostnames\artefacts\artefacts\raw\evt -ItemType Directory > $null
@@ -340,6 +341,69 @@ function Get-Artefacts {
 
         Write-Host "       Acquired WMI evidence from '$Hostnames'" -ForegroundColor Green
     }
+    function Get-PowerShellHistory {
+        Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
+
+        Write-Progress "Acquiring PowerShell history from '$Hostnames'..."
+
+        # PowerShell 5+ ConsoleHost_history.txt
+        $PSHistoryPaths = @(
+            "$DriveLetter\Users\*\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
+        )
+
+        $HistoryCount = 0
+        ForEach ($PSHistoryPath in $PSHistoryPaths) {
+            ForEach ($PSHistory in Get-ChildItem -Path $PSHistoryPath -ErrorAction SilentlyContinue) {
+                try {
+                    $UserName = $PSHistory.FullName.Split("\")[2]
+                    $DestPath = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw\powershell"
+
+                    if (-Not (Test-Path $DestPath)) {
+                        New-Item -Path $DestPath -ItemType Directory > $null
+                    }
+
+                    Copy-Item $PSHistory.FullName -Destination "$DestPath\$UserName`_ConsoleHost_history.txt" -Force -ErrorAction SilentlyContinue
+                    $Message = "acquired PowerShell history for '$UserName' from '$Hostnames'"
+                    Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "powershell_history" $Message
+                    $HistoryCount++
+                }
+                catch {
+                    Write-Host "      FAILURE: PowerShell history could not be collected." -ForegroundColor Red
+                }
+            }
+        }
+
+        # PowerShell Transcripts
+        $PSTranscriptPaths = @(
+            "$DriveLetter\Users\*\Documents\PowerShell_transcript.*.txt",
+            "$DriveLetter\Users\*\Documents\*.transcript"
+        )
+
+        ForEach ($PSTranscriptPath in $PSTranscriptPaths) {
+            ForEach ($PSTranscript in Get-ChildItem -Path $PSTranscriptPath -ErrorAction SilentlyContinue) {
+                try {
+                    $UserName = $PSTranscript.FullName.Split("\")[2]
+                    $DestPath = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw\powershell"
+
+                    if (-Not (Test-Path $DestPath)) {
+                        New-Item -Path $DestPath -ItemType Directory > $null
+                    }
+
+                    Copy-Item $PSTranscript.FullName -Destination "$DestPath\$UserName`_$($PSTranscript.Name)" -Force -ErrorAction SilentlyContinue
+                    $Message = "acquired PowerShell transcript for '$UserName' from '$Hostnames'"
+                    Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "powershell_transcript" $Message
+                    $HistoryCount++
+                }
+                catch {
+                    Write-Host "      FAILURE: PowerShell transcript could not be collected." -ForegroundColor Red
+                }
+            }
+        }
+
+        if ($HistoryCount -gt 0) {
+            Write-Host "       Acquired PowerShell history and transcripts from '$Hostnames'" -ForegroundColor Green
+        }
+    }
     function Get-Registry { 
         Param ($ShowProgress, $OutputDirectory, $Hostnames)
 
@@ -569,6 +633,7 @@ function Get-Artefacts {
     Get-Volatile $ShowProgress $Memory $OutputDirectory $Hostnames
     Get-Core $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-Wmi $ShowProgress $DriveLetter $OutputDirectory $Hostnames
+    Get-PowerShellHistory $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-Registry $ShowProgress $OutputDirectory $Hostnames
     Get-Winevt $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-Prefetch $ShowProgress $DriveLetter $OutputDirectory $Hostnames

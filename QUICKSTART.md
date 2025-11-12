@@ -12,17 +12,17 @@ cd rivendell
 # Start all services
 docker-compose up -d
 
-# Check status
-docker-compose ps
-
-# View logs
-docker-compose logs -f rivendell
-
 # Access web interface
 open http://localhost:8000
 
 # Access API documentation
 open http://localhost:8000/docs
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f rivendell
 ```
 
 **That's it!** The web interface is now available at http://localhost:8000
