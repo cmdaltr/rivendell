@@ -54,14 +54,17 @@ htmlcov/
 *.7z
 *.enc
 
-# Output directories
+# Output directories (analysis results, not code)
 /evidence/
 /output/
 /acquisitions/
 /collected/
 /processed/
 /timeline/
-/analysis/
+# Note: /analysis/ contains source code, only exclude output subdirs
+/analysis/output/
+/analysis/results/
+/analysis/temp/
 
 # Logs
 *.log

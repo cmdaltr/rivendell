@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Redis for Celery task queue
+  redis:
+    image: redis:7-alpine
+    container_name: elrond-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - elrond-network
+    restart: unless-stopped
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: elrond-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - /mnt:/mnt:ro  # Mount host /mnt for read-only access to images
+      - /media:/media:ro  # Mount host /media for read-only access
+      - elrond_output:/tmp/elrond/output  # Output directory
+      - elrond_uploads:/tmp/elrond/uploads  # Upload directory
+    depends_on:
+      - redis
+    networks:
+      - elrond-network
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Celery worker for background tasks
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: elrond-celery-worker
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+      - /mnt:/mnt:ro
+      - /media:/media:ro
+      - elrond_output:/tmp/elrond/output
+      - elrond_uploads:/tmp/elrond/uploads
+    depends_on:
+      - redis
+      - backend
+    networks:
+      - elrond-network
+    restart: unless-stopped
+    command: celery -A tasks.celery_app worker --loglevel=info
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: elrond-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
+    networks:
+      - elrond-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  elrond_output:
+  elrond_uploads:
+
+networks:
+  elrond-network:
+    driver: bridge
