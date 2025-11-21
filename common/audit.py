@@ -1,5 +1,5 @@
 """
-Unified audit logging for Rivendell DFIR Suite
+Unified audit logging for Rivendell DF Acceleration Suite
 
 Provides consistent audit trail logging across acquisition and analysis modules.
 Eliminates duplicate audit logging code found in 7+ files.
@@ -35,7 +35,7 @@ class AuditLogger:
         self,
         audit_log_path: str,
         meta_log_path: Optional[str] = None,
-        hostname: Optional[str] = None
+        hostname: Optional[str] = None,
     ):
         """
         Initialize audit logger.
@@ -60,7 +60,7 @@ class AuditLogger:
         """Initialize audit log file with headers."""
         if not self.audit_log_path.exists():
             self.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.audit_log_path, 'w', newline='') as f:
+            with open(self.audit_log_path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(self.AUDIT_HEADERS)
 
@@ -68,7 +68,7 @@ class AuditLogger:
         """Initialize metadata log file with headers."""
         if not self.meta_log_path.exists():
             self.meta_log_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.meta_log_path, 'w', newline='') as f:
+            with open(self.meta_log_path, "w", newline="") as f:
                 writer = csv.writer(f)
                 writer.writerow(self.META_HEADERS)
 
@@ -77,7 +77,7 @@ class AuditLogger:
         artefact: str,
         status: str = "collected",
         hostname: Optional[str] = None,
-        timestamp: Optional[datetime] = None
+        timestamp: Optional[datetime] = None,
     ):
         """
         Log an audit event.
@@ -95,15 +95,11 @@ class AuditLogger:
         hostname = hostname or self.hostname or "unknown"
         timestamp_str = get_audit_timestamp(timestamp)
 
-        with open(self.audit_log_path, 'a', newline='') as f:
+        with open(self.audit_log_path, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([timestamp_str, hostname, artefact, status])
 
-    def log_collection(
-        self,
-        artefact: str,
-        hostname: Optional[str] = None
-    ):
+    def log_collection(self, artefact: str, hostname: Optional[str] = None):
         """
         Log artifact collection event.
 
@@ -115,12 +111,7 @@ class AuditLogger:
         """
         self.log_event(artefact, status="collected", hostname=hostname)
 
-    def log_error(
-        self,
-        artefact: str,
-        error_msg: str,
-        hostname: Optional[str] = None
-    ):
+    def log_error(self, artefact: str, error_msg: str, hostname: Optional[str] = None):
         """
         Log error event.
 
@@ -133,10 +124,7 @@ class AuditLogger:
         self.log_event(artefact, status=status, hostname=hostname)
 
     def log_file_with_hash(
-        self,
-        filepath: str,
-        hostname: Optional[str] = None,
-        calculate_hash: bool = True
+        self, filepath: str, hostname: Optional[str] = None, calculate_hash: bool = True
     ):
         """
         Log file collection with SHA256 hash to both audit and metadata logs.
@@ -164,12 +152,7 @@ class AuditLogger:
                 # If hashing fails, log to audit but skip metadata
                 self.log_error(filepath, f"hash_failed: {str(e)}", hostname)
 
-    def log_metadata(
-        self,
-        filepath: str,
-        sha256_hash: str,
-        hostname: Optional[str] = None
-    ):
+    def log_metadata(self, filepath: str, sha256_hash: str, hostname: Optional[str] = None):
         """
         Log file metadata (hash) to metadata log.
 
@@ -183,16 +166,11 @@ class AuditLogger:
 
         hostname = hostname or self.hostname or "unknown"
 
-        with open(self.meta_log_path, 'a', newline='') as f:
+        with open(self.meta_log_path, "a", newline="") as f:
             writer = csv.writer(f)
             writer.writerow([hostname, filepath, sha256_hash])
 
-    def log_batch(
-        self,
-        artifacts: list,
-        status: str = "collected",
-        hostname: Optional[str] = None
-    ):
+    def log_batch(self, artifacts: list, status: str = "collected", hostname: Optional[str] = None):
         """
         Log multiple artifacts efficiently.
 
@@ -208,7 +186,7 @@ class AuditLogger:
         hostname = hostname or self.hostname or "unknown"
         timestamp_str = get_audit_timestamp()
 
-        with open(self.audit_log_path, 'a', newline='') as f:
+        with open(self.audit_log_path, "a", newline="") as f:
             writer = csv.writer(f)
             for artifact in artifacts:
                 writer.writerow([timestamp_str, hostname, artifact, status])
@@ -227,7 +205,7 @@ class AuditLogger:
             {'datetime': '2025-11-12T...', 'hostname': 'HOST01', ...}
         """
         entries = []
-        with open(self.audit_log_path, 'r', newline='') as f:
+        with open(self.audit_log_path, "r", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 entries.append(row)
@@ -244,7 +222,7 @@ class AuditLogger:
             return []
 
         entries = []
-        with open(self.meta_log_path, 'r', newline='') as f:
+        with open(self.meta_log_path, "r", newline="") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 entries.append(row)
@@ -262,8 +240,8 @@ class AuditLogger:
         """
         entries = self.read_meta_log()
         for entry in entries:
-            if entry.get('file_path') == filepath:
-                return entry.get('sha256_hash')
+            if entry.get("file_path") == filepath:
+                return entry.get("sha256_hash")
         return None
 
     def verify_integrity(self, filepath: str) -> bool:
@@ -301,15 +279,15 @@ class AuditLogger:
         """
         entries = self.read_audit_log()
         stats = {
-            'total_entries': len(entries),
-            'unique_artifacts': len(set(e['artefact'] for e in entries)),
-            'unique_hosts': len(set(e['hostname'] for e in entries)),
+            "total_entries": len(entries),
+            "unique_artifacts": len(set(e["artefact"] for e in entries)),
+            "unique_hosts": len(set(e["hostname"] for e in entries)),
         }
 
         # Count by status
         status_counts = {}
         for entry in entries:
-            status = entry.get('status', 'unknown')
+            status = entry.get("status", "unknown")
             status_counts[status] = status_counts.get(status, 0) + 1
 
         stats.update(status_counts)
@@ -318,11 +296,8 @@ class AuditLogger:
 
 # Convenience functions for quick usage
 
-def create_audit_logger(
-    output_dir: str,
-    hostname: str,
-    with_metadata: bool = True
-) -> AuditLogger:
+
+def create_audit_logger(output_dir: str, hostname: str, with_metadata: bool = True) -> AuditLogger:
     """
     Create audit logger with standard paths.
 
@@ -347,12 +322,7 @@ def create_audit_logger(
     return AuditLogger(str(audit_path), str(meta_path), hostname)
 
 
-def log_quick_event(
-    audit_log_path: str,
-    artifact: str,
-    hostname: str,
-    status: str = "collected"
-):
+def log_quick_event(audit_log_path: str, artifact: str, hostname: str, status: str = "collected"):
     """
     Quick function to log a single event without creating logger instance.
 

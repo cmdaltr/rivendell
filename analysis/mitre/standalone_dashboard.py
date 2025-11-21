@@ -4,7 +4,7 @@ MITRE ATT&CK Standalone Dashboard Generator
 Generates interactive HTML dashboards without requiring SIEM.
 Complete offline dashboard with ATT&CK matrix, timeline, and evidence browser.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -53,20 +53,22 @@ class StandaloneDashboard:
         html = self._get_html_template()
 
         # Inject data and components
-        html = html.replace('{{COVERAGE_DATA}}', json.dumps(coverage_data))
-        html = html.replace('{{CASE_ID}}', coverage_data.get('case_id', 'Unknown'))
-        html = html.replace('{{TIMESTAMP}}', coverage_data.get('timestamp', datetime.utcnow().isoformat()))
-        html = html.replace('{{ATTCK_VERSION}}', coverage_data.get('attck_version', 'unknown'))
+        html = html.replace("{{COVERAGE_DATA}}", json.dumps(coverage_data))
+        html = html.replace("{{CASE_ID}}", coverage_data.get("case_id", "Unknown"))
+        html = html.replace(
+            "{{TIMESTAMP}}", coverage_data.get("timestamp", datetime.utcnow().isoformat())
+        )
+        html = html.replace("{{ATTCK_VERSION}}", coverage_data.get("attck_version", "unknown"))
 
         # Write to file
-        with open(output_file, 'w', encoding='utf-8') as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write(html)
 
         return output_file
 
     def _get_html_template(self) -> str:
         """Get HTML template with embedded JavaScript."""
-        return '''<!DOCTYPE html>
+        return """<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -768,10 +770,11 @@ class StandaloneDashboard:
         window.onload = init;
     </script>
 </body>
-</html>'''
+</html>"""
 
 
 # Convenience function
+
 
 def generate_standalone_dashboard(coverage_data: dict, output_file: str) -> str:
     """

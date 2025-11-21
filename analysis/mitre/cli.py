@@ -11,7 +11,7 @@ Usage:
     python -m analysis.mitre.cli info T1059.001
     python -m analysis.mitre.cli stats
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -32,8 +32,8 @@ def setup_logging(verbose: bool = False):
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
 
@@ -59,9 +59,9 @@ def cmd_update(args):
             print(f"[+] Software: {len(data.get('software', {}))}")
 
             # Show recent changes if available
-            if data.get('changelog'):
+            if data.get("changelog"):
                 print("\n[*] Recent changes:")
-                for change in data['changelog'][:5]:  # Show last 5
+                for change in data["changelog"][:5]:  # Show last 5
                     print(f"  - {change}")
     else:
         print("[-] Failed to update ATT&CK data", file=sys.stderr)
@@ -85,9 +85,7 @@ def cmd_map(args):
 
     # Map artifact to techniques
     techniques = mapper.map_artifact_to_techniques(
-        artifact_type=args.artifact_type,
-        artifact_data=artifact_data,
-        context=args.context
+        artifact_type=args.artifact_type, artifact_data=artifact_data, context=args.context
     )
 
     if not techniques:
@@ -103,7 +101,7 @@ def cmd_map(args):
         print(f"    Tactics: {', '.join(tech['tactics'])}")
 
         # Show confidence factors
-        factors = tech.get('confidence_factors', {})
+        factors = tech.get("confidence_factors", {})
         if any(v > 0 for v in factors.values() if isinstance(v, (int, float))):
             print(f"    Confidence factors:")
             for factor, value in factors.items():
@@ -116,7 +114,7 @@ def cmd_map(args):
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(techniques, f, indent=2)
 
         print(f"[+] Results exported to {output_path}")
@@ -133,32 +131,33 @@ def cmd_dashboard(args):
             print(f"[-] Input file not found: {input_path}", file=sys.stderr)
             sys.exit(1)
 
-        with open(input_path, 'r') as f:
+        with open(input_path, "r") as f:
             technique_mappings = json.load(f)
     else:
-        print("[-] No input file specified. Use --input to provide technique mappings.", file=sys.stderr)
+        print(
+            "[-] No input file specified. Use --input to provide technique mappings.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Determine formats
-    formats = args.formats.split(',') if args.formats else None
+    formats = args.formats.split(",") if args.formats else None
 
     # Generate dashboards
     generator = MitreDashboardGenerator()
     result = generator.save_dashboards(
-        technique_mappings=technique_mappings,
-        output_dir=args.output,
-        formats=formats
+        technique_mappings=technique_mappings, output_dir=args.output, formats=formats
     )
 
     print(f"\n[+] Dashboards generated in: {result['output_dir']}")
 
-    if 'splunk' in result:
+    if "splunk" in result:
         print(f"  - Splunk: {result['splunk']}")
-    if 'elastic' in result:
+    if "elastic" in result:
         print(f"  - Kibana: {result['elastic']}")
-    if 'navigator' in result:
+    if "navigator" in result:
         print(f"  - Navigator: {result['navigator']}")
-    if 'statistics' in result:
+    if "statistics" in result:
         print(f"  - Statistics: {result['statistics']}")
 
 
@@ -173,7 +172,7 @@ def cmd_info(args):
         print("[-] No ATT&CK data found. Run 'update' command first.", file=sys.stderr)
         sys.exit(1)
 
-    technique = data.get('techniques', {}).get(args.technique_id)
+    technique = data.get("techniques", {}).get(args.technique_id)
 
     if not technique:
         print(f"[-] Technique {args.technique_id} not found", file=sys.stderr)
@@ -185,19 +184,19 @@ def cmd_info(args):
     print(f"  {technique.get('description', 'No description available')}")
 
     print(f"\nTactics:")
-    for tactic in technique.get('tactics', []):
+    for tactic in technique.get("tactics", []):
         print(f"  - {tactic}")
 
-    if technique.get('platforms'):
+    if technique.get("platforms"):
         print(f"\nPlatforms:")
-        for platform in technique['platforms']:
+        for platform in technique["platforms"]:
             print(f"  - {platform}")
 
-    if technique.get('detection'):
+    if technique.get("detection"):
         print(f"\nDetection:")
         print(f"  {technique['detection']}")
 
-    if technique.get('url'):
+    if technique.get("url"):
         print(f"\nURL: {technique['url']}")
 
     # Export if requested
@@ -205,7 +204,7 @@ def cmd_info(args):
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(technique, f, indent=2)
 
         print(f"\n[+] Details exported to {output_path}")
@@ -228,11 +227,11 @@ def cmd_stats(args):
     print()
 
     # Count statistics
-    techniques = data.get('techniques', {})
-    tactics = data.get('tactics', {})
-    groups = data.get('groups', {})
-    software = data.get('software', {})
-    mitigations = data.get('mitigations', {})
+    techniques = data.get("techniques", {})
+    tactics = data.get("tactics", {})
+    groups = data.get("groups", {})
+    software = data.get("software", {})
+    mitigations = data.get("mitigations", {})
 
     print(f"Techniques: {len(techniques)}")
     print(f"Tactics: {len(tactics)}")
@@ -246,7 +245,7 @@ def cmd_stats(args):
         print("Techniques by Tactic:")
         tactic_counts = {}
         for technique in techniques.values():
-            for tactic in technique.get('tactics', []):
+            for tactic in technique.get("tactics", []):
                 tactic_counts[tactic] = tactic_counts.get(tactic, 0) + 1
 
         for tactic, count in sorted(tactic_counts.items(), key=lambda x: x[1], reverse=True):
@@ -257,7 +256,7 @@ def cmd_stats(args):
         print("Techniques by Platform:")
         platform_counts = {}
         for technique in techniques.values():
-            for platform in technique.get('platforms', []):
+            for platform in technique.get("platforms", []):
                 platform_counts[platform] = platform_counts.get(platform, 0) + 1
 
         for platform, count in sorted(platform_counts.items(), key=lambda x: x[1], reverse=True):
@@ -296,9 +295,9 @@ def cmd_list_artifacts(args):
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='MITRE ATT&CK CLI Tools for Rivendell',
+        description="MITRE ATT&CK CLI Tools for Rivendell",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
+        epilog="""
 Examples:
   # Update ATT&CK data
   %(prog)s update
@@ -317,57 +316,76 @@ Examples:
 
   # Show statistics
   %(prog)s stats --detailed
-        '''
+        """,
     )
 
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
-    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Update command
-    update_parser = subparsers.add_parser('update', help='Update ATT&CK framework data')
-    update_parser.add_argument('-d', '--domain', default='enterprise',
-                              choices=['enterprise', 'mobile', 'ics'],
-                              help='ATT&CK domain to update (default: enterprise)')
-    update_parser.add_argument('-f', '--force', action='store_true',
-                              help='Force update even if cache is fresh')
+    update_parser = subparsers.add_parser("update", help="Update ATT&CK framework data")
+    update_parser.add_argument(
+        "-d",
+        "--domain",
+        default="enterprise",
+        choices=["enterprise", "mobile", "ics"],
+        help="ATT&CK domain to update (default: enterprise)",
+    )
+    update_parser.add_argument(
+        "-f", "--force", action="store_true", help="Force update even if cache is fresh"
+    )
 
     # Map command
-    map_parser = subparsers.add_parser('map', help='Map artifact to techniques')
-    map_parser.add_argument('artifact_type', help='Type of artifact (e.g., powershell_history)')
-    map_parser.add_argument('-c', '--context', help='Context string to analyze')
-    map_parser.add_argument('-d', '--data', help='Artifact data as JSON string')
-    map_parser.add_argument('-o', '--output', help='Output file for results (JSON)')
+    map_parser = subparsers.add_parser("map", help="Map artifact to techniques")
+    map_parser.add_argument("artifact_type", help="Type of artifact (e.g., powershell_history)")
+    map_parser.add_argument("-c", "--context", help="Context string to analyze")
+    map_parser.add_argument("-d", "--data", help="Artifact data as JSON string")
+    map_parser.add_argument("-o", "--output", help="Output file for results (JSON)")
 
     # Dashboard command
-    dashboard_parser = subparsers.add_parser('dashboard', help='Generate coverage dashboards')
-    dashboard_parser.add_argument('-i', '--input', required=True,
-                                 help='Input file with technique mappings (JSON)')
-    dashboard_parser.add_argument('-o', '--output', default='/tmp/rivendell/dashboards',
-                                 help='Output directory for dashboards')
-    dashboard_parser.add_argument('-f', '--formats',
-                                 help='Comma-separated formats (splunk,elastic,navigator)')
+    dashboard_parser = subparsers.add_parser("dashboard", help="Generate coverage dashboards")
+    dashboard_parser.add_argument(
+        "-i", "--input", required=True, help="Input file with technique mappings (JSON)"
+    )
+    dashboard_parser.add_argument(
+        "-o",
+        "--output",
+        default="/tmp/rivendell/dashboards",
+        help="Output directory for dashboards",
+    )
+    dashboard_parser.add_argument(
+        "-f", "--formats", help="Comma-separated formats (splunk,elastic,navigator)"
+    )
 
     # Info command
-    info_parser = subparsers.add_parser('info', help='Display technique information')
-    info_parser.add_argument('technique_id', help='Technique ID (e.g., T1059.001)')
-    info_parser.add_argument('-d', '--domain', default='enterprise',
-                            choices=['enterprise', 'mobile', 'ics'],
-                            help='ATT&CK domain (default: enterprise)')
-    info_parser.add_argument('-o', '--output', help='Output file for details (JSON)')
+    info_parser = subparsers.add_parser("info", help="Display technique information")
+    info_parser.add_argument("technique_id", help="Technique ID (e.g., T1059.001)")
+    info_parser.add_argument(
+        "-d",
+        "--domain",
+        default="enterprise",
+        choices=["enterprise", "mobile", "ics"],
+        help="ATT&CK domain (default: enterprise)",
+    )
+    info_parser.add_argument("-o", "--output", help="Output file for details (JSON)")
 
     # Stats command
-    stats_parser = subparsers.add_parser('stats', help='Display ATT&CK statistics')
-    stats_parser.add_argument('-d', '--domain', default='enterprise',
-                             choices=['enterprise', 'mobile', 'ics'],
-                             help='ATT&CK domain (default: enterprise)')
-    stats_parser.add_argument('--detailed', action='store_true',
-                             help='Show detailed statistics')
+    stats_parser = subparsers.add_parser("stats", help="Display ATT&CK statistics")
+    stats_parser.add_argument(
+        "-d",
+        "--domain",
+        default="enterprise",
+        choices=["enterprise", "mobile", "ics"],
+        help="ATT&CK domain (default: enterprise)",
+    )
+    stats_parser.add_argument("--detailed", action="store_true", help="Show detailed statistics")
 
     # List artifacts command
-    list_parser = subparsers.add_parser('list-artifacts', help='List available artifact types')
-    list_parser.add_argument('--detailed', action='store_true',
-                            help='Show mapped techniques for each artifact type')
+    list_parser = subparsers.add_parser("list-artifacts", help="List available artifact types")
+    list_parser.add_argument(
+        "--detailed", action="store_true", help="Show mapped techniques for each artifact type"
+    )
 
     args = parser.parse_args()
 
@@ -375,22 +393,22 @@ Examples:
     setup_logging(args.verbose)
 
     # Execute command
-    if args.command == 'update':
+    if args.command == "update":
         cmd_update(args)
-    elif args.command == 'map':
+    elif args.command == "map":
         cmd_map(args)
-    elif args.command == 'dashboard':
+    elif args.command == "dashboard":
         cmd_dashboard(args)
-    elif args.command == 'info':
+    elif args.command == "info":
         cmd_info(args)
-    elif args.command == 'stats':
+    elif args.command == "stats":
         cmd_stats(args)
-    elif args.command == 'list-artifacts':
+    elif args.command == "list-artifacts":
         cmd_list_artifacts(args)
     else:
         parser.print_help()
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

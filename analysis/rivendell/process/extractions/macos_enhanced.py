@@ -9,7 +9,7 @@ Comprehensive parsers for macOS-specific artifacts including:
 - FSEvents (file system events)
 - Quarantine database
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -55,7 +55,7 @@ class UnifiedLogParser:
             # Look for .tracev3 files
             for root, dirs, files in os.walk(diagnostics_dir):
                 for file in files:
-                    if file.endswith('.tracev3'):
+                    if file.endswith(".tracev3"):
                         file_path = os.path.join(root, file)
                         try:
                             file_entries = self._parse_tracev3_file(file_path)
@@ -84,7 +84,7 @@ class UnifiedLogParser:
         entries = []
 
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 data = f.read()
 
             # Tracev3 has a header followed by log entries
@@ -92,17 +92,20 @@ class UnifiedLogParser:
 
             # Extract printable strings that look like log messages
             import re
-            strings = re.findall(rb'[\x20-\x7E]{20,200}', data)
+
+            strings = re.findall(rb"[\x20-\x7E]{20,200}", data)
 
             for string in strings:
                 try:
-                    text = string.decode('utf-8')
-                    entries.append({
-                        'source_file': file_path,
-                        'message': text,
-                        'artifact_type': 'unified_log',
-                        'attck_techniques': ['T1070.002']
-                    })
+                    text = string.decode("utf-8")
+                    entries.append(
+                        {
+                            "source_file": file_path,
+                            "message": text,
+                            "artifact_type": "unified_log",
+                            "attck_techniques": ["T1070.002"],
+                        }
+                    )
                 except:
                     pass
 
@@ -138,12 +141,7 @@ class CoreDuetParser:
         Returns:
             Dictionary with application usage data
         """
-        results = {
-            'app_usage': [],
-            'app_installs': [],
-            'focus_time': [],
-            'errors': []
-        }
+        results = {"app_usage": [], "app_installs": [], "focus_time": [], "errors": []}
 
         if not os.path.exists(db_path):
             return results
@@ -154,7 +152,8 @@ class CoreDuetParser:
 
             # Get application usage
             try:
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT
                         ZOBJECT.ZVALUESTRING as app_name,
                         datetime(ZOBJECT.ZCREATIONDATE + 978307200, 'unixepoch') as timestamp,
@@ -163,23 +162,27 @@ class CoreDuetParser:
                     WHERE ZSTREAMNAME LIKE '%app%'
                     ORDER BY ZCREATIONDATE DESC
                     LIMIT 1000
-                ''')
+                """
+                )
 
                 for row in cursor.fetchall():
-                    results['app_usage'].append({
-                        'app_name': row[0],
-                        'timestamp': row[1],
-                        'stream_name': row[2],
-                        'artifact_type': 'coreduet_app_usage',
-                        'attck_techniques': ['T1083', 'T1087']
-                    })
+                    results["app_usage"].append(
+                        {
+                            "app_name": row[0],
+                            "timestamp": row[1],
+                            "stream_name": row[2],
+                            "artifact_type": "coreduet_app_usage",
+                            "attck_techniques": ["T1083", "T1087"],
+                        }
+                    )
 
             except sqlite3.Error as e:
-                results['errors'].append(f"Error querying app usage: {e}")
+                results["errors"].append(f"Error querying app usage: {e}")
 
             # Get application installs
             try:
-                cursor.execute('''
+                cursor.execute(
+                    """
                     SELECT
                         ZOBJECT.ZVALUESTRING as app_name,
                         datetime(ZOBJECT.ZCREATIONDATE + 978307200, 'unixepoch') as install_time
@@ -187,24 +190,27 @@ class CoreDuetParser:
                     WHERE ZSTREAMNAME LIKE '%install%'
                     ORDER BY ZCREATIONDATE DESC
                     LIMIT 1000
-                ''')
+                """
+                )
 
                 for row in cursor.fetchall():
-                    results['app_installs'].append({
-                        'app_name': row[0],
-                        'install_time': row[1],
-                        'artifact_type': 'coreduet_app_install',
-                        'attck_techniques': ['T1105']  # Ingress Tool Transfer
-                    })
+                    results["app_installs"].append(
+                        {
+                            "app_name": row[0],
+                            "install_time": row[1],
+                            "artifact_type": "coreduet_app_install",
+                            "attck_techniques": ["T1105"],  # Ingress Tool Transfer
+                        }
+                    )
 
             except sqlite3.Error as e:
-                results['errors'].append(f"Error querying app installs: {e}")
+                results["errors"].append(f"Error querying app installs: {e}")
 
             conn.close()
 
         except Exception as e:
             self.logger.error(f"Error parsing CoreDuet database: {e}")
-            results['errors'].append(str(e))
+            results["errors"].append(str(e))
 
         return results
 
@@ -247,7 +253,8 @@ class TCCParser:
             cursor = conn.cursor()
 
             # Query access table
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT
                     service,
                     client,
@@ -257,7 +264,8 @@ class TCCParser:
                     last_modified
                 FROM access
                 ORDER BY last_modified DESC
-            ''')
+            """
+            )
 
             for row in cursor.fetchall():
                 service = row[0]
@@ -266,24 +274,29 @@ class TCCParser:
 
                 # Determine ATT&CK techniques based on service
                 techniques = []
-                if service == 'kTCCServiceMicrophone':
-                    techniques.append('T1123')  # Audio Capture
-                elif service == 'kTCCServiceCamera':
-                    techniques.append('T1125')  # Video Capture
-                elif service in ['kTCCServiceSystemPolicyAllFiles', 'kTCCServiceSystemPolicyDesktopFolder']:
-                    techniques.append('T1005')  # Data from Local System
+                if service == "kTCCServiceMicrophone":
+                    techniques.append("T1123")  # Audio Capture
+                elif service == "kTCCServiceCamera":
+                    techniques.append("T1125")  # Video Capture
+                elif service in [
+                    "kTCCServiceSystemPolicyAllFiles",
+                    "kTCCServiceSystemPolicyDesktopFolder",
+                ]:
+                    techniques.append("T1005")  # Data from Local System
 
-                permissions.append({
-                    'service': service,
-                    'client': client,
-                    'client_type': row[2],
-                    'allowed': bool(allowed),
-                    'prompt_count': row[4],
-                    'last_modified': row[5],
-                    'artifact_type': 'tcc_permission',
-                    'attck_techniques': techniques,
-                    'severity': 'high' if allowed and techniques else 'low'
-                })
+                permissions.append(
+                    {
+                        "service": service,
+                        "client": client,
+                        "client_type": row[2],
+                        "allowed": bool(allowed),
+                        "prompt_count": row[4],
+                        "last_modified": row[5],
+                        "artifact_type": "tcc_permission",
+                        "attck_techniques": techniques,
+                        "severity": "high" if allowed and techniques else "low",
+                    }
+                )
 
             conn.close()
 
@@ -328,7 +341,7 @@ class FSEventsParser:
         try:
             # FSEvents are stored in numbered files
             for filename in os.listdir(fseventsd_dir):
-                if filename.isdigit() or filename.endswith('.gzip'):
+                if filename.isdigit() or filename.endswith(".gzip"):
                     file_path = os.path.join(fseventsd_dir, filename)
 
                     try:
@@ -358,27 +371,31 @@ class FSEventsParser:
 
         try:
             # Check if gzipped
-            if file_path.endswith('.gzip'):
+            if file_path.endswith(".gzip"):
                 import gzip
-                with gzip.open(file_path, 'rb') as f:
+
+                with gzip.open(file_path, "rb") as f:
                     data = f.read()
             else:
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     data = f.read()
 
             # Simplified extraction: look for file paths
             import re
-            paths = re.findall(rb'/[\x20-\x7E/]{10,200}', data)
+
+            paths = re.findall(rb"/[\x20-\x7E/]{10,200}", data)
 
             for path in paths:
                 try:
-                    path_str = path.decode('utf-8')
-                    events.append({
-                        'path': path_str,
-                        'source_file': file_path,
-                        'artifact_type': 'fsevent',
-                        'attck_techniques': ['T1083', 'T1070.004']
-                    })
+                    path_str = path.decode("utf-8")
+                    events.append(
+                        {
+                            "path": path_str,
+                            "source_file": file_path,
+                            "artifact_type": "fsevent",
+                            "attck_techniques": ["T1083", "T1070.004"],
+                        }
+                    )
                 except:
                     pass
 
@@ -423,7 +440,8 @@ class QuarantineParser:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
 
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT
                     LSQuarantineEventIdentifier,
                     LSQuarantineTimeStamp,
@@ -434,7 +452,8 @@ class QuarantineParser:
                     LSQuarantineOriginTitle
                 FROM LSQuarantineEvent
                 ORDER BY LSQuarantineTimeStamp DESC
-            ''')
+            """
+            )
 
             for row in cursor.fetchall():
                 # Convert Core Data timestamp (seconds since 2001-01-01)
@@ -446,19 +465,21 @@ class QuarantineParser:
                     except:
                         pass
 
-                events.append({
-                    'event_id': row[0],
-                    'timestamp': timestamp,
-                    'agent_name': row[2],
-                    'agent_bundle': row[3],
-                    'data_url': row[4],
-                    'origin_url': row[5],
-                    'origin_title': row[6],
-                    'artifact_type': 'quarantine_event',
-                    'attck_techniques': ['T1105'],
-                    'severity': 'medium',
-                    'description': f"File downloaded from {row[5] or 'unknown source'}"
-                })
+                events.append(
+                    {
+                        "event_id": row[0],
+                        "timestamp": timestamp,
+                        "agent_name": row[2],
+                        "agent_bundle": row[3],
+                        "data_url": row[4],
+                        "origin_url": row[5],
+                        "origin_title": row[6],
+                        "artifact_type": "quarantine_event",
+                        "attck_techniques": ["T1105"],
+                        "severity": "medium",
+                        "description": f"File downloaded from {row[5] or 'unknown source'}",
+                    }
+                )
 
             conn.close()
 
@@ -473,42 +494,31 @@ MACOS_ARTIFACTS_EXTENDED = {
     # Unified Logging
     "/private/var/db/diagnostics/": "unified_logs",
     "/private/var/db/uuidtext/": "unified_logs",
-
     # Application Usage
     "/private/var/db/CoreDuet/Knowledge/knowledgeC.db": "coreduet",
-
     # Privacy Permissions
     "/Library/Application Support/com.apple.TCC/TCC.db": "tcc",
     "/Users/*/Library/Application Support/com.apple.TCC/TCC.db": "tcc",
-
     # File System Events
     "/.fseventsd/": "fseventsd",
     "/Users/*/.fseventsd/": "fseventsd",
-
     # Quarantine
     "/Users/*/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2": "quarantine",
-
     # Network Configuration
     "/Library/Preferences/SystemConfiguration/": "network_config",
     "/private/var/db/dhcpclient/": "dhcp_leases",
-
     # Browser Extensions
     "/Users/*/Library/Safari/Extensions/": "safari_extensions",
     "/Users/*/Library/Application Support/Google/Chrome/Default/Extensions/": "chrome_extensions",
-
     # Spotlight
     "/.Spotlight-V100/": "spotlight",
-
     # Time Machine
     "/private/var/db/.TimeMachine/": "timemachine",
-
     # FileVault
     "/var/db/FileVaultKeys/": "filevault",
-
     # Keychain
     "/Users/*/Library/Keychains/": "keychains",
     "/Library/Keychains/": "keychains",
-
     # System Logs
     "/var/log/system.log": "system_log",
     "/var/log/install.log": "install_log",
@@ -517,6 +527,7 @@ MACOS_ARTIFACTS_EXTENDED = {
 
 
 # Convenience function
+
 
 def parse_all_macos_artifacts(mount_point: str) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -529,26 +540,26 @@ def parse_all_macos_artifacts(mount_point: str) -> Dict[str, List[Dict[str, Any]
         Dictionary with all parsed artifacts
     """
     results = {
-        'unified_logs': [],
-        'coreduet': [],
-        'tcc_permissions': [],
-        'fse events': [],
-        'quarantine': [],
-        'errors': []
+        "unified_logs": [],
+        "coreduet": [],
+        "tcc_permissions": [],
+        "fse events": [],
+        "quarantine": [],
+        "errors": [],
     }
 
     # Unified Logs
     unified_parser = UnifiedLogParser()
     diagnostics_path = os.path.join(mount_point, "private/var/db/diagnostics")
     if os.path.exists(diagnostics_path):
-        results['unified_logs'] = unified_parser.parse_unified_logs(diagnostics_path)
+        results["unified_logs"] = unified_parser.parse_unified_logs(diagnostics_path)
 
     # CoreDuet
     coreduet_parser = CoreDuetParser()
     coreduet_path = os.path.join(mount_point, "private/var/db/CoreDuet/Knowledge/knowledgeC.db")
     if os.path.exists(coreduet_path):
         coreduet_data = coreduet_parser.parse_knowledge_db(coreduet_path)
-        results['coreduet'] = coreduet_data
+        results["coreduet"] = coreduet_data
 
     # TCC
     tcc_parser = TCCParser()
@@ -557,20 +568,23 @@ def parse_all_macos_artifacts(mount_point: str) -> Dict[str, List[Dict[str, Any]
     ]
     for tcc_path in tcc_paths:
         if os.path.exists(tcc_path):
-            results['tcc_permissions'].extend(tcc_parser.parse_tcc_db(tcc_path))
+            results["tcc_permissions"].extend(tcc_parser.parse_tcc_db(tcc_path))
 
     # FSEvents
     fsevent_parser = FSEventsParser()
     fsevent_path = os.path.join(mount_point, ".fseventsd")
     if os.path.exists(fsevent_path):
-        results['fsevents'] = fsevent_parser.parse_fseventsd(fsevent_path)
+        results["fsevents"] = fsevent_parser.parse_fseventsd(fsevent_path)
 
     # Quarantine
     quarantine_parser = QuarantineParser()
     # Would need to find user directories
     import glob
-    quarantine_pattern = os.path.join(mount_point, "Users/*/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2")
+
+    quarantine_pattern = os.path.join(
+        mount_point, "Users/*/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2"
+    )
     for quarantine_path in glob.glob(quarantine_pattern):
-        results['quarantine'].extend(quarantine_parser.parse_quarantine_db(quarantine_path))
+        results["quarantine"].extend(quarantine_parser.parse_quarantine_db(quarantine_path))
 
     return results

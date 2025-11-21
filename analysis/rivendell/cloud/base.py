@@ -5,7 +5,7 @@ Base Cloud Provider Class
 Abstract base class for cloud provider forensics implementations.
 Defines common interface for AWS, Azure, and GCP forensics.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -66,12 +66,7 @@ class CloudProvider(ABC):
         pass
 
     @abstractmethod
-    def acquire_disk_image(
-        self,
-        instance_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_disk_image(self, instance_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire disk image/snapshot from instance.
 
@@ -87,11 +82,7 @@ class CloudProvider(ABC):
 
     @abstractmethod
     def acquire_logs(
-        self,
-        start_time: datetime,
-        end_time: datetime,
-        output_dir: str,
-        **kwargs
+        self, start_time: datetime, end_time: datetime, output_dir: str, **kwargs
     ) -> List[str]:
         """
         Acquire cloud audit/activity logs.
@@ -108,12 +99,7 @@ class CloudProvider(ABC):
         pass
 
     @abstractmethod
-    def acquire_storage(
-        self,
-        storage_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_storage(self, storage_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire cloud storage artifacts.
 
@@ -168,7 +154,7 @@ class CloudProvider(ABC):
             output_path: Output file path
         """
         try:
-            with open(output_path, 'w') as f:
+            with open(output_path, "w") as f:
                 json.dump(data, f, indent=2, default=str)
             self.logger.info(f"Saved data to {output_path}")
         except Exception as e:
@@ -201,7 +187,7 @@ class CloudProvider(ABC):
         Returns:
             Provider name (e.g., 'AWS', 'Azure', 'GCP')
         """
-        return self.__class__.__name__.replace('Forensics', '')
+        return self.__class__.__name__.replace("Forensics", "")
 
     def __str__(self) -> str:
         """String representation."""
@@ -223,7 +209,7 @@ class CloudArtifact:
         provider: str,
         timestamp: datetime,
         data: Dict[str, Any],
-        attck_techniques: Optional[List[str]] = None
+        attck_techniques: Optional[List[str]] = None,
     ):
         """
         Initialize cloud artifact.
@@ -249,11 +235,15 @@ class CloudArtifact:
             Dictionary representation
         """
         return {
-            'artifact_type': self.artifact_type,
-            'provider': self.provider,
-            'timestamp': self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else str(self.timestamp),
-            'data': self.data,
-            'attck_techniques': self.attck_techniques
+            "artifact_type": self.artifact_type,
+            "provider": self.provider,
+            "timestamp": (
+                self.timestamp.isoformat()
+                if isinstance(self.timestamp, datetime)
+                else str(self.timestamp)
+            ),
+            "data": self.data,
+            "attck_techniques": self.attck_techniques,
         }
 
     def __str__(self) -> str:
@@ -264,7 +254,9 @@ class CloudArtifact:
 class CloudForensicsException(Exception):
     """Custom exception for cloud forensics operations."""
 
-    def __init__(self, message: str, provider: Optional[str] = None, details: Optional[Dict] = None):
+    def __init__(
+        self, message: str, provider: Optional[str] = None, details: Optional[Dict] = None
+    ):
         """
         Initialize exception.
 

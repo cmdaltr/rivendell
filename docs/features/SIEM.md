@@ -52,7 +52,7 @@ tar xvzf splunk.tgz -C /opt
 /opt/splunk/bin/splunk http-event-collector create rivendell-token \
     -uri https://localhost:8089 \
     -auth admin:changeme \
-    -description "Rivendell DFIR Suite" \
+    -description "Rivendell DF Acceleration Suite" \
     -disabled 0 \
     -index rivendell \
     -indexes rivendell

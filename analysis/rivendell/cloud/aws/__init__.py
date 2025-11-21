@@ -3,7 +3,7 @@ AWS Cloud Forensics Module
 
 Forensic acquisition and analysis for Amazon Web Services.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -12,7 +12,7 @@ from .cloudtrail import CloudTrailAnalyzer
 from .s3 import S3Forensics
 
 __all__ = [
-    'AWSForensics',
-    'CloudTrailAnalyzer',
-    'S3Forensics',
+    "AWSForensics",
+    "CloudTrailAnalyzer",
+    "S3Forensics",
 ]

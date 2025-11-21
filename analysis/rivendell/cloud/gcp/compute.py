@@ -4,7 +4,7 @@ GCP Compute Engine Forensics Module
 
 Forensic acquisition and analysis of GCP Compute Engine instances and disks.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -16,6 +16,7 @@ from typing import List, Dict, Optional, Any
 try:
     from google.cloud import compute_v1
     from google.auth import default
+
     GCP_AVAILABLE = True
 except ImportError:
     GCP_AVAILABLE = False
@@ -52,14 +53,14 @@ class GCPForensics(CloudProvider):
                 "pip install google-cloud-compute google-cloud-logging"
             )
 
-        self.project_id = credentials.get('project_id')
+        self.project_id = credentials.get("project_id")
         self.instances_client = None
         self.disks_client = None
         self.firewalls_client = None
 
     def get_required_credential_keys(self) -> List[str]:
         """Required GCP credential keys."""
-        return ['project_id']
+        return ["project_id"]
 
     def authenticate(self) -> bool:
         """
@@ -76,8 +77,10 @@ class GCPForensics(CloudProvider):
 
         try:
             # Set service account file if provided
-            if 'service_account_file' in self.credentials:
-                os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self.credentials['service_account_file']
+            if "service_account_file" in self.credentials:
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.credentials[
+                    "service_account_file"
+                ]
 
             # Initialize clients
             self.instances_client = compute_v1.InstancesClient()
@@ -111,7 +114,7 @@ class GCPForensics(CloudProvider):
             raise CloudForensicsException("Not authenticated", provider="GCP")
 
         try:
-            zone = kwargs.get('zone') or region
+            zone = kwargs.get("zone") or region
 
             if zone:
                 zones = [zone]
@@ -124,8 +127,7 @@ class GCPForensics(CloudProvider):
             for zone_name in zones:
                 try:
                     instance_list = self.instances_client.list(
-                        project=self.project_id,
-                        zone=zone_name
+                        project=self.project_id, zone=zone_name
                     )
 
                     for instance in instance_list:
@@ -143,48 +145,43 @@ class GCPForensics(CloudProvider):
     def _format_instance(self, instance: Any, zone: str) -> Dict[str, Any]:
         """Format instance data for output."""
         return {
-            'id': instance.id,
-            'name': instance.name,
-            'zone': zone,
-            'machine_type': instance.machine_type.split('/')[-1],
-            'status': instance.status,
-            'creation_timestamp': instance.creation_timestamp,
-            'disks': [
+            "id": instance.id,
+            "name": instance.name,
+            "zone": zone,
+            "machine_type": instance.machine_type.split("/")[-1],
+            "status": instance.status,
+            "creation_timestamp": instance.creation_timestamp,
+            "disks": [
                 {
-                    'device_name': disk.device_name,
-                    'source': disk.source.split('/')[-1],
-                    'boot': disk.boot,
-                    'auto_delete': disk.auto_delete
+                    "device_name": disk.device_name,
+                    "source": disk.source.split("/")[-1],
+                    "boot": disk.boot,
+                    "auto_delete": disk.auto_delete,
                 }
                 for disk in instance.disks
             ],
-            'network_interfaces': [
+            "network_interfaces": [
                 {
-                    'network': ni.network.split('/')[-1],
-                    'subnetwork': ni.subnetwork.split('/')[-1] if ni.subnetwork else None,
-                    'network_ip': ni.network_i_p
+                    "network": ni.network.split("/")[-1],
+                    "subnetwork": ni.subnetwork.split("/")[-1] if ni.subnetwork else None,
+                    "network_ip": ni.network_i_p,
                 }
                 for ni in instance.network_interfaces
             ],
-            'service_accounts': [
-                {
-                    'email': sa.email,
-                    'scopes': list(sa.scopes)
-                }
-                for sa in instance.service_accounts
+            "service_accounts": [
+                {"email": sa.email, "scopes": list(sa.scopes)} for sa in instance.service_accounts
             ],
-            'labels': dict(instance.labels) if instance.labels else {},
-            'metadata': {item.key: item.value for item in instance.metadata.items} if instance.metadata else {},
-            'provider': 'GCP',
-            'artifact_type': 'gcp_instance'
+            "labels": dict(instance.labels) if instance.labels else {},
+            "metadata": (
+                {item.key: item.value for item in instance.metadata.items}
+                if instance.metadata
+                else {}
+            ),
+            "provider": "GCP",
+            "artifact_type": "gcp_instance",
         }
 
-    def acquire_disk_image(
-        self,
-        instance_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_disk_image(self, instance_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire persistent disk snapshots from Compute Engine instance.
 
@@ -201,65 +198,63 @@ class GCPForensics(CloudProvider):
         if not self.authenticated:
             raise CloudForensicsException("Not authenticated", provider="GCP")
 
-        zone = kwargs.get('zone')
+        zone = kwargs.get("zone")
         if not zone:
             raise CloudForensicsException("zone parameter required", provider="GCP")
 
         try:
             # Get instance
             instance = self.instances_client.get(
-                project=self.project_id,
-                zone=zone,
-                instance=instance_id
+                project=self.project_id, zone=zone, instance=instance_id
             )
 
             # Get disks to snapshot
-            disk_names = kwargs.get('disk_names')
+            disk_names = kwargs.get("disk_names")
             if disk_names is None:
-                disk_names = [disk.source.split('/')[-1] for disk in instance.disks]
+                disk_names = [disk.source.split("/")[-1] for disk in instance.disks]
 
             # Create snapshots
             snapshots = []
             for disk_name in disk_names:
                 self.logger.info(f"Creating snapshot for disk {disk_name}...")
 
-                snapshot_name = f"{instance_id}-{disk_name}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                snapshot_name = (
+                    f"{instance_id}-{disk_name}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                )
 
                 snapshot_body = compute_v1.Snapshot(
                     name=snapshot_name,
                     labels={
-                        'forensic_snapshot': 'true',
-                        'source_instance': instance_id,
-                        'source_disk': disk_name,
-                        'acquisition_time': datetime.now().strftime('%Y%m%d%H%M%S')
-                    }
+                        "forensic_snapshot": "true",
+                        "source_instance": instance_id,
+                        "source_disk": disk_name,
+                        "acquisition_time": datetime.now().strftime("%Y%m%d%H%M%S"),
+                    },
                 )
 
                 operation = self.disks_client.create_snapshot(
                     project=self.project_id,
                     zone=zone,
                     disk=disk_name,
-                    snapshot_resource=snapshot_body
+                    snapshot_resource=snapshot_body,
                 )
 
                 # Wait for operation
                 operation.result()
 
-                snapshots.append({
-                    'snapshot_name': snapshot_name,
-                    'source_disk': disk_name,
-                    'zone': zone
-                })
+                snapshots.append(
+                    {"snapshot_name": snapshot_name, "source_disk": disk_name, "zone": zone}
+                )
 
                 self.logger.info(f"Snapshot {snapshot_name} created")
 
             # Save metadata
             result = {
-                'instance_name': instance_id,
-                'zone': zone,
-                'acquisition_time': datetime.now().isoformat(),
-                'snapshots': snapshots,
-                'instance_metadata': self._format_instance(instance, zone)
+                "instance_name": instance_id,
+                "zone": zone,
+                "acquisition_time": datetime.now().isoformat(),
+                "snapshots": snapshots,
+                "instance_metadata": self._format_instance(instance, zone),
             }
 
             metadata_file = os.path.join(output_dir, f"{instance_id}_snapshots.json")
@@ -271,11 +266,7 @@ class GCPForensics(CloudProvider):
             raise CloudForensicsException(f"Failed to acquire disk image: {e}", provider="GCP")
 
     def acquire_logs(
-        self,
-        start_time: datetime,
-        end_time: datetime,
-        output_dir: str,
-        **kwargs
+        self, start_time: datetime, end_time: datetime, output_dir: str, **kwargs
     ) -> List[str]:
         """
         Acquire Cloud Logging entries.
@@ -292,15 +283,12 @@ class GCPForensics(CloudProvider):
             List of output file paths
         """
         # Placeholder - Cloud Logging functionality in separate module
-        self.logger.warning("Cloud Logging acquisition not implemented in compute module. Use gcp.logging module.")
+        self.logger.warning(
+            "Cloud Logging acquisition not implemented in compute module. Use gcp.logging module."
+        )
         return []
 
-    def acquire_storage(
-        self,
-        storage_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_storage(self, storage_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire Cloud Storage metadata.
 
@@ -315,7 +303,9 @@ class GCPForensics(CloudProvider):
             Dictionary with storage analysis
         """
         # Placeholder - Cloud Storage functionality in separate module
-        self.logger.warning("Cloud Storage acquisition not implemented in compute module. Use gcp.storage module.")
+        self.logger.warning(
+            "Cloud Storage acquisition not implemented in compute module. Use gcp.storage module."
+        )
         return {}
 
     def analyze_firewall_rules(self) -> List[Dict[str, Any]]:
@@ -333,29 +323,33 @@ class GCPForensics(CloudProvider):
 
             analysis = []
             for rule in firewall_rules:
-                analysis.append({
-                    'name': rule.name,
-                    'direction': rule.direction,
-                    'priority': rule.priority,
-                    'allowed': [
-                        {
-                            'ip_protocol': allowed.i_p_protocol,
-                            'ports': list(allowed.ports) if allowed.ports else []
-                        }
-                        for allowed in rule.allowed
-                    ],
-                    'denied': [
-                        {
-                            'ip_protocol': denied.i_p_protocol,
-                            'ports': list(denied.ports) if denied.ports else []
-                        }
-                        for denied in rule.denied
-                    ],
-                    'source_ranges': list(rule.source_ranges) if rule.source_ranges else [],
-                    'destination_ranges': list(rule.destination_ranges) if rule.destination_ranges else [],
-                    'target_tags': list(rule.target_tags) if rule.target_tags else [],
-                    'attck_techniques': self._analyze_firewall_threats(rule)
-                })
+                analysis.append(
+                    {
+                        "name": rule.name,
+                        "direction": rule.direction,
+                        "priority": rule.priority,
+                        "allowed": [
+                            {
+                                "ip_protocol": allowed.i_p_protocol,
+                                "ports": list(allowed.ports) if allowed.ports else [],
+                            }
+                            for allowed in rule.allowed
+                        ],
+                        "denied": [
+                            {
+                                "ip_protocol": denied.i_p_protocol,
+                                "ports": list(denied.ports) if denied.ports else [],
+                            }
+                            for denied in rule.denied
+                        ],
+                        "source_ranges": list(rule.source_ranges) if rule.source_ranges else [],
+                        "destination_ranges": (
+                            list(rule.destination_ranges) if rule.destination_ranges else []
+                        ),
+                        "target_tags": list(rule.target_tags) if rule.target_tags else [],
+                        "attck_techniques": self._analyze_firewall_threats(rule),
+                    }
+                )
 
             return analysis
 
@@ -366,17 +360,17 @@ class GCPForensics(CloudProvider):
         """Analyze firewall rule for threat indicators."""
         techniques = []
 
-        if rule.direction == 'INGRESS':
+        if rule.direction == "INGRESS":
             # Check for overly permissive rules
             source_ranges = list(rule.source_ranges) if rule.source_ranges else []
 
-            if '0.0.0.0/0' in source_ranges:
+            if "0.0.0.0/0" in source_ranges:
                 for allowed in rule.allowed:
                     ports = list(allowed.ports) if allowed.ports else []
 
                     # Check for exposed management/database ports
-                    if any(port in ['22', '3389', '1433', '3306'] or '-' in port for port in ports):
-                        techniques.append('T1190')  # Exploit Public-Facing Application
-                        techniques.append('T1133')  # External Remote Services
+                    if any(port in ["22", "3389", "1433", "3306"] or "-" in port for port in ports):
+                        techniques.append("T1190")  # Exploit Public-Facing Application
+                        techniques.append("T1133")  # External Remote Services
 
         return list(set(techniques))

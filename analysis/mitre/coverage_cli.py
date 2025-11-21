@@ -11,7 +11,7 @@ Usage:
     python -m analysis.mitre.coverage_cli dashboard CASE-001 /output
     python -m analysis.mitre.coverage_cli export CASE-001 /output --format json,csv,html
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -30,8 +30,8 @@ def setup_logging(verbose: bool = False):
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
 
@@ -72,7 +72,7 @@ def cmd_analyze(args):
         artifact_type=args.artifact_type,
         artifact_path=args.artifact_path,
         artifact_data=artifact_data,
-        context=args.context
+        context=args.context,
     )
 
     print(f"[+] Analysis complete")
@@ -94,8 +94,8 @@ def cmd_batch(args):
     print(f"[*] Starting batch analysis from: {args.artifact_list}")
 
     # Read artifact list
-    with open(args.artifact_list, 'r') as f:
-        artifacts = [line.strip().split(',') for line in f if line.strip()]
+    with open(args.artifact_list, "r") as f:
+        artifacts = [line.strip().split(",") for line in f if line.strip()]
 
     print(f"[*] Found {len(artifacts)} artifacts to process")
 
@@ -116,9 +116,7 @@ def cmd_batch(args):
 
         try:
             detections = analyzer.analyze_artifact(
-                artifact_type=artifact_type,
-                artifact_path=artifact_path,
-                context=context
+                artifact_type=artifact_type, artifact_path=artifact_path, context=context
             )
 
             if args.verbose and detections:
@@ -149,7 +147,7 @@ def cmd_report(args):
     report = analyzer.generate_coverage_report()
 
     # Print summary
-    stats = report['statistics']
+    stats = report["statistics"]
     print(f"\n[+] Coverage Report")
     print(f"    Case: {report['case_id']}")
     print(f"    ATT&CK Version: {report['attck_version']}")
@@ -168,9 +166,11 @@ def cmd_report(args):
 
     if args.detailed:
         print(f"\n[*] Top Techniques:")
-        for i, tech in enumerate(report['techniques'][:10], 1):
+        for i, tech in enumerate(report["techniques"][:10], 1):
             print(f"  {i}. {tech['technique_id']}: {tech['technique_name']}")
-            print(f"     Confidence: {tech['confidence']:.2f} | Detections: {tech['detection_count']}")
+            print(
+                f"     Confidence: {tech['confidence']:.2f} | Detections: {tech['detection_count']}"
+            )
 
     analyzer.close()
 
@@ -185,7 +185,7 @@ def cmd_dashboard(args):
     report = analyzer.generate_coverage_report()
 
     # Generate dashboard
-    output_file = args.output or str(analyzer.mitre_dir / 'coverage.html')
+    output_file = args.output or str(analyzer.mitre_dir / "coverage.html")
     dashboard_path = generate_standalone_dashboard(report, output_file)
 
     print(f"[+] Dashboard generated: {dashboard_path}")
@@ -200,48 +200,48 @@ def cmd_export(args):
 
     analyzer = MitreCoverageAnalyzer(args.case_id, args.output_dir, auto_update=False)
 
-    formats = args.format.split(',') if args.format else ['json', 'csv', 'html']
+    formats = args.format.split(",") if args.format else ["json", "csv", "html"]
     exported = {}
 
     for fmt in formats:
         fmt = fmt.strip().lower()
 
         try:
-            if fmt == 'json':
-                output_file = args.output or str(analyzer.mitre_dir / 'coverage.json')
+            if fmt == "json":
+                output_file = args.output or str(analyzer.mitre_dir / "coverage.json")
                 path = analyzer.export_json(output_file)
-                exported['json'] = path
+                exported["json"] = path
                 print(f"[+] JSON exported: {path}")
 
-            elif fmt == 'csv':
+            elif fmt == "csv":
                 output_dir = args.output or str(analyzer.mitre_dir)
                 paths = analyzer.export_csv(output_dir)
-                exported['csv'] = paths
+                exported["csv"] = paths
                 print(f"[+] CSV exported:")
                 for name, path in paths.items():
                     print(f"    {name}: {path}")
 
-            elif fmt == 'html' or fmt == 'dashboard':
+            elif fmt == "html" or fmt == "dashboard":
                 report = analyzer.generate_coverage_report()
-                output_file = args.output or str(analyzer.mitre_dir / 'coverage.html')
+                output_file = args.output or str(analyzer.mitre_dir / "coverage.html")
                 path = generate_standalone_dashboard(report, output_file)
-                exported['html'] = path
+                exported["html"] = path
                 print(f"[+] HTML dashboard exported: {path}")
 
-            elif fmt == 'splunk':
-                events = analyzer.export_for_siem('splunk')
-                output_file = args.output or str(analyzer.mitre_dir / 'splunk_events.json')
-                with open(output_file, 'w') as f:
+            elif fmt == "splunk":
+                events = analyzer.export_for_siem("splunk")
+                output_file = args.output or str(analyzer.mitre_dir / "splunk_events.json")
+                with open(output_file, "w") as f:
                     json.dump(events, f, indent=2)
-                exported['splunk'] = output_file
+                exported["splunk"] = output_file
                 print(f"[+] Splunk HEC events exported: {output_file}")
 
-            elif fmt == 'elastic':
-                docs = analyzer.export_for_siem('elastic')
-                output_file = args.output or str(analyzer.mitre_dir / 'elastic_docs.json')
-                with open(output_file, 'w') as f:
+            elif fmt == "elastic":
+                docs = analyzer.export_for_siem("elastic")
+                output_file = args.output or str(analyzer.mitre_dir / "elastic_docs.json")
+                with open(output_file, "w") as f:
                     json.dump(docs, f, indent=2)
-                exported['elastic'] = output_file
+                exported["elastic"] = output_file
                 print(f"[+] Elasticsearch documents exported: {output_file}")
 
             else:
@@ -285,9 +285,9 @@ def cmd_stats(args):
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='MITRE Coverage Analysis CLI for Rivendell',
+        description="MITRE Coverage Analysis CLI for Rivendell",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
+        epilog="""
 Examples:
   # Initialize coverage analysis
   %(prog)s init CASE-001 /output/CASE-001
@@ -310,58 +310,64 @@ Examples:
 
   # Show statistics
   %(prog)s stats CASE-001 /output/CASE-001
-        '''
+        """,
     )
 
-    parser.add_argument('-v', '--verbose', action='store_true', help='Enable verbose output')
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
-    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # Init command
-    init_parser = subparsers.add_parser('init', help='Initialize coverage analysis')
-    init_parser.add_argument('case_id', help='Case identifier')
-    init_parser.add_argument('output_dir', help='Output directory')
+    init_parser = subparsers.add_parser("init", help="Initialize coverage analysis")
+    init_parser.add_argument("case_id", help="Case identifier")
+    init_parser.add_argument("output_dir", help="Output directory")
 
     # Analyze command
-    analyze_parser = subparsers.add_parser('analyze', help='Analyze single artifact')
-    analyze_parser.add_argument('case_id', help='Case identifier')
-    analyze_parser.add_argument('output_dir', help='Output directory')
-    analyze_parser.add_argument('artifact_type', help='Artifact type')
-    analyze_parser.add_argument('artifact_path', help='Path to artifact')
-    analyze_parser.add_argument('-c', '--context', help='Context (command line, content, etc.)')
-    analyze_parser.add_argument('-d', '--data', help='Artifact data as JSON string')
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze single artifact")
+    analyze_parser.add_argument("case_id", help="Case identifier")
+    analyze_parser.add_argument("output_dir", help="Output directory")
+    analyze_parser.add_argument("artifact_type", help="Artifact type")
+    analyze_parser.add_argument("artifact_path", help="Path to artifact")
+    analyze_parser.add_argument("-c", "--context", help="Context (command line, content, etc.)")
+    analyze_parser.add_argument("-d", "--data", help="Artifact data as JSON string")
 
     # Batch command
-    batch_parser = subparsers.add_parser('batch', help='Batch analyze from file list')
-    batch_parser.add_argument('case_id', help='Case identifier')
-    batch_parser.add_argument('output_dir', help='Output directory')
-    batch_parser.add_argument('artifact_list', help='File with artifact list (CSV: type,path,context)')
+    batch_parser = subparsers.add_parser("batch", help="Batch analyze from file list")
+    batch_parser.add_argument("case_id", help="Case identifier")
+    batch_parser.add_argument("output_dir", help="Output directory")
+    batch_parser.add_argument(
+        "artifact_list", help="File with artifact list (CSV: type,path,context)"
+    )
 
     # Report command
-    report_parser = subparsers.add_parser('report', help='Generate coverage report')
-    report_parser.add_argument('case_id', help='Case identifier')
-    report_parser.add_argument('output_dir', help='Output directory')
-    report_parser.add_argument('--detailed', action='store_true', help='Show detailed report')
+    report_parser = subparsers.add_parser("report", help="Generate coverage report")
+    report_parser.add_argument("case_id", help="Case identifier")
+    report_parser.add_argument("output_dir", help="Output directory")
+    report_parser.add_argument("--detailed", action="store_true", help="Show detailed report")
 
     # Dashboard command
-    dashboard_parser = subparsers.add_parser('dashboard', help='Generate standalone dashboard')
-    dashboard_parser.add_argument('case_id', help='Case identifier')
-    dashboard_parser.add_argument('output_dir', help='Output directory')
-    dashboard_parser.add_argument('-o', '--output', help='Output HTML file path')
+    dashboard_parser = subparsers.add_parser("dashboard", help="Generate standalone dashboard")
+    dashboard_parser.add_argument("case_id", help="Case identifier")
+    dashboard_parser.add_argument("output_dir", help="Output directory")
+    dashboard_parser.add_argument("-o", "--output", help="Output HTML file path")
 
     # Export command
-    export_parser = subparsers.add_parser('export', help='Export coverage data')
-    export_parser.add_argument('case_id', help='Case identifier')
-    export_parser.add_argument('output_dir', help='Output directory')
-    export_parser.add_argument('-f', '--format', default='json,csv,html',
-                               help='Export formats (json,csv,html,splunk,elastic)')
-    export_parser.add_argument('-o', '--output', help='Output file/directory path')
+    export_parser = subparsers.add_parser("export", help="Export coverage data")
+    export_parser.add_argument("case_id", help="Case identifier")
+    export_parser.add_argument("output_dir", help="Output directory")
+    export_parser.add_argument(
+        "-f",
+        "--format",
+        default="json,csv,html",
+        help="Export formats (json,csv,html,splunk,elastic)",
+    )
+    export_parser.add_argument("-o", "--output", help="Output file/directory path")
 
     # Stats command
-    stats_parser = subparsers.add_parser('stats', help='Show coverage statistics')
-    stats_parser.add_argument('case_id', help='Case identifier')
-    stats_parser.add_argument('output_dir', help='Output directory')
-    stats_parser.add_argument('--detailed', action='store_true', help='Show detailed statistics')
+    stats_parser = subparsers.add_parser("stats", help="Show coverage statistics")
+    stats_parser.add_argument("case_id", help="Case identifier")
+    stats_parser.add_argument("output_dir", help="Output directory")
+    stats_parser.add_argument("--detailed", action="store_true", help="Show detailed statistics")
 
     args = parser.parse_args()
 
@@ -369,24 +375,24 @@ Examples:
     setup_logging(args.verbose)
 
     # Execute command
-    if args.command == 'init':
+    if args.command == "init":
         cmd_init(args)
-    elif args.command == 'analyze':
+    elif args.command == "analyze":
         cmd_analyze(args)
-    elif args.command == 'batch':
+    elif args.command == "batch":
         cmd_batch(args)
-    elif args.command == 'report':
+    elif args.command == "report":
         cmd_report(args)
-    elif args.command == 'dashboard':
+    elif args.command == "dashboard":
         cmd_dashboard(args)
-    elif args.command == 'export':
+    elif args.command == "export":
         cmd_export(args)
-    elif args.command == 'stats':
+    elif args.command == "stats":
         cmd_stats(args)
     else:
         parser.print_help()
         sys.exit(1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

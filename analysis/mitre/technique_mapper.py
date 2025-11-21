@@ -4,7 +4,7 @@ MITRE ATT&CK Technique Mapper
 Maps forensic artifacts to ATT&CK techniques dynamically.
 Provides confidence scoring and context-aware mapping.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -32,277 +32,276 @@ class TechniqueMapper:
     # Format: artifact_type -> [(technique_id, base_confidence), ...]
     ARTIFACT_MAPPINGS = {
         # ===== Windows Artifacts =====
-
         # Execution
-        'prefetch': [
-            ('T1059', 0.8),      # Command and Scripting Interpreter
-            ('T1106', 0.7),      # Native API
+        "prefetch": [
+            ("T1059", 0.8),  # Command and Scripting Interpreter
+            ("T1106", 0.7),  # Native API
         ],
-        'powershell_history': [
-            ('T1059.001', 0.95), # PowerShell
-            ('T1059', 0.9),      # Command and Scripting Interpreter
+        "powershell_history": [
+            ("T1059.001", 0.95),  # PowerShell
+            ("T1059", 0.9),  # Command and Scripting Interpreter
         ],
-        'cmd_history': [
-            ('T1059.003', 0.95), # Windows Command Shell
-            ('T1059', 0.9),      # Command and Scripting Interpreter
+        "cmd_history": [
+            ("T1059.003", 0.95),  # Windows Command Shell
+            ("T1059", 0.9),  # Command and Scripting Interpreter
         ],
-        'wmi_consumers': [
-            ('T1546.003', 0.95), # WMI Event Subscription
-            ('T1047', 0.9),      # Windows Management Instrumentation
+        "wmi_consumers": [
+            ("T1546.003", 0.95),  # WMI Event Subscription
+            ("T1047", 0.9),  # Windows Management Instrumentation
         ],
-        'wmi_event_consumer': [
-            ('T1546.003', 0.95), # WMI Event Subscription
-            ('T1047', 0.9),      # Windows Management Instrumentation
+        "wmi_event_consumer": [
+            ("T1546.003", 0.95),  # WMI Event Subscription
+            ("T1047", 0.9),  # Windows Management Instrumentation
         ],
-        'wmi_event_filter': [
-            ('T1546.003', 0.95), # WMI Event Subscription
-            ('T1047', 0.9),      # Windows Management Instrumentation
+        "wmi_event_filter": [
+            ("T1546.003", 0.95),  # WMI Event Subscription
+            ("T1047", 0.9),  # Windows Management Instrumentation
         ],
-        'wmi_binding': [
-            ('T1546.003', 0.95), # WMI Event Subscription
-            ('T1047', 0.9),      # Windows Management Instrumentation
+        "wmi_binding": [
+            ("T1546.003", 0.95),  # WMI Event Subscription
+            ("T1047", 0.9),  # Windows Management Instrumentation
         ],
-        'wmi_namespace': [
-            ('T1047', 0.85),     # Windows Management Instrumentation
+        "wmi_namespace": [
+            ("T1047", 0.85),  # Windows Management Instrumentation
         ],
-        'scheduled_tasks': [
-            ('T1053.005', 0.95), # Scheduled Task
-            ('T1053', 0.9),      # Scheduled Task/Job
+        "scheduled_tasks": [
+            ("T1053.005", 0.95),  # Scheduled Task
+            ("T1053", 0.9),  # Scheduled Task/Job
         ],
-
         # Persistence
-        'registry_run_keys': [
-            ('T1547.001', 0.95), # Registry Run Keys / Startup Folder
-            ('T1547', 0.9),      # Boot or Logon Autostart Execution
+        "registry_run_keys": [
+            ("T1547.001", 0.95),  # Registry Run Keys / Startup Folder
+            ("T1547", 0.9),  # Boot or Logon Autostart Execution
         ],
-        'registry_persistence': [
-            ('T1547', 0.85),     # Boot or Logon Autostart Execution
-            ('T1112', 0.7),      # Modify Registry
+        "registry_persistence": [
+            ("T1547", 0.85),  # Boot or Logon Autostart Execution
+            ("T1112", 0.7),  # Modify Registry
         ],
-        'services': [
-            ('T1543.003', 0.9),  # Windows Service
-            ('T1543', 0.85),     # Create or Modify System Process
+        "services": [
+            ("T1543.003", 0.9),  # Windows Service
+            ("T1543", 0.85),  # Create or Modify System Process
         ],
-
         # Privilege Escalation
-        'token_manipulation': [
-            ('T1134', 0.9),      # Access Token Manipulation
+        "token_manipulation": [
+            ("T1134", 0.9),  # Access Token Manipulation
         ],
-
         # Defense Evasion
-        'timestomp': [
-            ('T1070.006', 0.95), # Timestomp
-            ('T1070', 0.9),      # Indicator Removal
+        "timestomp": [
+            ("T1070.006", 0.95),  # Timestomp
+            ("T1070", 0.9),  # Indicator Removal
         ],
-        'file_deletion': [
-            ('T1070.004', 0.8),  # File Deletion
-            ('T1070', 0.75),     # Indicator Removal
+        "file_deletion": [
+            ("T1070.004", 0.8),  # File Deletion
+            ("T1070", 0.75),  # Indicator Removal
         ],
-        'clear_logs': [
-            ('T1070.001', 0.95), # Clear Windows Event Logs
-            ('T1070', 0.9),      # Indicator Removal
+        "clear_logs": [
+            ("T1070.001", 0.95),  # Clear Windows Event Logs
+            ("T1070", 0.9),  # Indicator Removal
         ],
-
         # Credential Access
-        'lsass_dump': [
-            ('T1003.001', 0.95), # LSASS Memory
-            ('T1003', 0.9),      # OS Credential Dumping
+        "lsass_dump": [
+            ("T1003.001", 0.95),  # LSASS Memory
+            ("T1003", 0.9),  # OS Credential Dumping
         ],
-        'sam_dump': [
-            ('T1003.002', 0.95), # Security Account Manager
-            ('T1003', 0.9),      # OS Credential Dumping
+        "sam_dump": [
+            ("T1003.002", 0.95),  # Security Account Manager
+            ("T1003", 0.9),  # OS Credential Dumping
         ],
-        'credentials_registry': [
-            ('T1003.005', 0.9),  # Cached Domain Credentials
-            ('T1003', 0.85),     # OS Credential Dumping
+        "credentials_registry": [
+            ("T1003.005", 0.9),  # Cached Domain Credentials
+            ("T1003", 0.85),  # OS Credential Dumping
         ],
-
         # Discovery
-        'network_connections': [
-            ('T1049', 0.85),     # System Network Connections Discovery
-            ('T1057', 0.7),      # Process Discovery
+        "network_connections": [
+            ("T1049", 0.85),  # System Network Connections Discovery
+            ("T1057", 0.7),  # Process Discovery
         ],
-        'process_list': [
-            ('T1057', 0.9),      # Process Discovery
+        "process_list": [
+            ("T1057", 0.9),  # Process Discovery
         ],
-        'file_directory_discovery': [
-            ('T1083', 0.85),     # File and Directory Discovery
+        "file_directory_discovery": [
+            ("T1083", 0.85),  # File and Directory Discovery
         ],
-
         # Collection
-        'clipboard': [
-            ('T1115', 0.95),     # Clipboard Data
+        "clipboard": [
+            ("T1115", 0.95),  # Clipboard Data
         ],
-        'screen_capture': [
-            ('T1113', 0.95),     # Screen Capture
+        "screen_capture": [
+            ("T1113", 0.95),  # Screen Capture
         ],
-        'browser_data': [
-            ('T1555.003', 0.9),  # Credentials from Web Browsers
-            ('T1555', 0.85),     # Credentials from Password Stores
+        "browser_data": [
+            ("T1555.003", 0.9),  # Credentials from Web Browsers
+            ("T1555", 0.85),  # Credentials from Password Stores
         ],
-
         # ===== Linux Artifacts =====
-
-        'bash_history': [
-            ('T1059.004', 0.95), # Unix Shell
-            ('T1059', 0.9),      # Command and Scripting Interpreter
+        "bash_history": [
+            ("T1059.004", 0.95),  # Unix Shell
+            ("T1059", 0.9),  # Command and Scripting Interpreter
         ],
-        'cron_jobs': [
-            ('T1053.003', 0.95), # Cron
-            ('T1053', 0.9),      # Scheduled Task/Job
+        "cron_jobs": [
+            ("T1053.003", 0.95),  # Cron
+            ("T1053", 0.9),  # Scheduled Task/Job
         ],
-        'systemd_services': [
-            ('T1543.002', 0.95), # Systemd Service
-            ('T1543', 0.9),      # Create or Modify System Process
+        "systemd_services": [
+            ("T1543.002", 0.95),  # Systemd Service
+            ("T1543", 0.9),  # Create or Modify System Process
         ],
-        'ssh_authorized_keys': [
-            ('T1098.004', 0.9),  # SSH Authorized Keys
-            ('T1098', 0.85),     # Account Manipulation
+        "ssh_authorized_keys": [
+            ("T1098.004", 0.9),  # SSH Authorized Keys
+            ("T1098", 0.85),  # Account Manipulation
         ],
         # Linux Enhanced Artifacts (Feature 3)
-        'systemd_journal': [
-            ('T1070.002', 0.7),  # Clear Linux or Mac System Logs
+        "systemd_journal": [
+            ("T1070.002", 0.7),  # Clear Linux or Mac System Logs
         ],
-        'audit_execve': [
-            ('T1059', 0.9),      # Command and Scripting Interpreter
-            ('T1059.004', 0.85), # Unix Shell
+        "audit_execve": [
+            ("T1059", 0.9),  # Command and Scripting Interpreter
+            ("T1059.004", 0.85),  # Unix Shell
         ],
-        'audit_user': [
-            ('T1136', 0.85),     # Create Account
-            ('T1087', 0.8),      # Account Discovery
+        "audit_user": [
+            ("T1136", 0.85),  # Create Account
+            ("T1087", 0.8),  # Account Discovery
         ],
-        'audit_auth': [
-            ('T1078', 0.85),     # Valid Accounts
-            ('T1110', 0.7),      # Brute Force
+        "audit_auth": [
+            ("T1078", 0.85),  # Valid Accounts
+            ("T1110", 0.7),  # Brute Force
         ],
-        'audit_file': [
-            ('T1005', 0.7),      # Data from Local System
-            ('T1083', 0.75),     # File and Directory Discovery
+        "audit_file": [
+            ("T1005", 0.7),  # Data from Local System
+            ("T1083", 0.75),  # File and Directory Discovery
         ],
-        'audit_network': [
-            ('T1049', 0.75),     # System Network Connections Discovery
+        "audit_network": [
+            ("T1049", 0.75),  # System Network Connections Discovery
         ],
-        'docker_container': [
-            ('T1610', 0.9),      # Deploy Container
-            ('T1613', 0.85),     # Container Discovery
-            ('T1611', 0.7),      # Escape to Host
+        "docker_container": [
+            ("T1610", 0.9),  # Deploy Container
+            ("T1613", 0.85),  # Container Discovery
+            ("T1611", 0.7),  # Escape to Host
         ],
-        'docker_image': [
-            ('T1610', 0.85),     # Deploy Container
+        "docker_image": [
+            ("T1610", 0.85),  # Deploy Container
         ],
-        'docker_volume': [
-            ('T1610', 0.7),      # Deploy Container
+        "docker_volume": [
+            ("T1610", 0.7),  # Deploy Container
         ],
-        'zsh_history': [
-            ('T1059.004', 0.95), # Unix Shell
-            ('T1059', 0.9),      # Command and Scripting Interpreter
+        "zsh_history": [
+            ("T1059.004", 0.95),  # Unix Shell
+            ("T1059", 0.9),  # Command and Scripting Interpreter
         ],
-        'python_history': [
-            ('T1059.006', 0.9),  # Python
-            ('T1059', 0.85),     # Command and Scripting Interpreter
+        "python_history": [
+            ("T1059.006", 0.9),  # Python
+            ("T1059", 0.85),  # Command and Scripting Interpreter
         ],
-        'package_install': [
-            ('T1072', 0.85),     # Software Deployment
-            ('T1105', 0.75),     # Ingress Tool Transfer
+        "package_install": [
+            ("T1072", 0.85),  # Software Deployment
+            ("T1105", 0.75),  # Ingress Tool Transfer
         ],
-
         # ===== macOS Artifacts =====
-
-        'launch_agents': [
-            ('T1543.001', 0.95), # Launch Agent
-            ('T1543', 0.9),      # Create or Modify System Process
+        "launch_agents": [
+            ("T1543.001", 0.95),  # Launch Agent
+            ("T1543", 0.9),  # Create or Modify System Process
         ],
-        'launch_daemons': [
-            ('T1543.004', 0.95), # Launch Daemon
-            ('T1543', 0.9),      # Create or Modify System Process
+        "launch_daemons": [
+            ("T1543.004", 0.95),  # Launch Daemon
+            ("T1543", 0.9),  # Create or Modify System Process
         ],
-        'login_items': [
-            ('T1547.015', 0.9),  # Login Items
-            ('T1547', 0.85),     # Boot or Logon Autostart Execution
+        "login_items": [
+            ("T1547.015", 0.9),  # Login Items
+            ("T1547", 0.85),  # Boot or Logon Autostart Execution
         ],
-        'plist_files': [
-            ('T1647', 0.75),     # Plist File Modification
+        "plist_files": [
+            ("T1647", 0.75),  # Plist File Modification
         ],
         # macOS Enhanced Artifacts (Feature 3)
-        'unified_log': [
-            ('T1070.002', 0.7),  # Clear Linux or Mac System Logs
+        "unified_log": [
+            ("T1070.002", 0.7),  # Clear Linux or Mac System Logs
         ],
-        'coreduet_app_usage': [
-            ('T1083', 0.75),     # File and Directory Discovery
-            ('T1087', 0.7),      # Account Discovery
+        "coreduet_app_usage": [
+            ("T1083", 0.75),  # File and Directory Discovery
+            ("T1087", 0.7),  # Account Discovery
         ],
-        'coreduet_app_install': [
-            ('T1105', 0.8),      # Ingress Tool Transfer
+        "coreduet_app_install": [
+            ("T1105", 0.8),  # Ingress Tool Transfer
         ],
-        'tcc_permission': [
-            ('T1123', 0.9),      # Audio Capture
-            ('T1125', 0.9),      # Video Capture
-            ('T1005', 0.85),     # Data from Local System
+        "tcc_permission": [
+            ("T1123", 0.9),  # Audio Capture
+            ("T1125", 0.9),  # Video Capture
+            ("T1005", 0.85),  # Data from Local System
         ],
-        'fsevent': [
-            ('T1083', 0.7),      # File and Directory Discovery
-            ('T1070.004', 0.75), # File Deletion
+        "fsevent": [
+            ("T1083", 0.7),  # File and Directory Discovery
+            ("T1070.004", 0.75),  # File Deletion
         ],
-        'quarantine_event': [
-            ('T1105', 0.85),     # Ingress Tool Transfer
-            ('T1566', 0.6),      # Phishing
+        "quarantine_event": [
+            ("T1105", 0.85),  # Ingress Tool Transfer
+            ("T1566", 0.6),  # Phishing
         ],
-
         # ===== Network Artifacts =====
-
-        'network_traffic': [
-            ('T1071', 0.7),      # Application Layer Protocol
-            ('T1571', 0.6),      # Non-Standard Port
+        "network_traffic": [
+            ("T1071", 0.7),  # Application Layer Protocol
+            ("T1571", 0.6),  # Non-Standard Port
         ],
-        'dns_queries': [
-            ('T1071.004', 0.85), # DNS
-            ('T1071', 0.8),      # Application Layer Protocol
+        "dns_queries": [
+            ("T1071.004", 0.85),  # DNS
+            ("T1071", 0.8),  # Application Layer Protocol
         ],
-
         # ===== Generic Artifacts =====
-
-        'file_creation': [
-            ('T1105', 0.6),      # Ingress Tool Transfer
+        "file_creation": [
+            ("T1105", 0.6),  # Ingress Tool Transfer
         ],
-        'registry_modification': [
-            ('T1112', 0.8),      # Modify Registry
+        "registry_modification": [
+            ("T1112", 0.8),  # Modify Registry
         ],
     }
 
     # Context-based bonus rules
     # These adjust confidence based on artifact content
     CONTEXT_RULES = {
-        'powershell_obfuscation': {
-            'patterns': [r'-enc', r'-encodedcommand', r'invoke-expression', r'iex'],
-            'techniques': [('T1027', 0.2), ('T1140', 0.15)],  # Obfuscated Files, Deobfuscate/Decode
+        "powershell_obfuscation": {
+            "patterns": [r"-enc", r"-encodedcommand", r"invoke-expression", r"iex"],
+            "techniques": [("T1027", 0.2), ("T1140", 0.15)],  # Obfuscated Files, Deobfuscate/Decode
         },
-        'powershell_download': {
-            'patterns': [r'downloadstring', r'downloadfile', r'net.webclient', r'invoke-webrequest'],
-            'techniques': [('T1105', 0.25)],  # Ingress Tool Transfer
+        "powershell_download": {
+            "patterns": [
+                r"downloadstring",
+                r"downloadfile",
+                r"net.webclient",
+                r"invoke-webrequest",
+            ],
+            "techniques": [("T1105", 0.25)],  # Ingress Tool Transfer
         },
-        'powershell_execution_policy_bypass': {
-            'patterns': [r'-executionpolicy bypass', r'-ep bypass'],
-            'techniques': [('T1562.001', 0.2)],  # Disable or Modify Tools
+        "powershell_execution_policy_bypass": {
+            "patterns": [r"-executionpolicy bypass", r"-ep bypass"],
+            "techniques": [("T1562.001", 0.2)],  # Disable or Modify Tools
         },
-        'mimikatz': {
-            'patterns': [r'mimikatz', r'sekurlsa', r'lsadump'],
-            'techniques': [('T1003.001', 0.3)],  # LSASS Memory
+        "mimikatz": {
+            "patterns": [r"mimikatz", r"sekurlsa", r"lsadump"],
+            "techniques": [("T1003.001", 0.3)],  # LSASS Memory
         },
-        'reconnaissance': {
-            'patterns': [r'net user', r'net group', r'net localgroup', r'whoami /all'],
-            'techniques': [('T1087', 0.2), ('T1069', 0.2)],  # Account Discovery, Permission Groups Discovery
+        "reconnaissance": {
+            "patterns": [r"net user", r"net group", r"net localgroup", r"whoami /all"],
+            "techniques": [
+                ("T1087", 0.2),
+                ("T1069", 0.2),
+            ],  # Account Discovery, Permission Groups Discovery
         },
-        'wmi_commands': {
-            'patterns': [r'get-wmiobject', r'gwmi', r'invoke-wmimethod', r'register-wmievent', r'set-wmiinstance'],
-            'techniques': [('T1047', 0.25), ('T1546.003', 0.2)],  # WMI, WMI Event Subscription
+        "wmi_commands": {
+            "patterns": [
+                r"get-wmiobject",
+                r"gwmi",
+                r"invoke-wmimethod",
+                r"register-wmievent",
+                r"set-wmiinstance",
+            ],
+            "techniques": [("T1047", 0.25), ("T1546.003", 0.2)],  # WMI, WMI Event Subscription
         },
-        'docker_commands': {
-            'patterns': [r'docker run', r'docker exec', r'docker create', r'docker-compose'],
-            'techniques': [('T1610', 0.2)],  # Deploy Container
+        "docker_commands": {
+            "patterns": [r"docker run", r"docker exec", r"docker create", r"docker-compose"],
+            "techniques": [("T1610", 0.2)],  # Deploy Container
         },
-        'persistence_commands': {
-            'patterns': [r'crontab', r'at\s+', r'systemctl enable', r'launchctl load'],
-            'techniques': [('T1053', 0.2)],  # Scheduled Task/Job
+        "persistence_commands": {
+            "patterns": [r"crontab", r"at\s+", r"systemctl enable", r"launchctl load"],
+            "techniques": [("T1053", 0.2)],  # Scheduled Task/Job
         },
     }
 
@@ -327,7 +326,7 @@ class TechniqueMapper:
         self,
         artifact_type: str,
         artifact_data: Optional[dict] = None,
-        context: Optional[str] = None
+        context: Optional[str] = None,
     ) -> List[dict]:
         """
         Map artifact to ATT&CK techniques with confidence scoring.
@@ -350,18 +349,18 @@ class TechniqueMapper:
 
             if technique_details:
                 mapping = {
-                    'id': technique_id,
-                    'name': technique_details.get('name'),
-                    'tactics': technique_details.get('tactics', []),
-                    'confidence': base_confidence,
-                    'confidence_factors': {
-                        'base': base_confidence,
-                        'context': 0.0,
+                    "id": technique_id,
+                    "name": technique_details.get("name"),
+                    "tactics": technique_details.get("tactics", []),
+                    "confidence": base_confidence,
+                    "confidence_factors": {
+                        "base": base_confidence,
+                        "context": 0.0,
                     },
-                    'evidence': {
-                        'artifact_type': artifact_type,
-                        'artifact_data': artifact_data,
-                    }
+                    "evidence": {
+                        "artifact_type": artifact_type,
+                        "artifact_data": artifact_data,
+                    },
                 }
 
                 techniques.append(mapping)
@@ -380,7 +379,7 @@ class TechniqueMapper:
         techniques = self._merge_techniques(techniques)
 
         # Sort by confidence (highest first)
-        techniques.sort(key=lambda x: x['confidence'], reverse=True)
+        techniques.sort(key=lambda x: x["confidence"], reverse=True)
 
         return techniques
 
@@ -398,8 +397,8 @@ class TechniqueMapper:
         context_lower = context.lower()
 
         for rule_name, rule_data in self.CONTEXT_RULES.items():
-            patterns = rule_data['patterns']
-            rule_techniques = rule_data['techniques']
+            patterns = rule_data["patterns"]
+            rule_techniques = rule_data["techniques"]
 
             # Check if any pattern matches
             for pattern in patterns:
@@ -409,20 +408,22 @@ class TechniqueMapper:
                         technique_details = self.get_technique_details(technique_id)
 
                         if technique_details:
-                            techniques.append({
-                                'id': technique_id,
-                                'name': technique_details.get('name'),
-                                'tactics': technique_details.get('tactics', []),
-                                'confidence': confidence_bonus,
-                                'confidence_factors': {
-                                    'base': 0.0,
-                                    'context': confidence_bonus,
-                                    'rule': rule_name,
-                                },
-                                'evidence': {
-                                    'context_match': pattern,
+                            techniques.append(
+                                {
+                                    "id": technique_id,
+                                    "name": technique_details.get("name"),
+                                    "tactics": technique_details.get("tactics", []),
+                                    "confidence": confidence_bonus,
+                                    "confidence_factors": {
+                                        "base": 0.0,
+                                        "context": confidence_bonus,
+                                        "rule": rule_name,
+                                    },
+                                    "evidence": {
+                                        "context_match": pattern,
+                                    },
                                 }
-                            })
+                            )
                     break  # Only match once per rule
 
         return techniques
@@ -441,44 +442,56 @@ class TechniqueMapper:
         techniques = []
 
         # Example: Check for specific file names in prefetch
-        if artifact_type == 'prefetch':
-            filename = artifact_data.get('filename', '').lower()
+        if artifact_type == "prefetch":
+            filename = artifact_data.get("filename", "").lower()
 
             # Known malicious tools
-            if 'mimikatz' in filename:
-                techniques.append(self._create_technique_mapping('T1003.001', 0.9, 'mimikatz_detection'))
-            elif 'psexec' in filename:
-                techniques.append(self._create_technique_mapping('T1021.002', 0.85, 'psexec_detection'))
-            elif 'procdump' in filename:
-                techniques.append(self._create_technique_mapping('T1003.001', 0.8, 'procdump_detection'))
+            if "mimikatz" in filename:
+                techniques.append(
+                    self._create_technique_mapping("T1003.001", 0.9, "mimikatz_detection")
+                )
+            elif "psexec" in filename:
+                techniques.append(
+                    self._create_technique_mapping("T1021.002", 0.85, "psexec_detection")
+                )
+            elif "procdump" in filename:
+                techniques.append(
+                    self._create_technique_mapping("T1003.001", 0.8, "procdump_detection")
+                )
 
         # Example: Check for suspicious registry keys
-        elif artifact_type == 'registry_modification':
-            key_path = artifact_data.get('key_path', '').lower()
+        elif artifact_type == "registry_modification":
+            key_path = artifact_data.get("key_path", "").lower()
 
-            if 'run' in key_path or 'runonce' in key_path:
-                techniques.append(self._create_technique_mapping('T1547.001', 0.9, 'run_key_detection'))
-            elif 'userinit' in key_path:
-                techniques.append(self._create_technique_mapping('T1547.001', 0.85, 'userinit_detection'))
+            if "run" in key_path or "runonce" in key_path:
+                techniques.append(
+                    self._create_technique_mapping("T1547.001", 0.9, "run_key_detection")
+                )
+            elif "userinit" in key_path:
+                techniques.append(
+                    self._create_technique_mapping("T1547.001", 0.85, "userinit_detection")
+                )
 
         return techniques
 
-    def _create_technique_mapping(self, technique_id: str, confidence: float, rule_name: str) -> dict:
+    def _create_technique_mapping(
+        self, technique_id: str, confidence: float, rule_name: str
+    ) -> dict:
         """Helper to create technique mapping dict."""
         technique_details = self.get_technique_details(technique_id)
 
         if technique_details:
             return {
-                'id': technique_id,
-                'name': technique_details.get('name'),
-                'tactics': technique_details.get('tactics', []),
-                'confidence': confidence,
-                'confidence_factors': {
-                    'base': 0.0,
-                    'data_rule': confidence,
-                    'rule': rule_name,
+                "id": technique_id,
+                "name": technique_details.get("name"),
+                "tactics": technique_details.get("tactics", []),
+                "confidence": confidence,
+                "confidence_factors": {
+                    "base": 0.0,
+                    "data_rule": confidence,
+                    "rule": rule_name,
                 },
-                'evidence': {}
+                "evidence": {},
             }
         return {}
 
@@ -495,13 +508,13 @@ class TechniqueMapper:
         merged = {}
 
         for tech in techniques:
-            tech_id = tech['id']
+            tech_id = tech["id"]
 
             if tech_id not in merged:
                 merged[tech_id] = tech
             else:
                 # Keep highest confidence
-                if tech['confidence'] > merged[tech_id]['confidence']:
+                if tech["confidence"] > merged[tech_id]["confidence"]:
                     merged[tech_id] = tech
 
         return list(merged.values())
@@ -519,7 +532,7 @@ class TechniqueMapper:
         if not self.attck_data:
             return None
 
-        return self.attck_data.get('techniques', {}).get(technique_id)
+        return self.attck_data.get("techniques", {}).get(technique_id)
 
     def get_techniques_by_artifact_type(self, artifact_type: str) -> List[str]:
         """
@@ -546,17 +559,28 @@ class TechniqueMapper:
         """
         # High-fidelity artifacts
         if artifact_type in [
-            'powershell_history', 'scheduled_tasks', 'wmi_consumers',
-            'wmi_event_consumer', 'wmi_event_filter', 'wmi_binding',
-            'audit_execve', 'docker_container', 'tcc_permission'
+            "powershell_history",
+            "scheduled_tasks",
+            "wmi_consumers",
+            "wmi_event_consumer",
+            "wmi_event_filter",
+            "wmi_binding",
+            "audit_execve",
+            "docker_container",
+            "tcc_permission",
         ]:
             return 0.7
 
         # Medium-fidelity artifacts
         elif artifact_type in [
-            'prefetch', 'registry_modification',
-            'coreduet_app_install', 'quarantine_event', 'package_install',
-            'systemd_journal', 'audit_user', 'audit_auth'
+            "prefetch",
+            "registry_modification",
+            "coreduet_app_install",
+            "quarantine_event",
+            "package_install",
+            "systemd_journal",
+            "audit_user",
+            "audit_auth",
         ]:
             return 0.6
 
@@ -564,12 +588,7 @@ class TechniqueMapper:
         else:
             return 0.5
 
-    def add_custom_mapping(
-        self,
-        artifact_type: str,
-        technique_id: str,
-        confidence: float
-    ):
+    def add_custom_mapping(self, artifact_type: str, technique_id: str, confidence: float):
         """
         Add custom artifact-to-technique mapping.
 
@@ -582,7 +601,9 @@ class TechniqueMapper:
             self.ARTIFACT_MAPPINGS[artifact_type] = []
 
         self.ARTIFACT_MAPPINGS[artifact_type].append((technique_id, confidence))
-        self.logger.info(f"Added custom mapping: {artifact_type} -> {technique_id} (confidence: {confidence})")
+        self.logger.info(
+            f"Added custom mapping: {artifact_type} -> {technique_id} (confidence: {confidence})"
+        )
 
     def get_statistics(self) -> dict:
         """
@@ -594,16 +615,19 @@ class TechniqueMapper:
         total_mappings = sum(len(mappings) for mappings in self.ARTIFACT_MAPPINGS.values())
 
         return {
-            'artifact_types': len(self.ARTIFACT_MAPPINGS),
-            'total_mappings': total_mappings,
-            'context_rules': len(self.CONTEXT_RULES),
-            'attck_version': self.attck_data.get('version') if self.attck_data else None,
+            "artifact_types": len(self.ARTIFACT_MAPPINGS),
+            "total_mappings": total_mappings,
+            "context_rules": len(self.CONTEXT_RULES),
+            "attck_version": self.attck_data.get("version") if self.attck_data else None,
         }
 
 
 # Convenience function
 
-def map_artifact(artifact_type: str, artifact_data: Optional[dict] = None, context: Optional[str] = None) -> List[dict]:
+
+def map_artifact(
+    artifact_type: str, artifact_data: Optional[dict] = None, context: Optional[str] = None
+) -> List[dict]:
     """
     Convenience function to map artifact to techniques.
 

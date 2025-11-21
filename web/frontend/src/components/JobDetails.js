@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getJob, cancelJob, deleteJob } from '../api';
 
+const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
+
 function JobDetails() {
   const { jobId } = useParams();
   const navigate = useNavigate();
@@ -86,9 +88,25 @@ function JobDetails() {
   const getEnabledOptions = () => {
     if (!job) return [];
     const enabled = [];
+    // Internal options to exclude from display
+    const internalOptions = ['collect', 'process', 'local', 'gandalf', 'brisk', 'force_overwrite'];
+
+    // Special formatting for specific options
+    const specialFormatting = {
+      'vss': 'VSS',
+      'userprofiles': 'User Profiles',
+      'nsrl': 'NSRL',
+      'extract_iocs': 'Extract IOCs',
+      'clamav': 'ClamAV'
+    };
+
     Object.entries(job.options).forEach(([key, value]) => {
-      if (value === true) {
-        enabled.push(key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+      // Use case-insensitive comparison for internal options
+      const keyLower = key.toLowerCase();
+      if (value === true && !internalOptions.includes(keyLower)) {
+        // Check if there's special formatting for this key (case-insensitive)
+        const displayName = specialFormatting[keyLower] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        enabled.push(displayName);
       }
     });
     return enabled;
@@ -99,18 +117,77 @@ function JobDetails() {
   }
 
   if (error && !job) {
+    // Select a random 404 image
+    const notFoundImages = [
+      'boromir404.png',
+      'frodo1404.png',
+      'frodo2404.png',
+      'gandalf404.png',
+      'gollum404.png'
+    ];
+    const randomImage = notFoundImages[Math.floor(Math.random() * notFoundImages.length)];
+    const notFoundImageUrl = `${process.env.PUBLIC_URL}/images/404/${randomImage}`;
+
     return (
-      <div className="card">
-        <div className="error">{error}</div>
-        <Link to="/jobs">
-          <button>Back to Jobs</button>
-        </Link>
+      <div className="job-details journey-detail">
+        <section className="hero-section">
+          <img
+            src={heroImage}
+            alt="Rivendell - The Last Homely House"
+            className="hero-image"
+            style={{
+              transform: 'scale(0.2)',
+              transformOrigin: 'center top'
+            }}
+          />
+        </section>
+
+        <header>
+          <h2>Job Not Found</h2>
+          <p>The requested job could not be found. It may have been deleted or the ID is incorrect.</p>
+        </header>
+
+        <div className="card" style={{ textAlign: 'center', padding: '3rem' }}>
+          <img
+            src={notFoundImageUrl}
+            alt="Job Not Found"
+            style={{
+              maxWidth: '400px',
+              width: '100%',
+              height: 'auto',
+              marginBottom: '2rem',
+              borderRadius: '8px'
+            }}
+          />
+          <h3 style={{ marginBottom: '1rem', color: '#f0dba5' }}>404 - Job Not Found</h3>
+          <p style={{ marginBottom: '2rem', color: '#a7db6c' }}>{error}</p>
+          <Link to="/jobs">
+            <button>Back to Jobs</button>
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="job-details">
+    <div className="job-details journey-detail">
+      <section className="hero-section">
+        <img
+          src={heroImage}
+          alt="Rivendell - The Last Homely House"
+          className="hero-image"
+          style={{
+            transform: 'scale(0.2)',
+            transformOrigin: 'center top'
+          }}
+        />
+      </section>
+
+      <header>
+        <h2>Job Monitoring</h2>
+        <p>Real-time monitoring of forensic analysis and artifact processing jobs.</p>
+      </header>
+
       <div className="card">
         <div className="job-header">
           <div>
@@ -144,18 +221,18 @@ function JobDetails() {
 
         {error && <div className="error">{error}</div>}
 
-        <div className="job-info-grid">
+        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.8fr 0.8fr 0.8fr 1.6fr', gap: '1rem', marginBottom: '2rem' }}>
           <div className="info-item">
-            <strong>Case Number:</strong>
+            <strong>Case ID:</strong>
             <span>{job.case_number}</span>
           </div>
           <div className="info-item">
             <strong>Status:</strong>
-            <span className={getStatusClass(job.status)}>{job.status}</span>
+            <span className={getStatusClass(job.status)} style={{ display: 'inline-block', width: '50%', textAlign: 'center' }}>{job.status}</span>
           </div>
           <div className="info-item">
             <strong>Progress:</strong>
-            <div className="progress-bar">
+            <div className="progress-bar" style={{ marginRight: 'auto', width: '80%' }}>
               <div
                 className="progress-fill"
                 style={{ width: `${job.progress}%` }}
@@ -163,6 +240,10 @@ function JobDetails() {
                 {job.progress}%
               </div>
             </div>
+          </div>
+          <div className="info-item">
+            <strong>Destination:</strong>
+            <span style={{ fontSize: '0.85rem' }}>{job.destination_path || 'Default location'}</span>
           </div>
           <div className="info-item">
             <strong>Created:</strong>
@@ -179,10 +260,6 @@ function JobDetails() {
           <div className="info-item">
             <strong>Duration:</strong>
             <span>{formatDuration(job.started_at, job.completed_at)}</span>
-          </div>
-          <div className="info-item">
-            <strong>Destination:</strong>
-            <span>{job.destination_path || 'Default location'}</span>
           </div>
         </div>
 

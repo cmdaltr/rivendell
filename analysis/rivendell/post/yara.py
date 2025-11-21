@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.utils import safe_input
 
 
 def validate_yara(verbosity, output_directory, img, yara_file, binary_dir):
@@ -27,10 +28,11 @@ def validate_yara(verbosity, output_directory, img, yara_file, binary_dir):
     )
     print()
     if "error" in yara_valid:
-        input(
+        safe_input(
             "    '{}' error: {}\n    It is advisable to review the syntax of the yara file. Continue? Y/n [Y] ".format(
                 yara_file.split("/")[-1], yara_valid.split(": error: ")[-1][0:-4]
-            )
+            ),
+            default="y"
         )
         validate_yara(verbosity, output_directory, img, yara_file, binary_dir)
     else:

@@ -4,7 +4,7 @@
 # Gandalf Bash - Remote Forensic Artifact Acquisition Tool
 #
 # A pure bash implementation for Linux/Unix forensic evidence collection
-# Part of the Rivendell DFIR Suite
+# Part of the Rivendell DF Acceleration Suite
 #
 # Usage: sudo ./gandalf.sh [ENCRYPTION] [MODE] [OPTIONS]
 #

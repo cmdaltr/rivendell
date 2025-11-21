@@ -22,16 +22,25 @@ class JobStatus(str, Enum):
 class AnalysisOptions(BaseModel):
     """Analysis options configuration."""
     # Main operation modes
-    collect: bool = False
+    collect: bool = True  # Auto-enabled by default
     gandalf: bool = False
-    reorganise: bool = False
-    process: bool = False
+    local: bool = False
+    process: bool = True  # Auto-enabled by default
 
     # Analysis options
     analysis: bool = False
     extract_iocs: bool = False
+    timeline: bool = False
+    clamav: bool = False
+    memory: bool = False
+    memory_timeline: bool = False
     keywords_file: Optional[str] = None
     yara_dir: Optional[str] = None
+
+    # Speed/Quality modes (merged into analysis)
+    brisk: bool = False
+    quick: bool = False
+    super_quick: bool = False
 
     # Collection options
     collect_files: bool = False
@@ -40,40 +49,22 @@ class AnalysisOptions(BaseModel):
     symlinks: bool = False
     userprofiles: bool = False
 
-    # Processing options
-    timeline: bool = False
-    memory: bool = False
-    memory_timeline: bool = False
+    # Verification options
+    nsrl: bool = False
+    metacollected: bool = False
     imageinfo: bool = False
-
-    # Speed/Quality modes
-    auto: bool = False
-    brisk: bool = False
-    exhaustive: bool = False
-    quick: bool = False
-    super_quick: bool = False
 
     # Output options
     splunk: bool = False
     elastic: bool = False
     navigator: bool = False
 
-    # Security scanning
-    clamav: bool = False
-
-    # Hash comparison
-    nsrl: bool = False
-    metacollected: bool = False
-
     # Post-processing
     delete: bool = False
     archive: bool = False
 
-    # Mount options
-    unmount: bool = False
-
-    # Display
-    lotr: bool = False
+    # Internal options
+    force_overwrite: bool = False
 
 
 class JobCreate(BaseModel):

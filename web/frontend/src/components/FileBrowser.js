@@ -1,15 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { browsePath } from '../api';
 
-function FileBrowser({ onSelectFiles, selectedFiles = [] }) {
-  const [currentPath, setCurrentPath] = useState('/');
+function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
+  const [currentPath, setCurrentPath] = useState(null);
+  const [allowedPaths, setAllowedPaths] = useState([]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Fetch allowed paths on mount
   useEffect(() => {
-    loadPath(currentPath);
+    fetchAllowedPaths();
+  }, []);
+
+  useEffect(() => {
+    if (currentPath) {
+      loadPath(currentPath);
+    }
   }, [currentPath]);
+
+  const fetchAllowedPaths = async () => {
+    try {
+      // Detect OS and set allowed paths
+      const isWindows = navigator.platform.toLowerCase().includes('win');
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+
+      let paths;
+      if (isWindows) {
+        paths = ['C:\\Temp\\rivendell', 'D:\\Temp\\rivendell', 'E:\\Temp\\rivendell', 'F:\\Temp\\rivendell'];
+      } else if (isMac) {
+        paths = ['/Volumes', '/tmp/rivendell'];
+      } else {
+        paths = ['/mnt', '/media', '/tmp/rivendell'];
+      }
+
+      setAllowedPaths(paths);
+
+      // Set first available path as default
+      if (paths.length > 0) {
+        setCurrentPath(paths[0]);
+      }
+    } catch (err) {
+      setError('Failed to initialize file browser');
+    }
+  };
 
   const loadPath = async (path) => {
     setLoading(true);
@@ -26,6 +60,8 @@ function FileBrowser({ onSelectFiles, selectedFiles = [] }) {
   };
 
   const handleItemClick = (item) => {
+    if (disabled) return;
+
     if (item.is_directory) {
       setCurrentPath(item.path);
     } else {
@@ -58,9 +94,48 @@ function FileBrowser({ onSelectFiles, selectedFiles = [] }) {
   };
 
   return (
-    <div className="file-browser-container">
-      <div className="current-path">
-        <strong>Current Path:</strong> {currentPath}
+    <div className={`file-browser-container ${disabled ? 'disabled' : ''}`}>
+      {allowedPaths.length > 1 && (
+        <div className="path-selector">
+          <label htmlFor="pathSelect">Select Root Directory:</label>
+          <select
+            id="pathSelect"
+            value={currentPath || ''}
+            onChange={(e) => setCurrentPath(e.target.value)}
+            disabled={disabled}
+          >
+            {allowedPaths.map((path) => (
+              <option key={path} value={path}>
+                {path}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="current-path" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <strong>Current Path:</strong> {currentPath || 'Loading...'}
+        </div>
+        <button
+          onClick={() => currentPath && loadPath(currentPath)}
+          disabled={disabled || loading}
+          style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '4px',
+            border: '1px solid #3f4b2a',
+            background: 'rgba(240, 219, 165, 0.1)',
+            color: '#f0dba5',
+            cursor: disabled || loading ? 'not-allowed' : 'pointer',
+            fontFamily: "'Cinzel', 'Times New Roman', serif",
+            fontSize: '0.9rem',
+            transition: 'all 0.3s ease'
+          }}
+          onMouseOver={(e) => !disabled && !loading && (e.target.style.background = 'rgba(240, 219, 165, 0.2)')}
+          onMouseOut={(e) => (e.target.style.background = 'rgba(240, 219, 165, 0.1)')}
+        >
+          🔄 Refresh
+        </button>
       </div>
 
       {error && <div className="error">{error}</div>}

@@ -9,9 +9,17 @@ function OptionsPanel({ options, onChange }) {
       description: 'Choose how you want to process the images',
       options: [
         { key: 'collect', label: 'Collect', description: 'Collect artifacts from disk image' },
-        { key: 'gandalf', label: 'Gandalf', description: 'Read artifacts acquired using gandalf' },
-        { key: 'reorganise', label: 'Reorganise', description: 'Reorganise separately acquired artifacts' },
-        { key: 'process', label: 'Process', description: 'Process disk artifacts which have been collected' },
+        { key: 'gandalf', label: 'Gandalf', description: 'Read artifacts acquired using gandalf' }
+      ],
+    },
+    collection: {
+      title: 'Collection Options',
+      description: 'What to collect from the images',
+      options: [
+        { key: 'collect_files', label: 'Collect Files', description: 'Collect files (binaries, documents, scripts)' },
+        { key: 'userprofiles', label: 'User Profiles', description: 'Collect content of user profiles' },
+        { key: 'vss', label: 'Volume Shadow Copies', description: 'Process VSS  (if available)' },
+        { key: 'symlinks', label: 'Follow Symlinks', description: 'Follow paths of symbolic links' },
       ],
     },
     analysis: {
@@ -20,17 +28,11 @@ function OptionsPanel({ options, onChange }) {
       options: [
         { key: 'analysis', label: 'Automated Analysis', description: 'Conduct automated forensic analysis' },
         { key: 'extract_iocs', label: 'Extract IOCs', description: 'Extract Indicators of Compromise' },
-        { key: 'timeline', label: 'Timeline', description: 'Create timeline using plaso (SLOW!)' },
-      ],
-    },
-    collection: {
-      title: 'Collection Options',
-      description: 'What to collect from the images',
-      options: [
-        { key: 'collect_files', label: 'Collect Files', description: 'Collect files (binaries, documents, scripts)' },
-        { key: 'userprofiles', label: 'User Profiles', description: 'Collect user profile artifacts' },
-        { key: 'vss', label: 'Volume Shadow Copies', description: 'Process VSS if available' },
-        { key: 'symlinks', label: 'Follow Symlinks', description: 'Follow symbolic links (SLOW!)' },
+        { key: 'timeline', label: 'Timeline', description: 'Create full timeline using plaso' },
+        { key: 'clamav', label: 'ClamAV', description: 'Run ClamAV against mounted image' },
+        { key: 'brisk', label: 'Brisk', description: 'Fast analysis with most features' },
+        { key: 'quick', label: 'Quick', description: 'Get timestamps but skip hashing' },
+        { key: 'super_quick', label: 'Super Quick', description: 'Skip timestamps and hashing' },
       ],
     },
     memory: {
@@ -39,17 +41,6 @@ function OptionsPanel({ options, onChange }) {
       options: [
         { key: 'memory', label: 'Memory Analysis', description: 'Analyze memory using Volatility' },
         { key: 'memory_timeline', label: 'Memory Timeline', description: 'Create memory timeline' },
-      ],
-    },
-    speed: {
-      title: 'Speed/Quality Mode',
-      description: 'Balance between speed and thoroughness',
-      options: [
-        { key: 'exhaustive', label: 'Exhaustive', description: 'All analysis options (VERY SLOW!)' },
-        { key: 'brisk', label: 'Brisk', description: 'Fast analysis with most features' },
-        { key: 'auto', label: 'Auto', description: 'Minimal prompting when mounting' },
-        { key: 'quick', label: 'Quick', description: 'Get timestamps but skip hashing' },
-        { key: 'super_quick', label: 'Super Quick', description: 'Skip timestamps and hashing' },
       ],
     },
     output: {
@@ -61,15 +52,8 @@ function OptionsPanel({ options, onChange }) {
         { key: 'navigator', label: 'MITRE Navigator', description: 'Map to ATT&CK framework' },
       ],
     },
-    security: {
-      title: 'Security Scanning',
-      description: 'Scan for malware and threats',
-      options: [
-        { key: 'clamav', label: 'ClamAV', description: 'Run ClamAV against mounted image' },
-      ],
-    },
     hashing: {
-      title: 'Hashing & Verification',
+      title: 'Verification',
       description: 'File hashing and comparison options',
       options: [
         { key: 'nsrl', label: 'NSRL', description: 'Compare hashes against NSRL database' },
@@ -83,14 +67,6 @@ function OptionsPanel({ options, onChange }) {
       options: [
         { key: 'archive', label: 'Archive', description: 'Create ZIP archive after processing' },
         { key: 'delete', label: 'Delete Raw Data', description: 'Delete raw data after processing' },
-      ],
-    },
-    misc: {
-      title: 'Miscellaneous',
-      description: 'Other options',
-      options: [
-        { key: 'unmount', label: 'Keep Mounted', description: 'Do not unmount images' },
-        { key: 'lotr', label: 'LOTR Theme', description: 'Show Tolkien-themed ASCII art' },
       ],
     },
   };

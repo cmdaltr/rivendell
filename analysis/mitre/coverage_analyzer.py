@@ -4,7 +4,7 @@ MITRE ATT&CK Coverage Analyzer
 Real-time coverage analysis during artifact processing.
 Tracks evidence, calculates coverage, generates standalone reports.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -23,6 +23,7 @@ from .attck_updater import MitreAttackUpdater
 @dataclass
 class Evidence:
     """Evidence supporting a technique detection."""
+
     artifact_type: str
     artifact_path: str
     timestamp: str
@@ -38,6 +39,7 @@ class Evidence:
 @dataclass
 class TechniqueDetection:
     """A detected MITRE ATT&CK technique with evidence."""
+
     technique_id: str
     technique_name: str
     tactics: List[str]
@@ -50,14 +52,14 @@ class TechniqueDetection:
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
-            'technique_id': self.technique_id,
-            'technique_name': self.technique_name,
-            'tactics': self.tactics,
-            'confidence': self.confidence,
-            'detection_count': self.detection_count,
-            'first_seen': self.first_seen,
-            'last_seen': self.last_seen,
-            'evidence': [e.to_dict() for e in self.evidence]
+            "technique_id": self.technique_id,
+            "technique_name": self.technique_name,
+            "tactics": self.tactics,
+            "confidence": self.confidence,
+            "detection_count": self.detection_count,
+            "first_seen": self.first_seen,
+            "last_seen": self.last_seen,
+            "evidence": [e.to_dict() for e in self.evidence],
         }
 
 
@@ -89,7 +91,8 @@ class CoverageDatabase:
         cursor = self.conn.cursor()
 
         # Techniques table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS techniques (
                 technique_id TEXT PRIMARY KEY,
                 technique_name TEXT,
@@ -99,10 +102,12 @@ class CoverageDatabase:
                 first_seen TEXT,
                 last_seen TEXT
             )
-        ''')
+        """
+        )
 
         # Evidence table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS evidence (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 technique_id TEXT,
@@ -114,10 +119,12 @@ class CoverageDatabase:
                 metadata TEXT,
                 FOREIGN KEY (technique_id) REFERENCES techniques(technique_id)
             )
-        ''')
+        """
+        )
 
         # Artifacts table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS artifacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 artifact_type TEXT,
@@ -125,10 +132,12 @@ class CoverageDatabase:
                 processed_timestamp TEXT,
                 technique_count INTEGER
             )
-        ''')
+        """
+        )
 
         # Statistics table
-        cursor.execute('''
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS statistics (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT,
@@ -137,7 +146,8 @@ class CoverageDatabase:
                 coverage_percentage REAL,
                 total_artifacts INTEGER
             )
-        ''')
+        """
+        )
 
         self.conn.commit()
 
@@ -146,35 +156,43 @@ class CoverageDatabase:
         cursor = self.conn.cursor()
 
         # Check if technique exists
-        cursor.execute('SELECT detection_count, first_seen FROM techniques WHERE technique_id = ?',
-                      (detection.technique_id,))
+        cursor.execute(
+            "SELECT detection_count, first_seen FROM techniques WHERE technique_id = ?",
+            (detection.technique_id,),
+        )
         existing = cursor.fetchone()
 
         if existing:
             # Update existing
             new_count = existing[0] + 1
-            cursor.execute('''
+            cursor.execute(
+                """
                 UPDATE techniques
                 SET detection_count = ?,
                     confidence = ?,
                     last_seen = ?
                 WHERE technique_id = ?
-            ''', (new_count, detection.confidence, detection.last_seen, detection.technique_id))
+            """,
+                (new_count, detection.confidence, detection.last_seen, detection.technique_id),
+            )
         else:
             # Insert new
-            cursor.execute('''
+            cursor.execute(
+                """
                 INSERT INTO techniques
                 (technique_id, technique_name, tactics, confidence, detection_count, first_seen, last_seen)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                detection.technique_id,
-                detection.technique_name,
-                json.dumps(detection.tactics),
-                detection.confidence,
-                detection.detection_count,
-                detection.first_seen,
-                detection.last_seen
-            ))
+            """,
+                (
+                    detection.technique_id,
+                    detection.technique_name,
+                    json.dumps(detection.tactics),
+                    detection.confidence,
+                    detection.detection_count,
+                    detection.first_seen,
+                    detection.last_seen,
+                ),
+            )
 
         self.conn.commit()
 
@@ -182,19 +200,22 @@ class CoverageDatabase:
         """Add evidence for a technique."""
         cursor = self.conn.cursor()
 
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO evidence
             (technique_id, artifact_type, artifact_path, timestamp, confidence, context, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            technique_id,
-            evidence.artifact_type,
-            evidence.artifact_path,
-            evidence.timestamp,
-            evidence.confidence,
-            evidence.context,
-            json.dumps(evidence.metadata) if evidence.metadata else None
-        ))
+        """,
+            (
+                technique_id,
+                evidence.artifact_type,
+                evidence.artifact_path,
+                evidence.timestamp,
+                evidence.confidence,
+                evidence.context,
+                json.dumps(evidence.metadata) if evidence.metadata else None,
+            ),
+        )
 
         self.conn.commit()
 
@@ -202,11 +223,14 @@ class CoverageDatabase:
         """Record processed artifact."""
         cursor = self.conn.cursor()
 
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO artifacts
             (artifact_type, artifact_path, processed_timestamp, technique_count)
             VALUES (?, ?, ?, ?)
-        ''', (artifact_type, artifact_path, datetime.utcnow().isoformat(), technique_count))
+        """,
+            (artifact_type, artifact_path, datetime.utcnow().isoformat(), technique_count),
+        )
 
         self.conn.commit()
 
@@ -214,17 +238,20 @@ class CoverageDatabase:
         """Record coverage statistics snapshot."""
         cursor = self.conn.cursor()
 
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO statistics
             (timestamp, total_techniques, detected_techniques, coverage_percentage, total_artifacts)
             VALUES (?, ?, ?, ?, ?)
-        ''', (
-            datetime.utcnow().isoformat(),
-            stats['total_techniques'],
-            stats['detected_techniques'],
-            stats['coverage_percentage'],
-            stats['total_artifacts']
-        ))
+        """,
+            (
+                datetime.utcnow().isoformat(),
+                stats["total_techniques"],
+                stats["detected_techniques"],
+                stats["coverage_percentage"],
+                stats["total_artifacts"],
+            ),
+        )
 
         self.conn.commit()
 
@@ -232,21 +259,26 @@ class CoverageDatabase:
         """Get all detected techniques."""
         cursor = self.conn.cursor()
 
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT technique_id, technique_name, tactics, confidence,
                    detection_count, first_seen, last_seen
             FROM techniques
             ORDER BY confidence DESC, detection_count DESC
-        ''')
+        """
+        )
 
         techniques = []
         for row in cursor.fetchall():
             # Get evidence for this technique
-            cursor.execute('''
+            cursor.execute(
+                """
                 SELECT artifact_type, artifact_path, timestamp, confidence, context, metadata
                 FROM evidence
                 WHERE technique_id = ?
-            ''', (row[0],))
+            """,
+                (row[0],),
+            )
 
             evidence_rows = cursor.fetchall()
             evidence = [
@@ -256,21 +288,23 @@ class CoverageDatabase:
                     timestamp=e[2],
                     confidence=e[3],
                     context=e[4],
-                    metadata=json.loads(e[5]) if e[5] else None
+                    metadata=json.loads(e[5]) if e[5] else None,
                 )
                 for e in evidence_rows
             ]
 
-            techniques.append(TechniqueDetection(
-                technique_id=row[0],
-                technique_name=row[1],
-                tactics=json.loads(row[2]),
-                confidence=row[3],
-                detection_count=row[4],
-                first_seen=row[5],
-                last_seen=row[6],
-                evidence=evidence
-            ))
+            techniques.append(
+                TechniqueDetection(
+                    technique_id=row[0],
+                    technique_name=row[1],
+                    tactics=json.loads(row[2]),
+                    confidence=row[3],
+                    detection_count=row[4],
+                    first_seen=row[5],
+                    last_seen=row[6],
+                    evidence=evidence,
+                )
+            )
 
         return techniques
 
@@ -279,31 +313,33 @@ class CoverageDatabase:
         cursor = self.conn.cursor()
 
         # Get technique counts
-        cursor.execute('SELECT COUNT(*) FROM techniques')
+        cursor.execute("SELECT COUNT(*) FROM techniques")
         detected_count = cursor.fetchone()[0]
 
         # Get artifact count
-        cursor.execute('SELECT COUNT(*) FROM artifacts')
+        cursor.execute("SELECT COUNT(*) FROM artifacts")
         artifact_count = cursor.fetchone()[0]
 
         # Get confidence distribution
-        cursor.execute('''
+        cursor.execute(
+            """
             SELECT
                 SUM(CASE WHEN confidence >= 0.8 THEN 1 ELSE 0 END) as high,
                 SUM(CASE WHEN confidence >= 0.5 AND confidence < 0.8 THEN 1 ELSE 0 END) as medium,
                 SUM(CASE WHEN confidence < 0.5 THEN 1 ELSE 0 END) as low
             FROM techniques
-        ''')
+        """
+        )
         conf_dist = cursor.fetchone()
 
         return {
-            'detected_techniques': detected_count,
-            'total_artifacts': artifact_count,
-            'confidence_distribution': {
-                'high': conf_dist[0] or 0,
-                'medium': conf_dist[1] or 0,
-                'low': conf_dist[2] or 0
-            }
+            "detected_techniques": detected_count,
+            "total_artifacts": artifact_count,
+            "confidence_distribution": {
+                "high": conf_dist[0] or 0,
+                "medium": conf_dist[1] or 0,
+                "low": conf_dist[2] or 0,
+            },
         }
 
     def close(self):
@@ -325,12 +361,7 @@ class MitreCoverageAnalyzer:
     - Standalone dashboard generation
     """
 
-    def __init__(
-        self,
-        case_id: str,
-        output_dir: str,
-        auto_update: bool = True
-    ):
+    def __init__(self, case_id: str, output_dir: str, auto_update: bool = True):
         """
         Initialize coverage analyzer.
 
@@ -344,7 +375,7 @@ class MitreCoverageAnalyzer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Create MITRE subdirectory
-        self.mitre_dir = self.output_dir / 'mitre'
+        self.mitre_dir = self.output_dir / "mitre"
         self.mitre_dir.mkdir(exist_ok=True)
 
         # Initialize components
@@ -357,7 +388,7 @@ class MitreCoverageAnalyzer:
         self.attck_data = self.updater.load_cached_data()
 
         # Initialize database
-        db_path = str(self.mitre_dir / f'{case_id}_coverage.db')
+        db_path = str(self.mitre_dir / f"{case_id}_coverage.db")
         self.db = CoverageDatabase(db_path)
 
         # Track processing
@@ -369,7 +400,7 @@ class MitreCoverageAnalyzer:
         artifact_type: str,
         artifact_path: str,
         artifact_data: Optional[dict] = None,
-        context: Optional[str] = None
+        context: Optional[str] = None,
     ) -> List[TechniqueDetection]:
         """
         Analyze artifact and update coverage in real-time.
@@ -385,13 +416,11 @@ class MitreCoverageAnalyzer:
         """
         # Map artifact to techniques
         mappings = self.mapper.map_artifact_to_techniques(
-            artifact_type=artifact_type,
-            artifact_data=artifact_data,
-            context=context
+            artifact_type=artifact_type, artifact_data=artifact_data, context=context
         )
 
         detections = []
-        now = datetime.utcnow().isoformat() + 'Z'
+        now = datetime.utcnow().isoformat() + "Z"
 
         for mapping in mappings:
             # Create evidence
@@ -399,21 +428,21 @@ class MitreCoverageAnalyzer:
                 artifact_type=artifact_type,
                 artifact_path=artifact_path,
                 timestamp=now,
-                confidence=mapping['confidence'],
+                confidence=mapping["confidence"],
                 context=context,
-                metadata=artifact_data
+                metadata=artifact_data,
             )
 
             # Create or update detection
             detection = TechniqueDetection(
-                technique_id=mapping['id'],
-                technique_name=mapping['name'],
-                tactics=mapping['tactics'],
-                confidence=mapping['confidence'],
+                technique_id=mapping["id"],
+                technique_name=mapping["name"],
+                tactics=mapping["tactics"],
+                confidence=mapping["confidence"],
                 detection_count=1,
                 first_seen=now,
                 last_seen=now,
-                evidence=[evidence]
+                evidence=[evidence],
             )
 
             # Store in database
@@ -443,14 +472,14 @@ class MitreCoverageAnalyzer:
 
         # Build report
         report = {
-            'case_id': self.case_id,
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'attck_version': self.attck_data.get('version', 'unknown'),
-            'analysis_duration': (datetime.utcnow() - self.start_time).total_seconds(),
-            'statistics': stats,
-            'techniques': [d.to_dict() for d in detections],
-            'tactics_summary': self._get_tactics_summary(detections),
-            'evidence_map': self._get_evidence_map(detections)
+            "case_id": self.case_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "attck_version": self.attck_data.get("version", "unknown"),
+            "analysis_duration": (datetime.utcnow() - self.start_time).total_seconds(),
+            "statistics": stats,
+            "techniques": [d.to_dict() for d in detections],
+            "tactics_summary": self._get_tactics_summary(detections),
+            "evidence_map": self._get_evidence_map(detections),
         }
 
         # Save statistics snapshot
@@ -460,7 +489,7 @@ class MitreCoverageAnalyzer:
 
     def _calculate_coverage_statistics(self, detections: List[TechniqueDetection]) -> dict:
         """Calculate coverage statistics."""
-        total_techniques = len(self.attck_data.get('techniques', {}))
+        total_techniques = len(self.attck_data.get("techniques", {}))
         detected_count = len(detections)
 
         # Confidence distribution
@@ -470,30 +499,28 @@ class MitreCoverageAnalyzer:
 
         # Tactic coverage
         tactics_with_coverage = len(self._get_tactics_summary(detections))
-        total_tactics = len(self.attck_data.get('tactics', {}))
+        total_tactics = len(self.attck_data.get("tactics", {}))
 
         return {
-            'total_techniques': total_techniques,
-            'detected_techniques': detected_count,
-            'coverage_percentage': (detected_count / total_techniques * 100) if total_techniques > 0 else 0,
-            'total_tactics': total_tactics,
-            'tactics_with_coverage': tactics_with_coverage,
-            'total_artifacts': self.artifact_count,
-            'confidence_distribution': {
-                'high': high_conf,
-                'medium': medium_conf,
-                'low': low_conf
-            }
+            "total_techniques": total_techniques,
+            "detected_techniques": detected_count,
+            "coverage_percentage": (
+                (detected_count / total_techniques * 100) if total_techniques > 0 else 0
+            ),
+            "total_tactics": total_tactics,
+            "tactics_with_coverage": tactics_with_coverage,
+            "total_artifacts": self.artifact_count,
+            "confidence_distribution": {"high": high_conf, "medium": medium_conf, "low": low_conf},
         }
 
     def _get_tactics_summary(self, detections: List[TechniqueDetection]) -> dict:
         """Get tactic-level coverage summary."""
-        tactic_summary = defaultdict(lambda: {'techniques': [], 'count': 0})
+        tactic_summary = defaultdict(lambda: {"techniques": [], "count": 0})
 
         for detection in detections:
             for tactic in detection.tactics:
-                tactic_summary[tactic]['techniques'].append(detection.technique_id)
-                tactic_summary[tactic]['count'] += 1
+                tactic_summary[tactic]["techniques"].append(detection.technique_id)
+                tactic_summary[tactic]["count"] += 1
 
         return dict(tactic_summary)
 
@@ -503,11 +530,13 @@ class MitreCoverageAnalyzer:
 
         for detection in detections:
             for evidence in detection.evidence:
-                evidence_map[evidence.artifact_path].append({
-                    'technique_id': detection.technique_id,
-                    'technique_name': detection.technique_name,
-                    'confidence': evidence.confidence
-                })
+                evidence_map[evidence.artifact_path].append(
+                    {
+                        "technique_id": detection.technique_id,
+                        "technique_name": detection.technique_name,
+                        "confidence": evidence.confidence,
+                    }
+                )
 
         return dict(evidence_map)
 
@@ -522,11 +551,11 @@ class MitreCoverageAnalyzer:
             Path to exported file
         """
         if not output_file:
-            output_file = str(self.mitre_dir / 'coverage.json')
+            output_file = str(self.mitre_dir / "coverage.json")
 
         report = self.generate_coverage_report()
 
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(report, f, indent=2)
 
         return output_file
@@ -553,56 +582,67 @@ class MitreCoverageAnalyzer:
         files = {}
 
         # Techniques CSV
-        techniques_file = output_path / 'techniques.csv'
-        with open(techniques_file, 'w', newline='') as f:
+        techniques_file = output_path / "techniques.csv"
+        with open(techniques_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['Technique ID', 'Technique Name', 'Tactics', 'Confidence', 'Detection Count', 'First Seen', 'Last Seen', 'Evidence Count'])
+            writer.writerow(
+                [
+                    "Technique ID",
+                    "Technique Name",
+                    "Tactics",
+                    "Confidence",
+                    "Detection Count",
+                    "First Seen",
+                    "Last Seen",
+                    "Evidence Count",
+                ]
+            )
 
-            for tech in report['techniques']:
-                writer.writerow([
-                    tech['technique_id'],
-                    tech['technique_name'],
-                    ', '.join(tech['tactics']),
-                    f"{tech['confidence']:.2f}",
-                    tech['detection_count'],
-                    tech['first_seen'],
-                    tech['last_seen'],
-                    len(tech['evidence'])
-                ])
+            for tech in report["techniques"]:
+                writer.writerow(
+                    [
+                        tech["technique_id"],
+                        tech["technique_name"],
+                        ", ".join(tech["tactics"]),
+                        f"{tech['confidence']:.2f}",
+                        tech["detection_count"],
+                        tech["first_seen"],
+                        tech["last_seen"],
+                        len(tech["evidence"]),
+                    ]
+                )
 
-        files['techniques'] = str(techniques_file)
+        files["techniques"] = str(techniques_file)
 
         # Tactics summary CSV
-        tactics_file = output_path / 'tactics_summary.csv'
-        with open(tactics_file, 'w', newline='') as f:
+        tactics_file = output_path / "tactics_summary.csv"
+        with open(tactics_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['Tactic', 'Technique Count', 'Techniques'])
+            writer.writerow(["Tactic", "Technique Count", "Techniques"])
 
-            for tactic, data in report['tactics_summary'].items():
-                writer.writerow([
-                    tactic,
-                    data['count'],
-                    ', '.join(data['techniques'])
-                ])
+            for tactic, data in report["tactics_summary"].items():
+                writer.writerow([tactic, data["count"], ", ".join(data["techniques"])])
 
-        files['tactics_summary'] = str(tactics_file)
+        files["tactics_summary"] = str(tactics_file)
 
         # Evidence map CSV
-        evidence_file = output_path / 'evidence_map.csv'
-        with open(evidence_file, 'w', newline='') as f:
+        evidence_file = output_path / "evidence_map.csv"
+        with open(evidence_file, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow(['Artifact Path', 'Technique ID', 'Technique Name', 'Confidence'])
+            writer.writerow(["Artifact Path", "Technique ID", "Technique Name", "Confidence"])
 
-            for artifact_path, techniques in report['evidence_map'].items():
+            for artifact_path, techniques in report["evidence_map"].items():
                 for tech in techniques:
-                    writer.writerow([
-                        artifact_path,
-                        tech['technique_id'],
-                        tech['technique_name'],
-                        f"{tech['confidence']:.2f}"
-                    ])
+                    writer.writerow(
+                        [
+                            artifact_path,
+                            tech["technique_id"],
+                            tech["technique_name"],
+                            f"{tech['confidence']:.2f}",
+                        ]
+                    )
 
-        files['evidence_map'] = str(evidence_file)
+        files["evidence_map"] = str(evidence_file)
 
         return files
 
@@ -619,44 +659,44 @@ class MitreCoverageAnalyzer:
         report = self.generate_coverage_report()
         events = []
 
-        for technique in report['techniques']:
-            if siem_type == 'splunk':
+        for technique in report["techniques"]:
+            if siem_type == "splunk":
                 # Splunk HEC format
-                for evidence in technique['evidence']:
+                for evidence in technique["evidence"]:
                     event = {
-                        'time': evidence['timestamp'],
-                        'source': 'rivendell:mitre',
-                        'sourcetype': 'mitre:coverage',
-                        'event': {
-                            'case_id': self.case_id,
-                            'technique_id': technique['technique_id'],
-                            'technique_name': technique['technique_name'],
-                            'tactics': technique['tactics'],
-                            'confidence': technique['confidence'],
-                            'artifact_type': evidence['artifact_type'],
-                            'artifact_path': evidence['artifact_path'],
-                            'context': evidence.get('context', ''),
-                        }
+                        "time": evidence["timestamp"],
+                        "source": "rivendell:mitre",
+                        "sourcetype": "mitre:coverage",
+                        "event": {
+                            "case_id": self.case_id,
+                            "technique_id": technique["technique_id"],
+                            "technique_name": technique["technique_name"],
+                            "tactics": technique["tactics"],
+                            "confidence": technique["confidence"],
+                            "artifact_type": evidence["artifact_type"],
+                            "artifact_path": evidence["artifact_path"],
+                            "context": evidence.get("context", ""),
+                        },
                     }
                     events.append(event)
 
-            elif siem_type == 'elastic':
+            elif siem_type == "elastic":
                 # Elasticsearch format
-                for evidence in technique['evidence']:
+                for evidence in technique["evidence"]:
                     doc = {
-                        '@timestamp': evidence['timestamp'],
-                        'case_id': self.case_id,
-                        'mitre': {
-                            'technique_id': technique['technique_id'],
-                            'technique_name': technique['technique_name'],
-                            'tactics': technique['tactics'],
-                            'confidence': technique['confidence']
+                        "@timestamp": evidence["timestamp"],
+                        "case_id": self.case_id,
+                        "mitre": {
+                            "technique_id": technique["technique_id"],
+                            "technique_name": technique["technique_name"],
+                            "tactics": technique["tactics"],
+                            "confidence": technique["confidence"],
                         },
-                        'artifact': {
-                            'type': evidence['artifact_type'],
-                            'path': evidence['artifact_path'],
-                            'context': evidence.get('context', '')
-                        }
+                        "artifact": {
+                            "type": evidence["artifact_type"],
+                            "path": evidence["artifact_path"],
+                            "context": evidence.get("context", ""),
+                        },
                     }
                     events.append(doc)
 
@@ -669,13 +709,14 @@ class MitreCoverageAnalyzer:
 
 # Convenience functions
 
+
 def analyze_artifact(
     case_id: str,
     output_dir: str,
     artifact_type: str,
     artifact_path: str,
     artifact_data: Optional[dict] = None,
-    context: Optional[str] = None
+    context: Optional[str] = None,
 ) -> List[TechniqueDetection]:
     """
     Convenience function to analyze a single artifact.

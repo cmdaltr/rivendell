@@ -6,12 +6,25 @@ import subprocess
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
-from rivendell.memory.volatility.plugins.vol_lin import linux_vol
-from rivendell.memory.volatility.plugins.vol_mac import mac_vol
-from rivendell.memory.volatility.plugins.vol_win import windows_vol
-from rivendell.memory.volatility3.plugins.vol3_lin import linux_vol3
-from rivendell.memory.volatility3.plugins.vol3_mac import macos_vol3
-from rivendell.memory.volatility3.plugins.vol3_win import windows_vol3
+
+# Try to import volatility plugins - they may not be installed
+try:
+    from rivendell.memory.volatility.plugins.vol_lin import linux_vol
+    from rivendell.memory.volatility.plugins.vol_mac import mac_vol
+    from rivendell.memory.volatility.plugins.vol_win import windows_vol
+except ImportError:
+    linux_vol = None
+    mac_vol = None
+    windows_vol = None
+
+try:
+    from rivendell.memory.volatility3.plugins.vol3_lin import linux_vol3
+    from rivendell.memory.volatility3.plugins.vol3_mac import macos_vol3
+    from rivendell.memory.volatility3.plugins.vol3_win import windows_vol3
+except ImportError:
+    linux_vol3 = None
+    macos_vol3 = None
+    windows_vol3 = None
 
 
 def use_plugins(

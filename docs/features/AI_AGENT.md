@@ -1060,4 +1060,4 @@ Start by indexing a small case, experiment with different queries, and gradually
 
 **Version:** 2.1.0
 **Last Updated:** 2025-11-12
-**Author:** Rivendell DFIR Suite
+**Author:** Rivendell DF Acceleration Suite

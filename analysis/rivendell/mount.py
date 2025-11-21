@@ -28,17 +28,22 @@ def unmount_images(elrond_mount, ewf_mount):
             sys.exit()
         time.sleep(0.1)
 
-    for shadowimg in os.listdir("/mnt/shadow_mount/"):
-        for everyshadow in os.listdir("/mnt/shadow_mount/" + shadowimg):
-            unmount_locations("/mnt/shadow_mount/" + shadowimg + "/" + everyshadow)
-        remove_directories("/mnt/shadow_mount/" + shadowimg)
-    for eachimg in os.listdir("/mnt/vss/"):
-        for eachvss in os.listdir("/mnt/vss/" + eachimg):
-            if os.path.exists("/mnt/vss/" + eachimg + "/" + eachvss):
-                unmount_locations("/mnt/vss/" + eachimg + "/" + eachvss)
-        if os.path.exists("/mnt/vss/" + eachimg):
-            unmount_locations("/mnt/vss/" + eachimg)
-            remove_directories("/mnt/vss/" + eachimg)
+    # Check if shadow_mount directory exists before accessing
+    if os.path.exists("/mnt/shadow_mount/"):
+        for shadowimg in os.listdir("/mnt/shadow_mount/"):
+            for everyshadow in os.listdir("/mnt/shadow_mount/" + shadowimg):
+                unmount_locations("/mnt/shadow_mount/" + shadowimg + "/" + everyshadow)
+            remove_directories("/mnt/shadow_mount/" + shadowimg)
+
+    # Check if vss directory exists before accessing
+    if os.path.exists("/mnt/vss/"):
+        for eachimg in os.listdir("/mnt/vss/"):
+            for eachvss in os.listdir("/mnt/vss/" + eachimg):
+                if os.path.exists("/mnt/vss/" + eachimg + "/" + eachvss):
+                    unmount_locations("/mnt/vss/" + eachimg + "/" + eachvss)
+            if os.path.exists("/mnt/vss/" + eachimg):
+                unmount_locations("/mnt/vss/" + eachimg)
+                remove_directories("/mnt/vss/" + eachimg)
     for devnbd in range(1, 15):
         if os.path.exists("/dev/nbd" + str(devnbd)):
             unmount_locations("/dev/nbd" + str(devnbd))
@@ -623,6 +628,9 @@ def mount_images(
                                 disk_file
                             )
                         )
+                    # Ensure parent directory exists
+                    if not os.path.exists("/mnt/vss/"):
+                        os.makedirs("/mnt/vss/")
                     os.mkdir("/mnt/vss/" + disk_file.split("::")[0] + "/")
                     subprocess.Popen(
                         [
@@ -662,6 +670,9 @@ def mount_images(
                                 "/mnt/shadow_mount/" + disk_file.split("::")[0] + "/"
                             )
                     else:
+                        # Ensure parent directory exists
+                        if not os.path.exists("/mnt/shadow_mount/"):
+                            os.makedirs("/mnt/shadow_mount/")
                         os.mkdir("/mnt/shadow_mount/" + disk_file.split("::")[0] + "/")
                         for i in os.listdir(
                             "/mnt/vss/" + disk_file.split("::")[0] + "/"

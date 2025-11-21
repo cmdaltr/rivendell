@@ -5,7 +5,7 @@ MITRE ATT&CK Integration for Elrond Analysis Pipeline
 Bridges the new MITRE module with the existing Elrond analysis pipeline.
 Provides automatic technique mapping and dashboard generation.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -30,11 +30,7 @@ class ElrondMitreIntegration:
     - Export to Splunk, Elastic, and Navigator formats
     """
 
-    def __init__(
-        self,
-        output_dir: str = '/tmp/rivendell/mitre',
-        auto_update: bool = True
-    ):
+    def __init__(self, output_dir: str = "/tmp/rivendell/mitre", auto_update: bool = True):
         """
         Initialize MITRE integration.
 
@@ -63,7 +59,7 @@ class ElrondMitreIntegration:
         self,
         artifact_type: str,
         artifact_data: Optional[dict] = None,
-        context: Optional[str] = None
+        context: Optional[str] = None,
     ) -> List[dict]:
         """
         Map a single artifact to MITRE ATT&CK techniques.
@@ -77,9 +73,7 @@ class ElrondMitreIntegration:
             List of technique mappings with confidence scores
         """
         techniques = self.mapper.map_artifact_to_techniques(
-            artifact_type=artifact_type,
-            artifact_data=artifact_data,
-            context=context
+            artifact_type=artifact_type, artifact_data=artifact_data, context=context
         )
 
         # Store for dashboard generation
@@ -87,10 +81,7 @@ class ElrondMitreIntegration:
 
         return techniques
 
-    def map_artifacts_batch(
-        self,
-        artifacts: List[Dict[str, any]]
-    ) -> List[dict]:
+    def map_artifacts_batch(self, artifacts: List[Dict[str, any]]) -> List[dict]:
         """
         Map multiple artifacts to techniques in batch.
 
@@ -107,19 +98,15 @@ class ElrondMitreIntegration:
 
         for artifact in artifacts:
             techniques = self.map_artifact(
-                artifact_type=artifact.get('type'),
-                artifact_data=artifact.get('data'),
-                context=artifact.get('context')
+                artifact_type=artifact.get("type"),
+                artifact_data=artifact.get("data"),
+                context=artifact.get("context"),
             )
             all_techniques.extend(techniques)
 
         return all_techniques
 
-    def generate_dashboards(
-        self,
-        case_name: str,
-        formats: List[str] = None
-    ) -> dict:
+    def generate_dashboards(self, case_name: str, formats: List[str] = None) -> dict:
         """
         Generate MITRE coverage dashboards for current analysis.
 
@@ -140,20 +127,14 @@ class ElrondMitreIntegration:
 
         # Generate dashboards
         result = self.generator.save_dashboards(
-            technique_mappings=self.technique_mappings,
-            output_dir=str(case_output),
-            formats=formats
+            technique_mappings=self.technique_mappings, output_dir=str(case_output), formats=formats
         )
 
         self.logger.info(f"Dashboards generated for case '{case_name}' in {case_output}")
 
         return result
 
-    def export_to_legacy_format(
-        self,
-        case_name: str,
-        output_file: Optional[str] = None
-    ) -> str:
+    def export_to_legacy_format(self, case_name: str, output_file: Optional[str] = None) -> str:
         """
         Export technique mappings in legacy Elrond format.
 
@@ -171,34 +152,39 @@ class ElrondMitreIntegration:
 
         # Convert to legacy format
         legacy_data = {
-            'case': case_name,
-            'timestamp': self.updater.load_cached_data().get('last_updated', 'unknown'),
-            'attck_version': self.updater.load_cached_data().get('version', 'unknown'),
-            'techniques': []
+            "case": case_name,
+            "timestamp": self.updater.load_cached_data().get("last_updated", "unknown"),
+            "attck_version": self.updater.load_cached_data().get("version", "unknown"),
+            "techniques": [],
         }
 
         # Deduplicate techniques
         unique_techniques = {}
         for mapping in self.technique_mappings:
-            tech_id = mapping['id']
-            if tech_id not in unique_techniques or mapping['confidence'] > unique_techniques[tech_id]['confidence']:
+            tech_id = mapping["id"]
+            if (
+                tech_id not in unique_techniques
+                or mapping["confidence"] > unique_techniques[tech_id]["confidence"]
+            ):
                 unique_techniques[tech_id] = mapping
 
         # Convert to legacy format
         for tech_id, mapping in unique_techniques.items():
-            legacy_data['techniques'].append({
-                'id': tech_id,
-                'name': mapping.get('name', 'Unknown'),
-                'tactics': mapping.get('tactics', []),
-                'confidence': mapping.get('confidence', 0.0),
-                'evidence': mapping.get('evidence', {})
-            })
+            legacy_data["techniques"].append(
+                {
+                    "id": tech_id,
+                    "name": mapping.get("name", "Unknown"),
+                    "tactics": mapping.get("tactics", []),
+                    "confidence": mapping.get("confidence", 0.0),
+                    "evidence": mapping.get("evidence", {}),
+                }
+            )
 
         # Sort by confidence
-        legacy_data['techniques'].sort(key=lambda x: x['confidence'], reverse=True)
+        legacy_data["techniques"].sort(key=lambda x: x["confidence"], reverse=True)
 
         # Write to file
-        with open(output_file, 'w') as f:
+        with open(output_file, "w") as f:
             json.dump(legacy_data, f, indent=2)
 
         self.logger.info(f"Legacy format export saved to {output_file}")
@@ -214,7 +200,7 @@ class ElrondMitreIntegration:
         """
         techniques = set()
         for mapping in self.technique_mappings:
-            techniques.add(mapping['id'])
+            techniques.add(mapping["id"])
 
         return sorted(list(techniques))
 
@@ -230,19 +216,24 @@ class ElrondMitreIntegration:
         # Deduplicate and prepare for ES
         unique_techniques = {}
         for mapping in self.technique_mappings:
-            tech_id = mapping['id']
-            if tech_id not in unique_techniques or mapping['confidence'] > unique_techniques[tech_id]['confidence']:
+            tech_id = mapping["id"]
+            if (
+                tech_id not in unique_techniques
+                or mapping["confidence"] > unique_techniques[tech_id]["confidence"]
+            ):
                 unique_techniques[tech_id] = mapping
 
         for tech_id, mapping in unique_techniques.items():
-            documents.append({
-                'mitre_technique_id': tech_id,
-                'mitre_technique_name': mapping.get('name', 'Unknown'),
-                'mitre_tactics': mapping.get('tactics', []),
-                'mitre_confidence': mapping.get('confidence', 0.0),
-                'mitre_evidence': mapping.get('evidence', {}),
-                '@timestamp': self.updater.load_cached_data().get('last_updated', 'unknown')
-            })
+            documents.append(
+                {
+                    "mitre_technique_id": tech_id,
+                    "mitre_technique_name": mapping.get("name", "Unknown"),
+                    "mitre_tactics": mapping.get("tactics", []),
+                    "mitre_confidence": mapping.get("confidence", 0.0),
+                    "mitre_evidence": mapping.get("evidence", {}),
+                    "@timestamp": self.updater.load_cached_data().get("last_updated", "unknown"),
+                }
+            )
 
         return documents
 
@@ -255,20 +246,16 @@ class ElrondMitreIntegration:
         """
         if not self.technique_mappings:
             return {
-                'total_techniques': 0,
-                'detected_techniques': 0,
-                'coverage_percentage': 0.0,
-                'confidence_distribution': {
-                    'high': 0,
-                    'medium': 0,
-                    'low': 0
-                }
+                "total_techniques": 0,
+                "detected_techniques": 0,
+                "coverage_percentage": 0.0,
+                "confidence_distribution": {"high": 0, "medium": 0, "low": 0},
             }
 
         # Calculate coverage
         coverage = self.generator._calculate_coverage(self.technique_mappings)
 
-        return coverage['statistics']
+        return coverage["statistics"]
 
     def reset(self):
         """Reset technique mappings for new analysis."""
@@ -289,10 +276,9 @@ class ElrondMitreIntegration:
 
 # Convenience functions for backward compatibility with existing Elrond code
 
+
 def configure_navigator_v2(
-    case_name: str,
-    technique_mappings: List[dict],
-    output_dir: str = '/tmp/rivendell/mitre'
+    case_name: str, technique_mappings: List[dict], output_dir: str = "/tmp/rivendell/mitre"
 ) -> str:
     """
     Replacement for the legacy configure_navigator function.
@@ -316,9 +302,9 @@ def configure_navigator_v2(
     integration.technique_mappings = technique_mappings
 
     # Generate dashboards
-    result = integration.generate_dashboards(case_name, formats=['navigator'])
+    result = integration.generate_dashboards(case_name, formats=["navigator"])
 
-    if 'navigator' in result:
+    if "navigator" in result:
         print(f"     ATT&CK Navigator built for '{case_name}'")
         print(f"     Navigator file: {result['navigator']}")
         return "-"
@@ -328,8 +314,7 @@ def configure_navigator_v2(
 
 
 def extract_techniques_from_artifacts(
-    artifacts: List[Dict[str, any]],
-    output_dir: str = '/tmp/rivendell/mitre'
+    artifacts: List[Dict[str, any]], output_dir: str = "/tmp/rivendell/mitre"
 ) -> List[dict]:
     """
     Extract MITRE techniques from collected artifacts.
@@ -356,36 +341,32 @@ def extract_techniques_from_artifacts(
 # Example artifact type mappings for Elrond collectors
 ELROND_ARTIFACT_TYPE_MAP = {
     # Windows artifacts
-    'Prefetch': 'prefetch',
-    'PowerShell_History': 'powershell_history',
-    'CMD_History': 'cmd_history',
-    'WMI_Consumers': 'wmi_consumers',
-    'Scheduled_Tasks': 'scheduled_tasks',
-    'Registry_Run_Keys': 'registry_run_keys',
-    'Services': 'services',
-    'LSASS_Dump': 'lsass_dump',
-    'SAM_Dump': 'sam_dump',
-    'Browser_Data': 'browser_data',
-
+    "Prefetch": "prefetch",
+    "PowerShell_History": "powershell_history",
+    "CMD_History": "cmd_history",
+    "WMI_Consumers": "wmi_consumers",
+    "Scheduled_Tasks": "scheduled_tasks",
+    "Registry_Run_Keys": "registry_run_keys",
+    "Services": "services",
+    "LSASS_Dump": "lsass_dump",
+    "SAM_Dump": "sam_dump",
+    "Browser_Data": "browser_data",
     # Linux artifacts
-    'Bash_History': 'bash_history',
-    'Cron_Jobs': 'cron_jobs',
-    'Systemd_Services': 'systemd_services',
-    'SSH_Keys': 'ssh_authorized_keys',
-
+    "Bash_History": "bash_history",
+    "Cron_Jobs": "cron_jobs",
+    "Systemd_Services": "systemd_services",
+    "SSH_Keys": "ssh_authorized_keys",
     # macOS artifacts
-    'Launch_Agents': 'launch_agents',
-    'Launch_Daemons': 'launch_daemons',
-    'Login_Items': 'login_items',
-    'Plist_Files': 'plist_files',
-
+    "Launch_Agents": "launch_agents",
+    "Launch_Daemons": "launch_daemons",
+    "Login_Items": "login_items",
+    "Plist_Files": "plist_files",
     # Network artifacts
-    'Network_Connections': 'network_connections',
-    'DNS_Queries': 'dns_queries',
-
+    "Network_Connections": "network_connections",
+    "DNS_Queries": "dns_queries",
     # Generic
-    'File_Creation': 'file_creation',
-    'Registry_Modification': 'registry_modification',
+    "File_Creation": "file_creation",
+    "Registry_Modification": "registry_modification",
 }
 
 

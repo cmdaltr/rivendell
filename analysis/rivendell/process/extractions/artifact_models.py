@@ -3,7 +3,7 @@
 Artifact Models and Definitions
 
 Centralized artifact type definitions, collection path mappings,
-and ATT&CK technique associations for the Rivendell DFIR Suite.
+and ATT&CK technique associations for the Rivendell DF Acceleration Suite.
 
 This module provides a unified interface for:
 - Artifact type enumeration
@@ -11,7 +11,7 @@ This module provides a unified interface for:
 - ATT&CK technique mappings
 - Severity classifications
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -22,6 +22,7 @@ from dataclasses import dataclass
 
 class Platform(Enum):
     """Supported operating system platforms."""
+
     WINDOWS = "Windows"
     MACOS = "macOS"
     LINUX = "Linux"
@@ -92,6 +93,7 @@ class ArtifactDefinition:
         description: Human-readable description
         collection_paths: Dictionary of platform -> collection paths
     """
+
     artifact_type: ArtifactType
     platforms: Set[Platform]
     attck_techniques: List[str]
@@ -105,54 +107,54 @@ WINDOWS_ARTIFACTS: Dict[ArtifactType, ArtifactDefinition] = {
     ArtifactType.WMI_EVENT_CONSUMER: ArtifactDefinition(
         artifact_type=ArtifactType.WMI_EVENT_CONSUMER,
         platforms={Platform.WINDOWS},
-        attck_techniques=['T1546.003', 'T1047'],
-        severity='high',
-        description='WMI Event Consumer for persistence',
+        attck_techniques=["T1546.003", "T1047"],
+        severity="high",
+        description="WMI Event Consumer for persistence",
         collection_paths={
             Platform.WINDOWS: [
-                '/Windows/System32/wbem/Repository/OBJECTS.DATA',
-                '/Windows/System32/wbem/Repository/INDEX.BTR',
-                '/Windows/System32/wbem/Repository/FS/',
+                "/Windows/System32/wbem/Repository/OBJECTS.DATA",
+                "/Windows/System32/wbem/Repository/INDEX.BTR",
+                "/Windows/System32/wbem/Repository/FS/",
             ]
-        }
+        },
     ),
     ArtifactType.WMI_EVENT_FILTER: ArtifactDefinition(
         artifact_type=ArtifactType.WMI_EVENT_FILTER,
         platforms={Platform.WINDOWS},
-        attck_techniques=['T1546.003', 'T1047'],
-        severity='high',
-        description='WMI Event Filter for persistence',
+        attck_techniques=["T1546.003", "T1047"],
+        severity="high",
+        description="WMI Event Filter for persistence",
         collection_paths={
             Platform.WINDOWS: [
-                '/Windows/System32/wbem/Repository/OBJECTS.DATA',
-                '/Windows/System32/wbem/Repository/INDEX.BTR',
+                "/Windows/System32/wbem/Repository/OBJECTS.DATA",
+                "/Windows/System32/wbem/Repository/INDEX.BTR",
             ]
-        }
+        },
     ),
     ArtifactType.WMI_BINDING: ArtifactDefinition(
         artifact_type=ArtifactType.WMI_BINDING,
         platforms={Platform.WINDOWS},
-        attck_techniques=['T1546.003', 'T1047'],
-        severity='high',
-        description='WMI Filter-to-Consumer Binding',
+        attck_techniques=["T1546.003", "T1047"],
+        severity="high",
+        description="WMI Filter-to-Consumer Binding",
         collection_paths={
             Platform.WINDOWS: [
-                '/Windows/System32/wbem/Repository/OBJECTS.DATA',
+                "/Windows/System32/wbem/Repository/OBJECTS.DATA",
             ]
-        }
+        },
     ),
     ArtifactType.POWERSHELL_HISTORY: ArtifactDefinition(
         artifact_type=ArtifactType.POWERSHELL_HISTORY,
         platforms={Platform.WINDOWS},
-        attck_techniques=['T1059.001', 'T1047'],
-        severity='medium',
-        description='PowerShell command history',
+        attck_techniques=["T1059.001", "T1047"],
+        severity="medium",
+        description="PowerShell command history",
         collection_paths={
             Platform.WINDOWS: [
-                '/Users/*/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt',
-                '/Users/*/Documents/PowerShell_transcript.*.txt',
+                "/Users/*/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt",
+                "/Users/*/Documents/PowerShell_transcript.*.txt",
             ]
-        }
+        },
     ),
 }
 
@@ -162,77 +164,77 @@ MACOS_ARTIFACTS: Dict[ArtifactType, ArtifactDefinition] = {
     ArtifactType.UNIFIED_LOG: ArtifactDefinition(
         artifact_type=ArtifactType.UNIFIED_LOG,
         platforms={Platform.MACOS},
-        attck_techniques=['T1070.002'],
-        severity='medium',
-        description='macOS Unified Logging (tracev3)',
+        attck_techniques=["T1070.002"],
+        severity="medium",
+        description="macOS Unified Logging (tracev3)",
         collection_paths={
             Platform.MACOS: [
-                '/private/var/db/diagnostics/',
-                '/private/var/db/uuidtext/',
+                "/private/var/db/diagnostics/",
+                "/private/var/db/uuidtext/",
             ]
-        }
+        },
     ),
     ArtifactType.COREDUET_APP_USAGE: ArtifactDefinition(
         artifact_type=ArtifactType.COREDUET_APP_USAGE,
         platforms={Platform.MACOS},
-        attck_techniques=['T1083', 'T1087'],
-        severity='low',
-        description='Application usage tracking via CoreDuet',
+        attck_techniques=["T1083", "T1087"],
+        severity="low",
+        description="Application usage tracking via CoreDuet",
         collection_paths={
             Platform.MACOS: [
-                '/private/var/db/CoreDuet/Knowledge/knowledgeC.db',
+                "/private/var/db/CoreDuet/Knowledge/knowledgeC.db",
             ]
-        }
+        },
     ),
     ArtifactType.COREDUET_APP_INSTALL: ArtifactDefinition(
         artifact_type=ArtifactType.COREDUET_APP_INSTALL,
         platforms={Platform.MACOS},
-        attck_techniques=['T1105'],
-        severity='medium',
-        description='Application installation tracking',
+        attck_techniques=["T1105"],
+        severity="medium",
+        description="Application installation tracking",
         collection_paths={
             Platform.MACOS: [
-                '/private/var/db/CoreDuet/Knowledge/knowledgeC.db',
+                "/private/var/db/CoreDuet/Knowledge/knowledgeC.db",
             ]
-        }
+        },
     ),
     ArtifactType.TCC_PERMISSION: ArtifactDefinition(
         artifact_type=ArtifactType.TCC_PERMISSION,
         platforms={Platform.MACOS},
-        attck_techniques=['T1123', 'T1125', 'T1005'],
-        severity='high',
-        description='Privacy permission grants (camera, mic, files)',
+        attck_techniques=["T1123", "T1125", "T1005"],
+        severity="high",
+        description="Privacy permission grants (camera, mic, files)",
         collection_paths={
             Platform.MACOS: [
-                '/Library/Application Support/com.apple.TCC/TCC.db',
-                '/Users/*/Library/Application Support/com.apple.TCC/TCC.db',
+                "/Library/Application Support/com.apple.TCC/TCC.db",
+                "/Users/*/Library/Application Support/com.apple.TCC/TCC.db",
             ]
-        }
+        },
     ),
     ArtifactType.FSEVENT: ArtifactDefinition(
         artifact_type=ArtifactType.FSEVENT,
         platforms={Platform.MACOS},
-        attck_techniques=['T1083', 'T1070.004'],
-        severity='medium',
-        description='File system event logs',
+        attck_techniques=["T1083", "T1070.004"],
+        severity="medium",
+        description="File system event logs",
         collection_paths={
             Platform.MACOS: [
-                '/.fseventsd/',
-                '/Users/*/.fseventsd/',
+                "/.fseventsd/",
+                "/Users/*/.fseventsd/",
             ]
-        }
+        },
     ),
     ArtifactType.QUARANTINE_EVENT: ArtifactDefinition(
         artifact_type=ArtifactType.QUARANTINE_EVENT,
         platforms={Platform.MACOS},
-        attck_techniques=['T1105', 'T1566'],
-        severity='medium',
-        description='Downloaded file quarantine tracking',
+        attck_techniques=["T1105", "T1566"],
+        severity="medium",
+        description="Downloaded file quarantine tracking",
         collection_paths={
             Platform.MACOS: [
-                '/Users/*/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2',
+                "/Users/*/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2",
             ]
-        }
+        },
     ),
 }
 
@@ -242,97 +244,97 @@ LINUX_ARTIFACTS: Dict[ArtifactType, ArtifactDefinition] = {
     ArtifactType.SYSTEMD_JOURNAL: ArtifactDefinition(
         artifact_type=ArtifactType.SYSTEMD_JOURNAL,
         platforms={Platform.LINUX},
-        attck_techniques=['T1070.002'],
-        severity='medium',
-        description='Systemd journal logs',
+        attck_techniques=["T1070.002"],
+        severity="medium",
+        description="Systemd journal logs",
         collection_paths={
             Platform.LINUX: [
-                '/var/log/journal/',
-                '/run/log/journal/',
+                "/var/log/journal/",
+                "/run/log/journal/",
             ]
-        }
+        },
     ),
     ArtifactType.AUDIT_EXECVE: ArtifactDefinition(
         artifact_type=ArtifactType.AUDIT_EXECVE,
         platforms={Platform.LINUX},
-        attck_techniques=['T1059', 'T1059.004'],
-        severity='high',
-        description='Command execution via auditd',
+        attck_techniques=["T1059", "T1059.004"],
+        severity="high",
+        description="Command execution via auditd",
         collection_paths={
             Platform.LINUX: [
-                '/var/log/audit/audit.log',
-                '/var/log/audit/audit.log.*',
+                "/var/log/audit/audit.log",
+                "/var/log/audit/audit.log.*",
             ]
-        }
+        },
     ),
     ArtifactType.AUDIT_USER: ArtifactDefinition(
         artifact_type=ArtifactType.AUDIT_USER,
         platforms={Platform.LINUX},
-        attck_techniques=['T1136', 'T1087'],
-        severity='high',
-        description='User account changes via auditd',
+        attck_techniques=["T1136", "T1087"],
+        severity="high",
+        description="User account changes via auditd",
         collection_paths={
             Platform.LINUX: [
-                '/var/log/audit/audit.log',
+                "/var/log/audit/audit.log",
             ]
-        }
+        },
     ),
     ArtifactType.AUDIT_AUTH: ArtifactDefinition(
         artifact_type=ArtifactType.AUDIT_AUTH,
         platforms={Platform.LINUX},
-        attck_techniques=['T1078', 'T1110'],
-        severity='high',
-        description='Authentication events via auditd',
+        attck_techniques=["T1078", "T1110"],
+        severity="high",
+        description="Authentication events via auditd",
         collection_paths={
             Platform.LINUX: [
-                '/var/log/audit/audit.log',
+                "/var/log/audit/audit.log",
             ]
-        }
+        },
     ),
     ArtifactType.DOCKER_CONTAINER: ArtifactDefinition(
         artifact_type=ArtifactType.DOCKER_CONTAINER,
         platforms={Platform.LINUX},
-        attck_techniques=['T1610', 'T1613', 'T1611'],
-        severity='high',
-        description='Docker container artifacts',
+        attck_techniques=["T1610", "T1613", "T1611"],
+        severity="high",
+        description="Docker container artifacts",
         collection_paths={
             Platform.LINUX: [
-                '/var/lib/docker/containers/',
-                '/var/lib/docker/image/',
+                "/var/lib/docker/containers/",
+                "/var/lib/docker/image/",
             ]
-        }
+        },
     ),
     ArtifactType.BASH_HISTORY: ArtifactDefinition(
         artifact_type=ArtifactType.BASH_HISTORY,
         platforms={Platform.LINUX, Platform.MACOS},
-        attck_techniques=['T1059.004', 'T1070.003'],
-        severity='medium',
-        description='Bash command history',
+        attck_techniques=["T1059.004", "T1070.003"],
+        severity="medium",
+        description="Bash command history",
         collection_paths={
             Platform.LINUX: [
-                '/home/*/.bash_history',
-                '/root/.bash_history',
+                "/home/*/.bash_history",
+                "/root/.bash_history",
             ],
             Platform.MACOS: [
-                '/Users/*/.bash_history',
-                '/var/root/.bash_history',
-            ]
-        }
+                "/Users/*/.bash_history",
+                "/var/root/.bash_history",
+            ],
+        },
     ),
     ArtifactType.PACKAGE_INSTALL: ArtifactDefinition(
         artifact_type=ArtifactType.PACKAGE_INSTALL,
         platforms={Platform.LINUX},
-        attck_techniques=['T1072', 'T1105'],
-        severity='medium',
-        description='Package installation logs',
+        attck_techniques=["T1072", "T1105"],
+        severity="medium",
+        description="Package installation logs",
         collection_paths={
             Platform.LINUX: [
-                '/var/log/dpkg.log',
-                '/var/log/apt/history.log',
-                '/var/log/yum.log',
-                '/var/log/dnf.log',
+                "/var/log/dpkg.log",
+                "/var/log/apt/history.log",
+                "/var/log/yum.log",
+                "/var/log/dnf.log",
             ]
-        }
+        },
     ),
 }
 
@@ -352,102 +354,80 @@ COLLECTION_PATHS: Dict[Platform, Dict[str, str]] = {
         "/Windows/System32/wbem/Repository/": "wmi_repo",
         "/Windows/System32/wbem/Repository/FS/": "wmi_repo",
         "/Windows/System32/wbem/AutoRecover/": "wmi_autorecover",
-
         # PowerShell
         "/Users/*/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/": "powershell_history",
-
         # Registry
         "/Windows/System32/config/": "registry",
-
         # Event Logs
         "/Windows/System32/winevt/Logs/": "event_logs",
-
         # Prefetch
         "/Windows/Prefetch/": "prefetch",
-
         # File System
         "/$MFT": "mft",
         "/$LogFile": "logfile",
         "/$UsnJrnl": "usn_journal",
     },
-
     Platform.MACOS: {
         # Unified Logging
         "/private/var/db/diagnostics/": "unified_logs",
         "/private/var/db/uuidtext/": "unified_logs",
-
         # Application Usage
         "/private/var/db/CoreDuet/Knowledge/knowledgeC.db": "coreduet",
-
         # Privacy Permissions
         "/Library/Application Support/com.apple.TCC/TCC.db": "tcc",
         "/Users/*/Library/Application Support/com.apple.TCC/TCC.db": "tcc",
-
         # File System Events
         "/.fseventsd/": "fseventsd",
         "/Users/*/.fseventsd/": "fseventsd",
-
         # Quarantine
         "/Users/*/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2": "quarantine",
-
         # Network Configuration
         "/Library/Preferences/SystemConfiguration/": "network_config",
         "/private/var/db/dhcpclient/": "dhcp_leases",
-
         # Spotlight
         "/.Spotlight-V100/": "spotlight",
-
         # Keychains
         "/Users/*/Library/Keychains/": "keychains",
         "/Library/Keychains/": "keychains",
-
         # System Logs
         "/var/log/system.log": "system_log",
         "/var/log/install.log": "install_log",
         "/Library/Logs/DiagnosticReports/": "crash_reports",
     },
-
     Platform.LINUX: {
         # Systemd
         "/var/log/journal/": "journal",
         "/lib/systemd/system/": "systemd_units",
         "/etc/systemd/": "systemd_config",
-
         # Audit
         "/var/log/audit/": "audit",
-
         # Docker
         "/var/lib/docker/containers/": "docker_containers",
         "/var/lib/docker/volumes/": "docker_volumes",
         "/var/lib/docker/overlay2/": "docker_overlay",
-
         # Command History
         "/home/*/.bash_history": "bash_history",
         "/root/.bash_history": "bash_history",
         "/home/*/.zsh_history": "zsh_history",
         "/home/*/.python_history": "python_history",
-
         # Package Management
         "/var/log/dpkg.log": "package_log",
         "/var/log/apt/": "package_log",
         "/var/log/yum.log": "package_log",
         "/var/log/dnf.log": "package_log",
-
         # Network
         "/proc/net/tcp": "network_connections",
         "/proc/modules": "kernel_modules",
-
         # Authentication
         "/var/log/wtmp": "login_records",
         "/var/log/btmp": "failed_logins",
         "/var/log/auth.log": "auth_log",
         "/var/log/secure": "secure_log",
-
         # Cron
         "/var/spool/cron/": "cron_jobs",
         "/etc/cron.d/": "cron",
         "/etc/crontab": "cron",
-    }
+    },
 }
 
 

@@ -1,6 +1,6 @@
 # Elrond Web Interface
 
-A modern web application for the Elrond digital forensics analysis platform. This interface provides an intuitive way to analyze disk and memory images with full control over all analysis options through an easy-to-use GUI.
+A modern web application for the Elrond Digital Forensics Acceleration Suite. This interface provides an intuitive way to analyze disk and memory images with full control over all analysis options through an easy-to-use GUI.
 
 ## Features
 

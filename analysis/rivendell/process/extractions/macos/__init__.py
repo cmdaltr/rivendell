@@ -3,7 +3,7 @@ macOS Artifact Extraction Modules
 
 Enhanced parsers for macOS-specific artifacts.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -14,9 +14,9 @@ from .fseventsd import FSEventsParser
 from .quarantine import QuarantineParser
 
 __all__ = [
-    'UnifiedLogParser',
-    'CoreDuetParser',
-    'TCCParser',
-    'FSEventsParser',
-    'QuarantineParser',
+    "UnifiedLogParser",
+    "CoreDuetParser",
+    "TCCParser",
+    "FSEventsParser",
+    "QuarantineParser",
 ]

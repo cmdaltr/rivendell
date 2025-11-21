@@ -1,5 +1,5 @@
 """
-Unified timestamp utilities for Rivendell DFIR Suite
+Unified timestamp utilities for Rivendell DF Acceleration Suite
 
 Provides consistent timestamp formatting across acquisition and analysis modules.
 Eliminates duplicate timestamp code found in 57+ files.
@@ -30,11 +30,11 @@ def get_iso_timestamp(dt: Optional[datetime] = None, use_utc: bool = True) -> st
     timestamp = dt.isoformat()
 
     # Ensure UTC indicator for UTC times
-    if use_utc and not timestamp.endswith('Z'):
-        if '+' in timestamp or timestamp.endswith('+00:00'):
-            timestamp = timestamp.split('+')[0] + 'Z'
+    if use_utc and not timestamp.endswith("Z"):
+        if "+" in timestamp or timestamp.endswith("+00:00"):
+            timestamp = timestamp.split("+")[0] + "Z"
         else:
-            timestamp += 'Z'
+            timestamp += "Z"
 
     return timestamp
 
@@ -95,7 +95,7 @@ def get_elastic_timestamp(dt: Optional[datetime] = None) -> str:
     # Elasticsearch prefers milliseconds, not microseconds
     timestamp = dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]
 
-    return timestamp + 'Z'
+    return timestamp + "Z"
 
 
 def get_filename_timestamp(dt: Optional[datetime] = None) -> str:
@@ -138,8 +138,8 @@ def parse_iso_timestamp(timestamp_str: str) -> datetime:
         True
     """
     # Remove Z suffix and handle as UTC
-    if timestamp_str.endswith('Z'):
-        timestamp_str = timestamp_str[:-1] + '+00:00'
+    if timestamp_str.endswith("Z"):
+        timestamp_str = timestamp_str[:-1] + "+00:00"
 
     # Try multiple formats
     formats = [

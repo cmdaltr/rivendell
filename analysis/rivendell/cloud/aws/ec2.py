@@ -4,7 +4,7 @@ AWS EC2 Forensics Module
 
 Forensic acquisition and analysis of AWS EC2 instances and EBS volumes.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -17,6 +17,7 @@ from typing import List, Dict, Optional, Any
 try:
     import boto3
     from botocore.exceptions import ClientError, NoCredentialsError
+
     BOTO3_AVAILABLE = True
 except ImportError:
     BOTO3_AVAILABLE = False
@@ -55,11 +56,11 @@ class AWSForensics(CloudProvider):
 
         self.session = None
         self.ec2_client = None
-        self.region = credentials.get('region', 'us-east-1')
+        self.region = credentials.get("region", "us-east-1")
 
     def get_required_credential_keys(self) -> List[str]:
         """Required AWS credential keys."""
-        return ['access_key', 'secret_key']
+        return ["access_key", "secret_key"]
 
     def authenticate(self) -> bool:
         """
@@ -76,21 +77,21 @@ class AWSForensics(CloudProvider):
 
         try:
             session_kwargs = {
-                'aws_access_key_id': self.credentials['access_key'],
-                'aws_secret_access_key': self.credentials['secret_key'],
-                'region_name': self.region
+                "aws_access_key_id": self.credentials["access_key"],
+                "aws_secret_access_key": self.credentials["secret_key"],
+                "region_name": self.region,
             }
 
-            if 'session_token' in self.credentials:
-                session_kwargs['aws_session_token'] = self.credentials['session_token']
+            if "session_token" in self.credentials:
+                session_kwargs["aws_session_token"] = self.credentials["session_token"]
 
             self.session = boto3.Session(**session_kwargs)
 
             # Test credentials with STS
-            sts = self.session.client('sts')
+            sts = self.session.client("sts")
             identity = sts.get_caller_identity()
 
-            self.ec2_client = self.session.client('ec2', region_name=self.region)
+            self.ec2_client = self.session.client("ec2", region_name=self.region)
             self.authenticated = True
 
             self.logger.info(f"Authenticated as: {identity['Arn']}")
@@ -120,27 +121,27 @@ class AWSForensics(CloudProvider):
             raise CloudForensicsException("Not authenticated", provider="AWS")
 
         if region and region != self.region:
-            ec2 = self.session.client('ec2', region_name=region)
+            ec2 = self.session.client("ec2", region_name=region)
         else:
             ec2 = self.ec2_client
 
         try:
             filters = []
-            if 'state' in kwargs:
-                filters.append({'Name': 'instance-state-name', 'Values': [kwargs['state']]})
-            if 'tags' in kwargs:
-                for key, value in kwargs['tags'].items():
-                    filters.append({'Name': f'tag:{key}', 'Values': [value]})
+            if "state" in kwargs:
+                filters.append({"Name": "instance-state-name", "Values": [kwargs["state"]]})
+            if "tags" in kwargs:
+                for key, value in kwargs["tags"].items():
+                    filters.append({"Name": f"tag:{key}", "Values": [value]})
 
             describe_kwargs = {}
             if filters:
-                describe_kwargs['Filters'] = filters
+                describe_kwargs["Filters"] = filters
 
             response = ec2.describe_instances(**describe_kwargs)
 
             instances = []
-            for reservation in response['Reservations']:
-                for instance in reservation['Instances']:
+            for reservation in response["Reservations"]:
+                for instance in reservation["Instances"]:
                     instances.append(self._format_instance(instance))
 
             self.logger.info(f"Found {len(instances)} instances in {region or self.region}")
@@ -151,39 +152,34 @@ class AWSForensics(CloudProvider):
 
     def _format_instance(self, instance: Dict) -> Dict[str, Any]:
         """Format instance data for output."""
-        tags = {tag['Key']: tag['Value'] for tag in instance.get('Tags', [])}
+        tags = {tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])}
 
         return {
-            'id': instance['InstanceId'],
-            'name': tags.get('Name', 'N/A'),
-            'type': instance['InstanceType'],
-            'state': instance['State']['Name'],
-            'launch_time': self.format_timestamp(instance['LaunchTime']),
-            'private_ip': instance.get('PrivateIpAddress', 'N/A'),
-            'public_ip': instance.get('PublicIpAddress', 'N/A'),
-            'vpc_id': instance.get('VpcId', 'N/A'),
-            'subnet_id': instance.get('SubnetId', 'N/A'),
-            'security_groups': [sg['GroupId'] for sg in instance.get('SecurityGroups', [])],
-            'iam_role': instance.get('IamInstanceProfile', {}).get('Arn', 'N/A'),
-            'volumes': [
+            "id": instance["InstanceId"],
+            "name": tags.get("Name", "N/A"),
+            "type": instance["InstanceType"],
+            "state": instance["State"]["Name"],
+            "launch_time": self.format_timestamp(instance["LaunchTime"]),
+            "private_ip": instance.get("PrivateIpAddress", "N/A"),
+            "public_ip": instance.get("PublicIpAddress", "N/A"),
+            "vpc_id": instance.get("VpcId", "N/A"),
+            "subnet_id": instance.get("SubnetId", "N/A"),
+            "security_groups": [sg["GroupId"] for sg in instance.get("SecurityGroups", [])],
+            "iam_role": instance.get("IamInstanceProfile", {}).get("Arn", "N/A"),
+            "volumes": [
                 {
-                    'device': mapping['DeviceName'],
-                    'volume_id': mapping['Ebs']['VolumeId'],
-                    'delete_on_termination': mapping['Ebs']['DeleteOnTermination']
+                    "device": mapping["DeviceName"],
+                    "volume_id": mapping["Ebs"]["VolumeId"],
+                    "delete_on_termination": mapping["Ebs"]["DeleteOnTermination"],
                 }
-                for mapping in instance.get('BlockDeviceMappings', [])
+                for mapping in instance.get("BlockDeviceMappings", [])
             ],
-            'tags': tags,
-            'provider': 'AWS',
-            'artifact_type': 'ec2_instance'
+            "tags": tags,
+            "provider": "AWS",
+            "artifact_type": "ec2_instance",
         }
 
-    def acquire_disk_image(
-        self,
-        instance_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_disk_image(self, instance_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire EBS volume snapshots from EC2 instance.
 
@@ -204,20 +200,19 @@ class AWSForensics(CloudProvider):
         try:
             # Get instance details
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            if not response['Reservations']:
+            if not response["Reservations"]:
                 raise CloudForensicsException(f"Instance {instance_id} not found", provider="AWS")
 
-            instance = response['Reservations'][0]['Instances'][0]
+            instance = response["Reservations"][0]["Instances"][0]
 
             # Get volumes
-            volume_ids = kwargs.get('volume_ids')
+            volume_ids = kwargs.get("volume_ids")
             if volume_ids is None:
                 volume_ids = [
-                    mapping['Ebs']['VolumeId']
-                    for mapping in instance['BlockDeviceMappings']
+                    mapping["Ebs"]["VolumeId"] for mapping in instance["BlockDeviceMappings"]
                 ]
 
-            description = kwargs.get('description', f'Forensic snapshot of {instance_id}')
+            description = kwargs.get("description", f"Forensic snapshot of {instance_id}")
 
             # Create snapshots
             snapshots = []
@@ -227,38 +222,42 @@ class AWSForensics(CloudProvider):
                 snapshot = self.ec2_client.create_snapshot(
                     VolumeId=volume_id,
                     Description=f"{description} - {datetime.now().isoformat()}",
-                    TagSpecifications=[{
-                        'ResourceType': 'snapshot',
-                        'Tags': [
-                            {'Key': 'ForensicSnapshot', 'Value': 'true'},
-                            {'Key': 'SourceInstance', 'Value': instance_id},
-                            {'Key': 'SourceVolume', 'Value': volume_id},
-                            {'Key': 'AcquisitionTime', 'Value': datetime.now().isoformat()}
-                        ]
-                    }]
+                    TagSpecifications=[
+                        {
+                            "ResourceType": "snapshot",
+                            "Tags": [
+                                {"Key": "ForensicSnapshot", "Value": "true"},
+                                {"Key": "SourceInstance", "Value": instance_id},
+                                {"Key": "SourceVolume", "Value": volume_id},
+                                {"Key": "AcquisitionTime", "Value": datetime.now().isoformat()},
+                            ],
+                        }
+                    ],
                 )
 
-                snapshot_id = snapshot['SnapshotId']
-                snapshots.append({
-                    'snapshot_id': snapshot_id,
-                    'volume_id': volume_id,
-                    'start_time': self.format_timestamp(snapshot['StartTime']),
-                    'state': snapshot['State']
-                })
+                snapshot_id = snapshot["SnapshotId"]
+                snapshots.append(
+                    {
+                        "snapshot_id": snapshot_id,
+                        "volume_id": volume_id,
+                        "start_time": self.format_timestamp(snapshot["StartTime"]),
+                        "state": snapshot["State"],
+                    }
+                )
 
                 self.logger.info(f"Snapshot {snapshot_id} created for volume {volume_id}")
 
             # Wait for snapshots to complete
-            if kwargs.get('wait', True):
+            if kwargs.get("wait", True):
                 self.logger.info("Waiting for snapshots to complete...")
-                self._wait_for_snapshots([s['snapshot_id'] for s in snapshots])
+                self._wait_for_snapshots([s["snapshot_id"] for s in snapshots])
 
             # Save metadata
             result = {
-                'instance_id': instance_id,
-                'acquisition_time': datetime.now().isoformat(),
-                'snapshots': snapshots,
-                'instance_metadata': self._format_instance(instance)
+                "instance_id": instance_id,
+                "acquisition_time": datetime.now().isoformat(),
+                "snapshots": snapshots,
+                "instance_metadata": self._format_instance(instance),
             }
 
             metadata_file = os.path.join(output_dir, f"{instance_id}_snapshots.json")
@@ -277,22 +276,17 @@ class AWSForensics(CloudProvider):
             snapshot_ids: List of snapshot IDs
             timeout: Timeout in seconds
         """
-        waiter = self.ec2_client.get_waiter('snapshot_completed')
+        waiter = self.ec2_client.get_waiter("snapshot_completed")
         try:
             waiter.wait(
-                SnapshotIds=snapshot_ids,
-                WaiterConfig={'Delay': 15, 'MaxAttempts': timeout // 15}
+                SnapshotIds=snapshot_ids, WaiterConfig={"Delay": 15, "MaxAttempts": timeout // 15}
             )
             self.logger.info("All snapshots completed successfully")
         except Exception as e:
             self.logger.warning(f"Snapshot wait error: {e}")
 
     def acquire_logs(
-        self,
-        start_time: datetime,
-        end_time: datetime,
-        output_dir: str,
-        **kwargs
+        self, start_time: datetime, end_time: datetime, output_dir: str, **kwargs
     ) -> List[str]:
         """
         Acquire instance logs (from CloudWatch).
@@ -315,12 +309,7 @@ class AWSForensics(CloudProvider):
         self.logger.warning("CloudWatch Logs acquisition not yet implemented")
         return []
 
-    def acquire_storage(
-        self,
-        storage_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_storage(self, storage_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire S3 bucket metadata and artifacts.
 
@@ -353,10 +342,10 @@ class AWSForensics(CloudProvider):
 
         try:
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            if not response['Reservations']:
+            if not response["Reservations"]:
                 raise CloudForensicsException(f"Instance {instance_id} not found", provider="AWS")
 
-            instance = response['Reservations'][0]['Instances'][0]
+            instance = response["Reservations"][0]["Instances"][0]
             return self._format_instance(instance)
 
         except ClientError as e:
@@ -378,24 +367,26 @@ class AWSForensics(CloudProvider):
         try:
             # Get instance
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            instance = response['Reservations'][0]['Instances'][0]
+            instance = response["Reservations"][0]["Instances"][0]
 
-            sg_ids = [sg['GroupId'] for sg in instance.get('SecurityGroups', [])]
+            sg_ids = [sg["GroupId"] for sg in instance.get("SecurityGroups", [])]
 
             # Get security group details
             sg_response = self.ec2_client.describe_security_groups(GroupIds=sg_ids)
 
             results = []
-            for sg in sg_response['SecurityGroups']:
-                results.append({
-                    'group_id': sg['GroupId'],
-                    'group_name': sg['GroupName'],
-                    'description': sg['Description'],
-                    'vpc_id': sg.get('VpcId', 'N/A'),
-                    'ingress_rules': self._format_sg_rules(sg.get('IpPermissions', [])),
-                    'egress_rules': self._format_sg_rules(sg.get('IpPermissionsEgress', [])),
-                    'attck_techniques': self._analyze_sg_threats(sg)
-                })
+            for sg in sg_response["SecurityGroups"]:
+                results.append(
+                    {
+                        "group_id": sg["GroupId"],
+                        "group_name": sg["GroupName"],
+                        "description": sg["Description"],
+                        "vpc_id": sg.get("VpcId", "N/A"),
+                        "ingress_rules": self._format_sg_rules(sg.get("IpPermissions", [])),
+                        "egress_rules": self._format_sg_rules(sg.get("IpPermissionsEgress", [])),
+                        "attck_techniques": self._analyze_sg_threats(sg),
+                    }
+                )
 
             return results
 
@@ -406,13 +397,15 @@ class AWSForensics(CloudProvider):
         """Format security group rules."""
         formatted = []
         for rule in rules:
-            formatted.append({
-                'protocol': rule.get('IpProtocol', 'all'),
-                'from_port': rule.get('FromPort', 'all'),
-                'to_port': rule.get('ToPort', 'all'),
-                'ip_ranges': [r['CidrIp'] for r in rule.get('IpRanges', [])],
-                'ipv6_ranges': [r['CidrIpv6'] for r in rule.get('Ipv6Ranges', [])]
-            })
+            formatted.append(
+                {
+                    "protocol": rule.get("IpProtocol", "all"),
+                    "from_port": rule.get("FromPort", "all"),
+                    "to_port": rule.get("ToPort", "all"),
+                    "ip_ranges": [r["CidrIp"] for r in rule.get("IpRanges", [])],
+                    "ipv6_ranges": [r["CidrIpv6"] for r in rule.get("Ipv6Ranges", [])],
+                }
+            )
         return formatted
 
     def _analyze_sg_threats(self, sg: Dict) -> List[str]:
@@ -425,13 +418,13 @@ class AWSForensics(CloudProvider):
         techniques = []
 
         # Check for overly permissive ingress rules
-        for rule in sg.get('IpPermissions', []):
-            for ip_range in rule.get('IpRanges', []):
-                if ip_range['CidrIp'] == '0.0.0.0/0':
+        for rule in sg.get("IpPermissions", []):
+            for ip_range in rule.get("IpRanges", []):
+                if ip_range["CidrIp"] == "0.0.0.0/0":
                     # Open to internet
-                    if rule.get('FromPort') in [22, 3389, 1433, 3306]:
+                    if rule.get("FromPort") in [22, 3389, 1433, 3306]:
                         # Exposed management/database ports
-                        techniques.append('T1190')  # Exploit Public-Facing Application
-                        techniques.append('T1133')  # External Remote Services
+                        techniques.append("T1190")  # Exploit Public-Facing Application
+                        techniques.append("T1133")  # External Remote Services
 
         return list(set(techniques))

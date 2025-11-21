@@ -3,7 +3,7 @@ AI-Powered Analysis Agent Module
 
 Provides AI capabilities for querying and analyzing forensic data using natural language.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -12,8 +12,8 @@ from .query_engine import ForensicQueryEngine
 from .models import QueryResult, SourceDocument
 
 __all__ = [
-    'ForensicDataIndexer',
-    'ForensicQueryEngine',
-    'QueryResult',
-    'SourceDocument',
+    "ForensicDataIndexer",
+    "ForensicQueryEngine",
+    "QueryResult",
+    "SourceDocument",
 ]

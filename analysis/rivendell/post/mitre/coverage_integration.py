@@ -5,7 +5,7 @@ Elrond Pipeline Integration for MITRE Coverage Analysis
 Provides hooks for real-time coverage analysis during artifact processing.
 Integrates seamlessly with existing Elrond workflow.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -38,7 +38,7 @@ class ElrondCoverageHook:
         output_dir: str,
         enabled: bool = True,
         auto_dashboard: bool = True,
-        auto_export: bool = True
+        auto_export: bool = True,
     ):
         """
         Initialize coverage hook.
@@ -73,7 +73,7 @@ class ElrondCoverageHook:
         artifact_type: str,
         artifact_path: str,
         artifact_data: Optional[Dict[str, Any]] = None,
-        context: Optional[str] = None
+        context: Optional[str] = None,
     ) -> Optional[List[Dict[str, Any]]]:
         """
         Process artifact for MITRE coverage.
@@ -97,7 +97,7 @@ class ElrondCoverageHook:
                 artifact_type=artifact_type,
                 artifact_path=artifact_path,
                 artifact_data=artifact_data,
-                context=context
+                context=context,
             )
 
             if detections:
@@ -129,7 +129,7 @@ class ElrondCoverageHook:
             # Generate coverage report
             report = self.analyzer.generate_coverage_report()
 
-            stats = report['statistics']
+            stats = report["statistics"]
             self.logger.info(
                 f"Coverage: {stats['coverage_percentage']:.1f}% "
                 f"({stats['detected_techniques']}/{stats['total_techniques']} techniques)"
@@ -147,12 +147,12 @@ class ElrondCoverageHook:
             self.analyzer.close()
 
             return {
-                'case_id': self.case_id,
-                'coverage_percentage': stats['coverage_percentage'],
-                'detected_techniques': stats['detected_techniques'],
-                'total_artifacts': stats['total_artifacts'],
-                'high_confidence': stats['confidence_distribution']['high'],
-                'reports_generated': True
+                "case_id": self.case_id,
+                "coverage_percentage": stats["coverage_percentage"],
+                "detected_techniques": stats["detected_techniques"],
+                "total_artifacts": stats["total_artifacts"],
+                "high_confidence": stats["confidence_distribution"]["high"],
+                "reports_generated": True,
             }
 
         except Exception as e:
@@ -171,17 +171,19 @@ class ElrondCoverageHook:
             self.logger.info(f"Exported CSV: {len(csv_paths)} files")
 
             # Export SIEM formats
-            splunk_events = self.analyzer.export_for_siem('splunk')
-            splunk_path = Path(self.analyzer.mitre_dir) / 'splunk_events.json'
-            with open(splunk_path, 'w') as f:
+            splunk_events = self.analyzer.export_for_siem("splunk")
+            splunk_path = Path(self.analyzer.mitre_dir) / "splunk_events.json"
+            with open(splunk_path, "w") as f:
                 import json
+
                 json.dump(splunk_events, f, indent=2)
             self.logger.info(f"Exported Splunk HEC events: {splunk_path}")
 
-            elastic_docs = self.analyzer.export_for_siem('elastic')
-            elastic_path = Path(self.analyzer.mitre_dir) / 'elastic_docs.json'
-            with open(elastic_path, 'w') as f:
+            elastic_docs = self.analyzer.export_for_siem("elastic")
+            elastic_path = Path(self.analyzer.mitre_dir) / "elastic_docs.json"
+            with open(elastic_path, "w") as f:
                 import json
+
                 json.dump(elastic_docs, f, indent=2)
             self.logger.info(f"Exported Elasticsearch docs: {elastic_path}")
 
@@ -191,7 +193,7 @@ class ElrondCoverageHook:
     def _auto_dashboard(self, report: Dict[str, Any]):
         """Auto-generate standalone dashboard."""
         try:
-            dashboard_path = str(Path(self.analyzer.mitre_dir) / 'coverage.html')
+            dashboard_path = str(Path(self.analyzer.mitre_dir) / "coverage.html")
             generate_standalone_dashboard(report, dashboard_path)
             self.logger.info(f"Generated dashboard: {dashboard_path}")
             self.logger.info(f"Open in browser: file://{Path(dashboard_path).absolute()}")
@@ -219,52 +221,49 @@ class ElrondCoverageHook:
 # Artifact type mapping (Elrond artifact names -> MITRE mapper names)
 ELROND_TO_MITRE_TYPES = {
     # Windows
-    'Prefetch': 'prefetch',
-    'PowerShell History': 'powershell_history',
-    'PowerShell_History': 'powershell_history',
-    'CMD History': 'cmd_history',
-    'CMD_History': 'cmd_history',
-    'WMI Consumers': 'wmi_consumers',
-    'WMI_Consumers': 'wmi_consumers',
-    'Scheduled Tasks': 'scheduled_tasks',
-    'Scheduled_Tasks': 'scheduled_tasks',
-    'Registry Run Keys': 'registry_run_keys',
-    'Registry_Run_Keys': 'registry_run_keys',
-    'Services': 'services',
-    'LSASS Dump': 'lsass_dump',
-    'LSASS_Dump': 'lsass_dump',
-    'SAM Dump': 'sam_dump',
-    'SAM_Dump': 'sam_dump',
-    'Browser Data': 'browser_data',
-    'Browser_Data': 'browser_data',
-    'Registry Modification': 'registry_modification',
-    'Registry_Modification': 'registry_modification',
-
+    "Prefetch": "prefetch",
+    "PowerShell History": "powershell_history",
+    "PowerShell_History": "powershell_history",
+    "CMD History": "cmd_history",
+    "CMD_History": "cmd_history",
+    "WMI Consumers": "wmi_consumers",
+    "WMI_Consumers": "wmi_consumers",
+    "Scheduled Tasks": "scheduled_tasks",
+    "Scheduled_Tasks": "scheduled_tasks",
+    "Registry Run Keys": "registry_run_keys",
+    "Registry_Run_Keys": "registry_run_keys",
+    "Services": "services",
+    "LSASS Dump": "lsass_dump",
+    "LSASS_Dump": "lsass_dump",
+    "SAM Dump": "sam_dump",
+    "SAM_Dump": "sam_dump",
+    "Browser Data": "browser_data",
+    "Browser_Data": "browser_data",
+    "Registry Modification": "registry_modification",
+    "Registry_Modification": "registry_modification",
     # Linux
-    'Bash History': 'bash_history',
-    'Bash_History': 'bash_history',
-    'Cron Jobs': 'cron_jobs',
-    'Cron_Jobs': 'cron_jobs',
-    'Systemd Services': 'systemd_services',
-    'Systemd_Services': 'systemd_services',
-    'SSH Keys': 'ssh_authorized_keys',
-    'SSH_Keys': 'ssh_authorized_keys',
-
+    "Bash History": "bash_history",
+    "Bash_History": "bash_history",
+    "Cron Jobs": "cron_jobs",
+    "Cron_Jobs": "cron_jobs",
+    "Systemd Services": "systemd_services",
+    "Systemd_Services": "systemd_services",
+    "SSH Keys": "ssh_authorized_keys",
+    "SSH_Keys": "ssh_authorized_keys",
     # macOS
-    'Launch Agents': 'launch_agents',
-    'Launch_Agents': 'launch_agents',
-    'Launch Daemons': 'launch_daemons',
-    'Launch_Daemons': 'launch_daemons',
-    'Login Items': 'login_items',
-    'Login_Items': 'login_items',
-    'Plist Files': 'plist_files',
-    'Plist_Files': 'plist_files',
-
+    "Launch Agents": "launch_agents",
+    "Launch_Agents": "launch_agents",
+    "Launch Daemons": "launch_daemons",
+    "Launch_Daemons": "launch_daemons",
+    "Login Items": "login_items",
+    "Login_Items": "login_items",
+    "Plist Files": "plist_files",
+    "Plist_Files": "plist_files",
     # Network
-    'Network Connections': 'network_connections',
-    'Network_Connections': 'network_connections',
-    'DNS Queries': 'dns_queries',
-    'DNS_Queries': 'dns_queries',
+    "Network Connections": "network_connections",
+    "Network_Connections": "network_connections",
+    "DNS Queries": "dns_queries",
+    "DNS_Queries": "dns_queries",
 }
 
 
@@ -278,10 +277,11 @@ def normalize_artifact_type(elrond_type: str) -> str:
     Returns:
         Normalized MITRE artifact type
     """
-    return ELROND_TO_MITRE_TYPES.get(elrond_type, elrond_type.lower().replace(' ', '_'))
+    return ELROND_TO_MITRE_TYPES.get(elrond_type, elrond_type.lower().replace(" ", "_"))
 
 
 # Integration example for Elrond processors
+
 
 def example_processor_integration():
     """
@@ -290,6 +290,7 @@ def example_processor_integration():
     This shows the recommended pattern for adding coverage analysis
     to existing Elrond artifact processors.
     """
+
     # In processor __init__:
     class ExampleProcessor:
         def __init__(self, case_id, output_dir, enable_coverage=True):
@@ -302,7 +303,7 @@ def example_processor_integration():
                 output_dir=output_dir,
                 enabled=enable_coverage,
                 auto_dashboard=True,
-                auto_export=True
+                auto_export=True,
             )
 
         def process_artifact(self, artifact_type, artifact_path):
@@ -318,7 +319,7 @@ def example_processor_integration():
                 artifact_type=normalize_artifact_type(artifact_type),
                 artifact_path=artifact_path,
                 artifact_data=data,
-                context=context
+                context=context,
             )
 
             # Continue with existing processing
@@ -335,7 +336,7 @@ def example_processor_integration():
             # For Prefetch: executable name
             # For Registry: key path
             # etc.
-            return data.get('context', None)
+            return data.get("context", None)
 
         def save_processed_data(self, data):
             """Save processed data (existing logic)."""
@@ -356,10 +357,9 @@ def example_processor_integration():
 
 # Convenience function for quick integration
 
+
 def analyze_with_coverage(
-    case_id: str,
-    output_dir: str,
-    artifacts: List[Dict[str, Any]]
+    case_id: str, output_dir: str, artifacts: List[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
     Convenience function for batch coverage analysis.
@@ -380,10 +380,10 @@ def analyze_with_coverage(
 
     for artifact in artifacts:
         hook.process_artifact(
-            artifact_type=normalize_artifact_type(artifact['type']),
-            artifact_path=artifact['path'],
-            artifact_data=artifact.get('data'),
-            context=artifact.get('context')
+            artifact_type=normalize_artifact_type(artifact["type"]),
+            artifact_path=artifact["path"],
+            artifact_data=artifact.get("data"),
+            context=artifact.get("context"),
         )
 
     return hook.finalize()

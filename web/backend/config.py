@@ -4,9 +4,10 @@ Web Backend Configuration
 Configuration settings for the elrond web interface backend.
 """
 
+import platform
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -22,10 +23,17 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # CORS
-    cors_origins: list = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    cors_origins: list = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5687",
+        "http://127.0.0.1:5687",
+        "http://localhost:5688",
+        "http://127.0.0.1:5688",
+    ]
 
     # Redis
-    redis_host: str = "localhost"
+    redis_host: str = "redis"
     redis_port: int = 6379
     redis_db: int = 0
 
@@ -35,8 +43,8 @@ class Settings(BaseSettings):
         return f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
 
     # Celery
-    celery_broker_url: str = "redis://localhost:6379/0"
-    celery_result_backend: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://redis:6379/0"
+    celery_result_backend: str = "redis://redis:6379/0"
 
     # Storage
     upload_dir: Path = Path("/tmp/elrond/uploads")
@@ -51,8 +59,33 @@ class Settings(BaseSettings):
     max_concurrent_analyses: int = 3
     analysis_timeout: int = 86400  # 24 hours
 
-    # Paths - allowed directories for file browsing
-    allowed_paths: list = ["/mnt", "/media", "/tmp/elrond"]
+    @property
+    def allowed_paths(self) -> list:
+        """Get OS-specific allowed directories for file browsing."""
+        system = platform.system()
+
+        if system == "Windows":
+            # Windows paths only
+            return [
+                "C:\\Temp\\rivendell",
+                "D:\\Temp\\rivendell",
+                "E:\\Temp\\rivendell",
+                "F:\\Temp\\rivendell",
+            ]
+        elif system == "Darwin":
+            # macOS paths
+            return [
+                "/Volumes",
+                "/tmp/rivendell",
+            ]
+        else:
+            # Linux/Unix paths (includes Docker on Mac)
+            return [
+                "/Volumes",  # Docker on macOS
+                "/mnt",
+                "/media",
+                "/tmp/rivendell",
+            ]
 
     class Config:
         env_file = ".env"

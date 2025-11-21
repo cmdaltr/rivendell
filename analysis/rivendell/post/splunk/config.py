@@ -10,13 +10,23 @@ from tarfile import TarFile
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.post.splunk.app.app import build_app_elrond
-from rivendell.post.splunk.apps.geolocate import build_app_geolocate
-from rivendell.post.splunk.apps.lookup import build_app_lookup
-from rivendell.post.splunk.apps.punchcard import build_app_punchcard
-from rivendell.post.splunk.apps.sankey import build_app_sankey
-from rivendell.post.splunk.apps.topology import build_app_topology
-from rivendell.post.splunk.apps.treemap import build_app_treemap
 from rivendell.post.splunk.ingest import ingest_splunk_data
+
+# Try to import Splunk apps - they may not be installed
+try:
+    from rivendell.post.splunk.apps.geolocate import build_app_geolocate
+    from rivendell.post.splunk.apps.lookup import build_app_lookup
+    from rivendell.post.splunk.apps.punchcard import build_app_punchcard
+    from rivendell.post.splunk.apps.sankey import build_app_sankey
+    from rivendell.post.splunk.apps.topology import build_app_topology
+    from rivendell.post.splunk.apps.treemap import build_app_treemap
+except ImportError:
+    build_app_geolocate = None
+    build_app_lookup = None
+    build_app_punchcard = None
+    build_app_sankey = None
+    build_app_topology = None
+    build_app_treemap = None
 
 
 def splunk_service(splunk_install_path, action):
@@ -361,23 +371,21 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
         if not os.path.isdir("/" + splunk_install_path + "splunk/etc/apps/" + appdir):
             os.makedirs("/" + splunk_install_path + "splunk/etc/apps/" + appdir)
             with open("." + apptar, "w") as tarout:
-                if appdir == "TA-geolocate/":
+                apphexdump = None
+                if appdir == "TA-geolocate/" and build_app_geolocate is not None:
                     apphexdump = build_app_geolocate()
-                    tarout.write(apphexdump)
-                elif appdir == "lookup_editor/":
+                elif appdir == "lookup_editor/" and build_app_lookup is not None:
                     apphexdump = build_app_lookup()
-                    tarout.write(apphexdump)
-                elif appdir == "punchcard_app/":
+                elif appdir == "punchcard_app/" and build_app_punchcard is not None:
                     apphexdump = build_app_punchcard()
-                    tarout.write(apphexdump)
-                elif appdir == "sankey_diagram_app/":
+                elif appdir == "sankey_diagram_app/" and build_app_sankey is not None:
                     apphexdump = build_app_sankey()
-                    tarout.write(apphexdump)
-                elif appdir == "network_topology/":
+                elif appdir == "network_topology/" and build_app_topology is not None:
                     apphexdump = build_app_topology()
-                    tarout.write(apphexdump)
-                elif appdir == "treemap_app/":
+                elif appdir == "treemap_app/" and build_app_treemap is not None:
                     apphexdump = build_app_treemap()
+
+                if apphexdump is not None:
                     tarout.write(apphexdump)
                 subprocess.call(["xxd", "-plain", "-revert", "." + apptar, apptar])
                 tar = TarFile.open(apptar, "r:gz")

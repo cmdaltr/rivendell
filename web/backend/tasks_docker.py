@@ -59,8 +59,25 @@ def start_analysis(self, job_id: str):
         job.log.append(f"[{datetime.now().isoformat()}] Command: {' '.join(cmd)}")
         job_storage.save_job(job)
 
-        # Set destination directory
-        dest_dir = job.destination_path or str(Path(settings.output_dir) / job.case_number)
+        # Set destination directory - must match what's passed to elrond command
+        dest_dir = job.destination_path if job.destination_path else str(Path(settings.output_dir) / job.case_number)
+
+        # Check if force_overwrite is set and directory exists
+        if getattr(job.options, 'force_overwrite', False):
+            if Path(dest_dir).exists():
+                import shutil
+                logger.info(f"Force overwrite enabled, removing existing directory: {dest_dir}")
+                job.log.append(f"[{datetime.now().isoformat()}] Removing existing directory: {dest_dir}")
+                try:
+                    shutil.rmtree(dest_dir)
+                    logger.info(f"Successfully removed directory: {dest_dir}")
+                    job.log.append(f"[{datetime.now().isoformat()}] Successfully removed directory")
+                except Exception as e:
+                    logger.error(f"Error removing directory: {e}")
+                    job.log.append(f"[{datetime.now().isoformat()}] Error removing directory: {e}")
+                job_storage.save_job(job)
+
+        # Create the output directory if it doesn't exist
         Path(dest_dir).mkdir(parents=True, exist_ok=True)
 
         # Run elrond directly in container
@@ -69,11 +86,15 @@ def start_analysis(self, job_id: str):
         elrond_script = Path(elrond_path) / 'elrond.py'
 
         if not elrond_script.exists():
-            raise FileNotFoundError(f"Elrond script not found at {elrond_script}")
+            # Elrond not installed - create placeholder error
+            raise FileNotFoundError(
+                f"Elrond script not found at {elrond_script}. "
+                f"Please install Elrond or set ELROND_HOME environment variable to point to Elrond installation."
+            )
 
-        # Update command to use full path
-        cmd[0] = 'python3'
-        cmd.insert(1, str(elrond_script))
+        # Prepend python3 and elrond script path to command
+        cmd.insert(0, str(elrond_script))
+        cmd.insert(0, 'python3')
 
         logger.info(f"Executing: {' '.join(cmd)}")
 
@@ -82,6 +103,7 @@ def start_analysis(self, job_id: str):
         env['PYTHONPATH'] = f"{elrond_path}:{env.get('PYTHONPATH', '')}"
         env['ELROND_HOME'] = elrond_path
         env['ELROND_OUTPUT'] = str(settings.output_dir)
+        env['ELROND_NONINTERACTIVE'] = '1'  # Signal non-interactive mode
 
         process = subprocess.Popen(
             cmd,
@@ -193,8 +215,6 @@ def build_elrond_command(job):
         cmd.append("--Collect")
     if opts.gandalf:
         cmd.append("--Gandalf")
-    if opts.reorganise:
-        cmd.append("--Reorganise")
     if opts.process:
         cmd.append("--Process")
 
@@ -232,12 +252,8 @@ def build_elrond_command(job):
         cmd.append("--imageinfo")
 
     # Speed/Quality modes
-    if opts.auto:
-        cmd.append("--auto")
     if opts.brisk:
         cmd.append("--Brisk")
-    if opts.exhaustive:
-        cmd.append("--eXhaustive")
     if opts.quick:
         cmd.append("--quick")
     if opts.super_quick:
@@ -248,7 +264,8 @@ def build_elrond_command(job):
         cmd.append("--Splunk")
     if opts.elastic:
         cmd.append("--Elastic")
-    if opts.navigator:
+    # Navigator requires Splunk or Elastic
+    if opts.navigator and (opts.splunk or opts.elastic):
         cmd.append("--Navigator")
 
     # Security scanning
@@ -266,13 +283,5 @@ def build_elrond_command(job):
         cmd.append("--Delete")
     if opts.archive:
         cmd.append("--Ziparchive")
-
-    # Mount options
-    if opts.unmount:
-        cmd.append("--unmount")
-
-    # Display
-    if opts.lotr:
-        cmd.append("--lotr")
 
     return cmd

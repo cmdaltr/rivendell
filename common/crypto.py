@@ -1,5 +1,5 @@
 """
-Unified encryption utilities for Rivendell DFIR Suite
+Unified encryption utilities for Rivendell DF Acceleration Suite
 
 Provides consistent encryption/decryption across acquisition modules.
 Eliminates duplicate encryption code found in 3+ files.
@@ -66,7 +66,7 @@ class CryptoManager:
         Raises:
             FileNotFoundError: If key file doesn't exist
         """
-        with open(key_path, 'rb') as f:
+        with open(key_path, "rb") as f:
             self.key = f.read()
         return self.key
 
@@ -88,14 +88,11 @@ class CryptoManager:
             raise ValueError("No key to save. Generate or load a key first.")
 
         Path(key_path).parent.mkdir(parents=True, exist_ok=True)
-        with open(key_path, 'wb') as f:
+        with open(key_path, "wb") as f:
             f.write(key)
 
     def derive_key_from_password(
-        self,
-        password: str,
-        salt: bytes = DEFAULT_SALT,
-        iterations: int = DEFAULT_ITERATIONS
+        self, password: str, salt: bytes = DEFAULT_SALT, iterations: int = DEFAULT_ITERATIONS
     ) -> bytes:
         """
         Derive encryption key from password using PBKDF2.
@@ -151,10 +148,7 @@ class CryptoManager:
         return self.cipher
 
     def encrypt_file(
-        self,
-        input_path: str,
-        output_path: Optional[str] = None,
-        key: Optional[bytes] = None
+        self, input_path: str, output_path: Optional[str] = None, key: Optional[bytes] = None
     ) -> str:
         """
         Encrypt a file.
@@ -175,25 +169,22 @@ class CryptoManager:
             '/tmp/evidence.tar.gz.enc'
         """
         if output_path is None:
-            output_path = input_path + '.enc'
+            output_path = input_path + ".enc"
 
         cipher = self.get_cipher(key)
 
-        with open(input_path, 'rb') as f:
+        with open(input_path, "rb") as f:
             plaintext = f.read()
 
         ciphertext = cipher.encrypt(plaintext)
 
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             f.write(ciphertext)
 
         return output_path
 
     def decrypt_file(
-        self,
-        input_path: str,
-        output_path: Optional[str] = None,
-        key: Optional[bytes] = None
+        self, input_path: str, output_path: Optional[str] = None, key: Optional[bytes] = None
     ) -> str:
         """
         Decrypt a file.
@@ -215,28 +206,24 @@ class CryptoManager:
             >>> decrypted = crypto.decrypt_file("/tmp/evidence.tar.gz.enc")
         """
         if output_path is None:
-            if input_path.endswith('.enc'):
+            if input_path.endswith(".enc"):
                 output_path = input_path[:-4]
             else:
-                output_path = input_path + '.dec'
+                output_path = input_path + ".dec"
 
         cipher = self.get_cipher(key)
 
-        with open(input_path, 'rb') as f:
+        with open(input_path, "rb") as f:
             ciphertext = f.read()
 
         plaintext = cipher.decrypt(ciphertext)
 
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             f.write(plaintext)
 
         return output_path
 
-    def encrypt_data(
-        self,
-        data: bytes,
-        key: Optional[bytes] = None
-    ) -> bytes:
+    def encrypt_data(self, data: bytes, key: Optional[bytes] = None) -> bytes:
         """
         Encrypt bytes in memory.
 
@@ -250,11 +237,7 @@ class CryptoManager:
         cipher = self.get_cipher(key)
         return cipher.encrypt(data)
 
-    def decrypt_data(
-        self,
-        data: bytes,
-        key: Optional[bytes] = None
-    ) -> bytes:
+    def decrypt_data(self, data: bytes, key: Optional[bytes] = None) -> bytes:
         """
         Decrypt bytes in memory.
 
@@ -271,9 +254,9 @@ class CryptoManager:
 
 # Convenience functions for common use cases
 
+
 def encrypt_archive_with_key(
-    archive_path: str,
-    key_output_path: Optional[str] = None
+    archive_path: str, key_output_path: Optional[str] = None
 ) -> Tuple[str, str]:
     """
     Encrypt archive with newly generated key.
@@ -307,9 +290,7 @@ def encrypt_archive_with_key(
 
 
 def encrypt_archive_with_password(
-    archive_path: str,
-    password: str,
-    salt: bytes = DEFAULT_SALT
+    archive_path: str, password: str, salt: bytes = DEFAULT_SALT
 ) -> str:
     """
     Encrypt archive with password.
@@ -333,10 +314,7 @@ def encrypt_archive_with_password(
     return crypto.encrypt_file(archive_path)
 
 
-def decrypt_archive_with_key(
-    encrypted_path: str,
-    key_path: str
-) -> str:
+def decrypt_archive_with_key(encrypted_path: str, key_path: str) -> str:
     """
     Decrypt archive using key file.
 
@@ -359,9 +337,7 @@ def decrypt_archive_with_key(
 
 
 def decrypt_archive_with_password(
-    encrypted_path: str,
-    password: str,
-    salt: bytes = DEFAULT_SALT
+    encrypted_path: str, password: str, salt: bytes = DEFAULT_SALT
 ) -> str:
     """
     Decrypt archive using password.
@@ -415,7 +391,7 @@ def verify_key(key_path: str) -> bool:
         True if key is valid, False otherwise
     """
     try:
-        with open(key_path, 'rb') as f:
+        with open(key_path, "rb") as f:
             key = f.read()
         Fernet(key)
         return True

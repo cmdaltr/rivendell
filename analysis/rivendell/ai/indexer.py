@@ -4,7 +4,7 @@ Forensic Data Indexer
 
 Index forensic artifacts for AI-powered querying using vector embeddings.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -19,12 +19,14 @@ try:
     from langchain.vectorstores import Chroma
     from langchain.text_splitter import RecursiveCharacterTextSplitter
     from langchain.schema import Document
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
 
 try:
     import pandas as pd
+
     PANDAS_AVAILABLE = True
 except ImportError:
     PANDAS_AVAILABLE = False
@@ -68,28 +70,27 @@ class ForensicDataIndexer:
         self.logger = logging.getLogger(__name__)
 
         # Vector DB directory
-        self.vector_db_dir = os.path.join(output_dir, 'vector_db')
+        self.vector_db_dir = os.path.join(output_dir, "vector_db")
         os.makedirs(self.vector_db_dir, exist_ok=True)
 
         # Initialize embedding model
-        embedding_model = self.config.get('embedding_model', 'sentence-transformers/all-MiniLM-L6-v2')
+        embedding_model = self.config.get(
+            "embedding_model", "sentence-transformers/all-MiniLM-L6-v2"
+        )
         self.embeddings = HuggingFaceEmbeddings(
-            model_name=embedding_model,
-            model_kwargs={'device': self.config.get('device', 'cpu')}
+            model_name=embedding_model, model_kwargs={"device": self.config.get("device", "cpu")}
         )
 
         # Initialize vector store
         self.vectorstore = Chroma(
             collection_name=f"case_{case_id}",
             embedding_function=self.embeddings,
-            persist_directory=self.vector_db_dir
+            persist_directory=self.vector_db_dir,
         )
 
         # Text splitter for large documents
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len
+            chunk_size=1000, chunk_overlap=200, length_function=len
         )
 
         self.logger.info(f"Initialized indexer for case {case_id}")
@@ -127,11 +128,11 @@ File: {row.get('file', row.get('filename', row.get('path', 'N/A')))}
 
                 # Create metadata
                 metadata = {
-                    'type': 'timeline',
-                    'timestamp': str(row.get('timestamp', 'N/A')),
-                    'source': str(row.get('source', 'N/A')),
-                    'event_type': str(row.get('event_type', row.get('type', 'N/A'))),
-                    'case_id': self.case_id
+                    "type": "timeline",
+                    "timestamp": str(row.get("timestamp", "N/A")),
+                    "source": str(row.get("source", "N/A")),
+                    "event_type": str(row.get("event_type", row.get("type", "N/A"))),
+                    "case_id": self.case_id,
                 }
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
@@ -179,11 +180,11 @@ Source: {row.get('source', 'N/A')}
 """
 
                 metadata = {
-                    'type': 'ioc',
-                    'ioc_type': str(row.get('type', row.get('ioc_type', 'N/A'))),
-                    'value': str(row.get('value', 'N/A')),
-                    'severity': str(row.get('severity', 'N/A')),
-                    'case_id': self.case_id
+                    "type": "ioc",
+                    "ioc_type": str(row.get("type", row.get("ioc_type", "N/A"))),
+                    "value": str(row.get("value", "N/A")),
+                    "severity": str(row.get("severity", "N/A")),
+                    "case_id": self.case_id,
                 }
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
@@ -230,10 +231,10 @@ Start Time: {row.get('start_time', row.get('creation_time', 'N/A'))}
 """
 
                 metadata = {
-                    'type': 'process',
-                    'name': str(row.get('name', row.get('process_name', 'N/A'))),
-                    'pid': str(row.get('pid', 'N/A')),
-                    'case_id': self.case_id
+                    "type": "process",
+                    "name": str(row.get("name", row.get("process_name", "N/A"))),
+                    "pid": str(row.get("pid", "N/A")),
+                    "case_id": self.case_id,
                 }
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
@@ -281,10 +282,10 @@ PID: {row.get('pid', 'N/A')}
 """
 
                 metadata = {
-                    'type': 'network',
-                    'remote_address': str(row.get('remote_address', row.get('dst_ip', 'N/A'))),
-                    'protocol': str(row.get('protocol', 'N/A')),
-                    'case_id': self.case_id
+                    "type": "network",
+                    "remote_address": str(row.get("remote_address", row.get("dst_ip", "N/A"))),
+                    "protocol": str(row.get("protocol", "N/A")),
+                    "case_id": self.case_id,
                 }
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
@@ -329,9 +330,9 @@ Last Modified: {row.get('last_modified', row.get('modified', 'N/A'))}
 """
 
                 metadata = {
-                    'type': 'registry',
-                    'key': str(row.get('key', row.get('path', 'N/A'))),
-                    'case_id': self.case_id
+                    "type": "registry",
+                    "key": str(row.get("key", row.get("path", "N/A"))),
+                    "case_id": self.case_id,
                 }
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
@@ -379,10 +380,10 @@ Hash SHA256: {row.get('sha256', 'N/A')}
 """
 
                 metadata = {
-                    'type': 'file',
-                    'path': str(row.get('path', row.get('file_path', 'N/A'))),
-                    'name': str(row.get('name', row.get('filename', 'N/A'))),
-                    'case_id': self.case_id
+                    "type": "file",
+                    "path": str(row.get("path", row.get("file_path", "N/A"))),
+                    "name": str(row.get("name", row.get("filename", "N/A"))),
+                    "case_id": self.case_id,
                 }
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
@@ -414,7 +415,7 @@ Hash SHA256: {row.get('sha256', 'N/A')}
             return 0
 
         try:
-            with open(logs_json, 'r') as f:
+            with open(logs_json, "r") as f:
                 logs = json.load(f)
 
             if not isinstance(logs, list):
@@ -425,20 +426,16 @@ Hash SHA256: {row.get('sha256', 'N/A')}
             documents = []
             for log in logs:
                 # Format based on provider
-                if provider == 'aws':
+                if provider == "aws":
                     doc_text = self._format_aws_log(log)
-                elif provider == 'azure':
+                elif provider == "azure":
                     doc_text = self._format_azure_log(log)
-                elif provider == 'gcp':
+                elif provider == "gcp":
                     doc_text = self._format_gcp_log(log)
                 else:
                     doc_text = json.dumps(log, indent=2)
 
-                metadata = {
-                    'type': 'cloud_log',
-                    'provider': provider,
-                    'case_id': self.case_id
-                }
+                metadata = {"type": "cloud_log", "provider": provider, "case_id": self.case_id}
 
                 documents.append(Document(page_content=doc_text, metadata=metadata))
 
@@ -480,7 +477,7 @@ Properties: {json.dumps(log.get('properties', {}))}
 
     def _format_gcp_log(self, log: Dict) -> str:
         """Format GCP Cloud Logging entry."""
-        proto_payload = log.get('proto_payload', {})
+        proto_payload = log.get("proto_payload", {})
         return f"""
 Method Name: {proto_payload.get('method_name', proto_payload.get('methodName', 'N/A'))}
 Service Name: {proto_payload.get('service_name', proto_payload.get('serviceName', 'N/A'))}
@@ -506,34 +503,34 @@ Response: {json.dumps(proto_payload.get('response', {}))}
         counts = {}
 
         # Timeline
-        timeline_path = os.path.join(artifacts_dir, 'timeline', 'timeline.csv')
+        timeline_path = os.path.join(artifacts_dir, "timeline", "timeline.csv")
         if os.path.exists(timeline_path):
-            counts['timeline'] = self.index_timeline(timeline_path)
+            counts["timeline"] = self.index_timeline(timeline_path)
 
         # IOCs
-        iocs_path = os.path.join(artifacts_dir, 'analysis', 'iocs.csv')
+        iocs_path = os.path.join(artifacts_dir, "analysis", "iocs.csv")
         if os.path.exists(iocs_path):
-            counts['iocs'] = self.index_iocs(iocs_path)
+            counts["iocs"] = self.index_iocs(iocs_path)
 
         # Processes
-        processes_path = os.path.join(artifacts_dir, 'processed', 'processes.csv')
+        processes_path = os.path.join(artifacts_dir, "processed", "processes.csv")
         if os.path.exists(processes_path):
-            counts['processes'] = self.index_processes(processes_path)
+            counts["processes"] = self.index_processes(processes_path)
 
         # Network
-        network_path = os.path.join(artifacts_dir, 'processed', 'network.csv')
+        network_path = os.path.join(artifacts_dir, "processed", "network.csv")
         if os.path.exists(network_path):
-            counts['network'] = self.index_network(network_path)
+            counts["network"] = self.index_network(network_path)
 
         # Registry
-        registry_path = os.path.join(artifacts_dir, 'processed', 'registry.csv')
+        registry_path = os.path.join(artifacts_dir, "processed", "registry.csv")
         if os.path.exists(registry_path):
-            counts['registry'] = self.index_registry(registry_path)
+            counts["registry"] = self.index_registry(registry_path)
 
         # Files
-        files_path = os.path.join(artifacts_dir, 'processed', 'files.csv')
+        files_path = os.path.join(artifacts_dir, "processed", "files.csv")
         if os.path.exists(files_path):
-            counts['files'] = self.index_files(files_path)
+            counts["files"] = self.index_files(files_path)
 
         self.logger.info(f"Indexing complete. Total counts: {counts}")
         return counts
@@ -550,11 +547,13 @@ Response: {json.dumps(proto_payload.get('response', {}))}
             count = collection.count()
 
             return {
-                'case_id': self.case_id,
-                'collection_name': f"case_{self.case_id}",
-                'document_count': count,
-                'vector_db_dir': self.vector_db_dir,
-                'embedding_model': self.config.get('embedding_model', 'sentence-transformers/all-MiniLM-L6-v2')
+                "case_id": self.case_id,
+                "collection_name": f"case_{self.case_id}",
+                "document_count": count,
+                "vector_db_dir": self.vector_db_dir,
+                "embedding_model": self.config.get(
+                    "embedding_model", "sentence-transformers/all-MiniLM-L6-v2"
+                ),
             }
         except Exception as e:
             self.logger.error(f"Error getting collection info: {e}")

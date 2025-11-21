@@ -4,7 +4,7 @@ Azure Virtual Machine Forensics Module
 
 Forensic acquisition and analysis of Azure VMs and managed disks.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -18,6 +18,7 @@ try:
     from azure.mgmt.compute import ComputeManagementClient
     from azure.mgmt.compute.models import Snapshot, CreationData, DiskCreateOption
     from azure.mgmt.network import NetworkManagementClient
+
     AZURE_AVAILABLE = True
 except ImportError:
     AZURE_AVAILABLE = False
@@ -59,11 +60,11 @@ class AzureForensics(CloudProvider):
         self.credential = None
         self.compute_client = None
         self.network_client = None
-        self.subscription_id = credentials.get('subscription_id')
+        self.subscription_id = credentials.get("subscription_id")
 
     def get_required_credential_keys(self) -> List[str]:
         """Required Azure credential keys."""
-        return ['tenant_id', 'client_id', 'client_secret', 'subscription_id']
+        return ["tenant_id", "client_id", "client_secret", "subscription_id"]
 
     def authenticate(self) -> bool:
         """
@@ -80,20 +81,14 @@ class AzureForensics(CloudProvider):
 
         try:
             self.credential = ClientSecretCredential(
-                tenant_id=self.credentials['tenant_id'],
-                client_id=self.credentials['client_id'],
-                client_secret=self.credentials['client_secret']
+                tenant_id=self.credentials["tenant_id"],
+                client_id=self.credentials["client_id"],
+                client_secret=self.credentials["client_secret"],
             )
 
-            self.compute_client = ComputeManagementClient(
-                self.credential,
-                self.subscription_id
-            )
+            self.compute_client = ComputeManagementClient(self.credential, self.subscription_id)
 
-            self.network_client = NetworkManagementClient(
-                self.credential,
-                self.subscription_id
-            )
+            self.network_client = NetworkManagementClient(self.credential, self.subscription_id)
 
             # Test authentication
             list(self.compute_client.virtual_machines.list_all())
@@ -121,7 +116,7 @@ class AzureForensics(CloudProvider):
             raise CloudForensicsException("Not authenticated", provider="Azure")
 
         try:
-            resource_group = kwargs.get('resource_group')
+            resource_group = kwargs.get("resource_group")
 
             if resource_group:
                 vm_list = self.compute_client.virtual_machines.list(resource_group)
@@ -145,35 +140,34 @@ class AzureForensics(CloudProvider):
     def _format_vm(self, vm: Any) -> Dict[str, Any]:
         """Format VM data for output."""
         return {
-            'id': vm.id,
-            'name': vm.name,
-            'location': vm.location,
-            'vm_size': vm.hardware_profile.vm_size,
-            'os_type': vm.storage_profile.os_disk.os_type,
-            'os_disk_name': vm.storage_profile.os_disk.name,
-            'os_disk_id': vm.storage_profile.os_disk.managed_disk.id if vm.storage_profile.os_disk.managed_disk else None,
-            'data_disks': [
+            "id": vm.id,
+            "name": vm.name,
+            "location": vm.location,
+            "vm_size": vm.hardware_profile.vm_size,
+            "os_type": vm.storage_profile.os_disk.os_type,
+            "os_disk_name": vm.storage_profile.os_disk.name,
+            "os_disk_id": (
+                vm.storage_profile.os_disk.managed_disk.id
+                if vm.storage_profile.os_disk.managed_disk
+                else None
+            ),
+            "data_disks": [
                 {
-                    'name': disk.name,
-                    'lun': disk.lun,
-                    'disk_size_gb': disk.disk_size_gb,
-                    'managed_disk_id': disk.managed_disk.id if disk.managed_disk else None
+                    "name": disk.name,
+                    "lun": disk.lun,
+                    "disk_size_gb": disk.disk_size_gb,
+                    "managed_disk_id": disk.managed_disk.id if disk.managed_disk else None,
                 }
                 for disk in vm.storage_profile.data_disks
             ],
-            'network_interfaces': [nic.id for nic in vm.network_profile.network_interfaces],
-            'provisioning_state': vm.provisioning_state,
-            'tags': vm.tags or {},
-            'provider': 'Azure',
-            'artifact_type': 'azure_vm'
+            "network_interfaces": [nic.id for nic in vm.network_profile.network_interfaces],
+            "provisioning_state": vm.provisioning_state,
+            "tags": vm.tags or {},
+            "provider": "Azure",
+            "artifact_type": "azure_vm",
         }
 
-    def acquire_disk_image(
-        self,
-        instance_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_disk_image(self, instance_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire managed disk snapshots from Azure VM.
 
@@ -190,16 +184,15 @@ class AzureForensics(CloudProvider):
         if not self.authenticated:
             raise CloudForensicsException("Not authenticated", provider="Azure")
 
-        resource_group = kwargs.get('resource_group')
+        resource_group = kwargs.get("resource_group")
         if not resource_group:
             # Extract from resource ID
-            if '/resourceGroups/' in instance_id:
-                resource_group = instance_id.split('/resourceGroups/')[1].split('/')[0]
-                vm_name = instance_id.split('/')[-1]
+            if "/resourceGroups/" in instance_id:
+                resource_group = instance_id.split("/resourceGroups/")[1].split("/")[0]
+                vm_name = instance_id.split("/")[-1]
             else:
                 raise CloudForensicsException(
-                    "resource_group required when using VM name",
-                    provider="Azure"
+                    "resource_group required when using VM name", provider="Azure"
                 )
         else:
             vm_name = instance_id
@@ -209,7 +202,7 @@ class AzureForensics(CloudProvider):
             vm = self.compute_client.virtual_machines.get(resource_group, vm_name)
 
             # Get disks to snapshot
-            disk_ids = kwargs.get('disk_ids')
+            disk_ids = kwargs.get("disk_ids")
             if disk_ids is None:
                 disk_ids = []
                 # OS disk
@@ -225,48 +218,47 @@ class AzureForensics(CloudProvider):
             for disk_id in disk_ids:
                 self.logger.info(f"Creating snapshot for disk {disk_id}...")
 
-                disk_name = disk_id.split('/')[-1]
+                disk_name = disk_id.split("/")[-1]
                 snapshot_name = f"{vm_name}-{disk_name}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
                 snapshot = Snapshot(
                     location=vm.location,
                     creation_data=CreationData(
-                        create_option=DiskCreateOption.copy,
-                        source_uri=disk_id
+                        create_option=DiskCreateOption.copy, source_uri=disk_id
                     ),
                     tags={
-                        'ForensicSnapshot': 'true',
-                        'SourceVM': vm_name,
-                        'SourceDisk': disk_name,
-                        'AcquisitionTime': datetime.now().isoformat()
-                    }
+                        "ForensicSnapshot": "true",
+                        "SourceVM": vm_name,
+                        "SourceDisk": disk_name,
+                        "AcquisitionTime": datetime.now().isoformat(),
+                    },
                 )
 
                 async_snapshot = self.compute_client.snapshots.begin_create_or_update(
-                    resource_group,
-                    snapshot_name,
-                    snapshot
+                    resource_group, snapshot_name, snapshot
                 )
 
                 snapshot_resource = async_snapshot.result()
 
-                snapshots.append({
-                    'snapshot_id': snapshot_resource.id,
-                    'snapshot_name': snapshot_name,
-                    'source_disk_id': disk_id,
-                    'location': snapshot_resource.location,
-                    'provisioning_state': snapshot_resource.provisioning_state
-                })
+                snapshots.append(
+                    {
+                        "snapshot_id": snapshot_resource.id,
+                        "snapshot_name": snapshot_name,
+                        "source_disk_id": disk_id,
+                        "location": snapshot_resource.location,
+                        "provisioning_state": snapshot_resource.provisioning_state,
+                    }
+                )
 
                 self.logger.info(f"Snapshot {snapshot_name} created")
 
             # Save metadata
             result = {
-                'vm_name': vm_name,
-                'resource_group': resource_group,
-                'acquisition_time': datetime.now().isoformat(),
-                'snapshots': snapshots,
-                'vm_metadata': self._format_vm(vm)
+                "vm_name": vm_name,
+                "resource_group": resource_group,
+                "acquisition_time": datetime.now().isoformat(),
+                "snapshots": snapshots,
+                "vm_metadata": self._format_vm(vm),
             }
 
             metadata_file = os.path.join(output_dir, f"{vm_name}_snapshots.json")
@@ -278,11 +270,7 @@ class AzureForensics(CloudProvider):
             raise CloudForensicsException(f"Failed to acquire disk image: {e}", provider="Azure")
 
     def acquire_logs(
-        self,
-        start_time: datetime,
-        end_time: datetime,
-        output_dir: str,
-        **kwargs
+        self, start_time: datetime, end_time: datetime, output_dir: str, **kwargs
     ) -> List[str]:
         """
         Acquire Azure Activity Logs.
@@ -299,15 +287,12 @@ class AzureForensics(CloudProvider):
             List of output file paths
         """
         # Placeholder - Activity Log functionality in separate module
-        self.logger.warning("Activity Log acquisition not implemented in VM module. Use azure.activity_log module.")
+        self.logger.warning(
+            "Activity Log acquisition not implemented in VM module. Use azure.activity_log module."
+        )
         return []
 
-    def acquire_storage(
-        self,
-        storage_id: str,
-        output_dir: str,
-        **kwargs
-    ) -> Dict[str, Any]:
+    def acquire_storage(self, storage_id: str, output_dir: str, **kwargs) -> Dict[str, Any]:
         """
         Acquire Azure Blob Storage metadata.
 
@@ -322,14 +307,12 @@ class AzureForensics(CloudProvider):
             Dictionary with storage analysis
         """
         # Placeholder - Blob Storage functionality in separate module
-        self.logger.warning("Blob Storage acquisition not implemented in VM module. Use azure.blob module.")
+        self.logger.warning(
+            "Blob Storage acquisition not implemented in VM module. Use azure.blob module."
+        )
         return {}
 
-    def analyze_network_security(
-        self,
-        vm_name: str,
-        resource_group: str
-    ) -> List[Dict[str, Any]]:
+    def analyze_network_security(self, vm_name: str, resource_group: str) -> List[Dict[str, Any]]:
         """
         Analyze Network Security Groups attached to VM.
 
@@ -352,30 +335,33 @@ class AzureForensics(CloudProvider):
             # Get NICs
             for nic_ref in vm.network_profile.network_interfaces:
                 nic_id = nic_ref.id
-                nic_resource_group = nic_id.split('/resourceGroups/')[1].split('/')[0]
-                nic_name = nic_id.split('/')[-1]
+                nic_resource_group = nic_id.split("/resourceGroups/")[1].split("/")[0]
+                nic_name = nic_id.split("/")[-1]
 
                 nic = self.network_client.network_interfaces.get(nic_resource_group, nic_name)
 
                 # Get NSG
                 if nic.network_security_group:
                     nsg_id = nic.network_security_group.id
-                    nsg_resource_group = nsg_id.split('/resourceGroups/')[1].split('/')[0]
-                    nsg_name = nsg_id.split('/')[-1]
+                    nsg_resource_group = nsg_id.split("/resourceGroups/")[1].split("/")[0]
+                    nsg_name = nsg_id.split("/")[-1]
 
                     nsg = self.network_client.network_security_groups.get(
-                        nsg_resource_group,
-                        nsg_name
+                        nsg_resource_group, nsg_name
                     )
 
-                    nsg_analysis.append({
-                        'nsg_name': nsg.name,
-                        'nsg_id': nsg.id,
-                        'location': nsg.location,
-                        'security_rules': self._format_nsg_rules(nsg.security_rules),
-                        'default_security_rules': self._format_nsg_rules(nsg.default_security_rules),
-                        'attck_techniques': self._analyze_nsg_threats(nsg)
-                    })
+                    nsg_analysis.append(
+                        {
+                            "nsg_name": nsg.name,
+                            "nsg_id": nsg.id,
+                            "location": nsg.location,
+                            "security_rules": self._format_nsg_rules(nsg.security_rules),
+                            "default_security_rules": self._format_nsg_rules(
+                                nsg.default_security_rules
+                            ),
+                            "attck_techniques": self._analyze_nsg_threats(nsg),
+                        }
+                    )
 
             return nsg_analysis
 
@@ -386,17 +372,19 @@ class AzureForensics(CloudProvider):
         """Format NSG rules."""
         formatted = []
         for rule in rules:
-            formatted.append({
-                'name': rule.name,
-                'priority': rule.priority,
-                'direction': rule.direction,
-                'access': rule.access,
-                'protocol': rule.protocol,
-                'source_port_range': rule.source_port_range,
-                'destination_port_range': rule.destination_port_range,
-                'source_address_prefix': rule.source_address_prefix,
-                'destination_address_prefix': rule.destination_address_prefix
-            })
+            formatted.append(
+                {
+                    "name": rule.name,
+                    "priority": rule.priority,
+                    "direction": rule.direction,
+                    "access": rule.access,
+                    "protocol": rule.protocol,
+                    "source_port_range": rule.source_port_range,
+                    "destination_port_range": rule.destination_port_range,
+                    "source_address_prefix": rule.source_address_prefix,
+                    "destination_address_prefix": rule.destination_address_prefix,
+                }
+            )
         return formatted
 
     def _analyze_nsg_threats(self, nsg: Any) -> List[str]:
@@ -404,12 +392,12 @@ class AzureForensics(CloudProvider):
         techniques = []
 
         for rule in nsg.security_rules:
-            if rule.access == 'Allow' and rule.direction == 'Inbound':
+            if rule.access == "Allow" and rule.direction == "Inbound":
                 # Check for open management ports
-                if rule.source_address_prefix == '*' or rule.source_address_prefix == 'Internet':
+                if rule.source_address_prefix == "*" or rule.source_address_prefix == "Internet":
                     dest_port = rule.destination_port_range
-                    if dest_port in ['22', '3389', '1433', '3306', '*']:
-                        techniques.append('T1190')  # Exploit Public-Facing Application
-                        techniques.append('T1133')  # External Remote Services
+                    if dest_port in ["22", "3389", "1433", "3306", "*"]:
+                        techniques.append("T1190")  # Exploit Public-Facing Application
+                        techniques.append("T1133")  # External Remote Services
 
         return list(set(techniques))

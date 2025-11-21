@@ -1,12 +1,12 @@
 # Rivendell Quick Start Guide
 
-Get up and running with Rivendell DFIR Suite in minutes!
+Get up and running with Rivendell DF Acceleration Suite in minutes!
 
 ## 🚀 Quick Start (Docker - Recommended)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/rivendell.git
+git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 
 # Start all services
@@ -33,7 +33,7 @@ docker-compose logs -f rivendell
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/rivendell.git
+git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 
 # Create virtual environment

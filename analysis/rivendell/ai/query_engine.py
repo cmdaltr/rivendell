@@ -4,7 +4,7 @@ Forensic Query Engine
 
 AI-powered natural language query engine for forensic data analysis.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -23,6 +23,7 @@ try:
     from langchain.vectorstores import Chroma
     from langchain.callbacks.manager import CallbackManager
     from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
+
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
@@ -87,12 +88,7 @@ Suggest 5 specific investigation paths to pursue. For each path:
 
 Suggestions:"""
 
-    def __init__(
-        self,
-        case_id: str,
-        vector_store_dir: str,
-        config: Optional[Dict] = None
-    ):
+    def __init__(self, case_id: str, vector_store_dir: str, config: Optional[Dict] = None):
         """
         Initialize forensic query engine.
 
@@ -119,17 +115,18 @@ Suggestions:"""
         self.logger = logging.getLogger(__name__)
 
         # Initialize embedding model
-        embedding_model = self.config.get('embedding_model', 'sentence-transformers/all-MiniLM-L6-v2')
+        embedding_model = self.config.get(
+            "embedding_model", "sentence-transformers/all-MiniLM-L6-v2"
+        )
         self.embeddings = HuggingFaceEmbeddings(
-            model_name=embedding_model,
-            model_kwargs={'device': self.config.get('device', 'cpu')}
+            model_name=embedding_model, model_kwargs={"device": self.config.get("device", "cpu")}
         )
 
         # Load vector store
         self.vectorstore = Chroma(
             collection_name=f"case_{case_id}",
             embedding_function=self.embeddings,
-            persist_directory=vector_store_dir
+            persist_directory=vector_store_dir,
         )
 
         # Initialize LLM
@@ -137,19 +134,18 @@ Suggestions:"""
 
         # Create retrieval chain
         self.retriever = self.vectorstore.as_retriever(
-            search_type="similarity",
-            search_kwargs={"k": self.config.get('top_k', 10)}
+            search_type="similarity", search_kwargs={"k": self.config.get("top_k", 10)}
         )
 
         self.logger.info(f"Initialized query engine for case {case_id}")
 
     def _initialize_llm(self):
         """Initialize the LLM based on configuration."""
-        llm_type = self.config.get('llm_type', 'ollama')
+        llm_type = self.config.get("llm_type", "ollama")
 
-        if llm_type == 'llamacpp':
+        if llm_type == "llamacpp":
             # Use local LlamaCpp model
-            model_path = self.config.get('model_path', '/opt/rivendell/models/llama-3-70b.gguf')
+            model_path = self.config.get("model_path", "/opt/rivendell/models/llama-3-70b.gguf")
 
             if not os.path.exists(model_path):
                 raise FileNotFoundError(
@@ -161,22 +157,22 @@ Suggestions:"""
 
             return LlamaCpp(
                 model_path=model_path,
-                n_ctx=self.config.get('n_ctx', 4096),
-                n_batch=self.config.get('n_batch', 512),
-                temperature=self.config.get('temperature', 0.1),
-                max_tokens=self.config.get('max_tokens', 2048),
+                n_ctx=self.config.get("n_ctx", 4096),
+                n_batch=self.config.get("n_batch", 512),
+                temperature=self.config.get("temperature", 0.1),
+                max_tokens=self.config.get("max_tokens", 2048),
                 callback_manager=callback_manager,
-                verbose=self.config.get('verbose', False)
+                verbose=self.config.get("verbose", False),
             )
 
-        elif llm_type == 'ollama':
+        elif llm_type == "ollama":
             # Use Ollama (easier setup, runs locally)
-            model_name = self.config.get('model_name', 'llama3')
+            model_name = self.config.get("model_name", "llama3")
 
             return Ollama(
                 model=model_name,
-                temperature=self.config.get('temperature', 0.1),
-                num_predict=self.config.get('max_tokens', 2048)
+                temperature=self.config.get("temperature", 0.1),
+                num_predict=self.config.get("max_tokens", 2048),
             )
 
         else:
@@ -197,8 +193,7 @@ Suggestions:"""
         try:
             # Create prompt
             prompt = PromptTemplate(
-                template=self.QUERY_PROMPT,
-                input_variables=["case_id", "context", "question"]
+                template=self.QUERY_PROMPT, input_variables=["case_id", "context", "question"]
             )
 
             # Retrieve relevant documents
@@ -209,9 +204,7 @@ Suggestions:"""
 
             # Generate answer
             formatted_prompt = prompt.format(
-                case_id=self.case_id,
-                context=context,
-                question=question
+                case_id=self.case_id, context=context, question=question
             )
 
             answer = self.llm(formatted_prompt)
@@ -221,7 +214,7 @@ Suggestions:"""
                 SourceDocument(
                     content=doc.page_content,
                     metadata=doc.metadata,
-                    relevance_score=1.0 / (i + 1)  # Simple relevance scoring
+                    relevance_score=1.0 / (i + 1),  # Simple relevance scoring
                 )
                 for i, doc in enumerate(docs[:5])
             ]
@@ -235,10 +228,10 @@ Suggestions:"""
                 confidence=0.8,  # Could be enhanced with actual confidence scoring
                 processing_time=processing_time,
                 metadata={
-                    'case_id': self.case_id,
-                    'documents_retrieved': len(docs),
-                    'llm_type': self.config.get('llm_type', 'ollama')
-                }
+                    "case_id": self.case_id,
+                    "documents_retrieved": len(docs),
+                    "llm_type": self.config.get("llm_type", "ollama"),
+                },
             )
 
             self.logger.info(f"Query processed in {processing_time:.2f}s")
@@ -251,7 +244,7 @@ Suggestions:"""
                 answer=f"Error processing query: {e}",
                 sources=[],
                 confidence=0.0,
-                processing_time=time.time() - start_time
+                processing_time=time.time() - start_time,
             )
 
     def suggest_investigation_paths(self) -> List[InvestigationSuggestion]:
@@ -272,7 +265,7 @@ Suggestions:"""
 
             # Parse suggestions (basic parsing)
             suggestions = []
-            lines = suggestions_text.strip().split('\n')
+            lines = suggestions_text.strip().split("\n")
 
             current_suggestion = None
             for line in lines:
@@ -281,16 +274,14 @@ Suggestions:"""
                     continue
 
                 # Check if it's a numbered suggestion
-                if line[0].isdigit() and '.' in line[:3]:
+                if line[0].isdigit() and "." in line[:3]:
                     if current_suggestion:
                         suggestions.append(current_suggestion)
 
                     # Extract title
-                    title = line.split('.', 1)[1].strip()
+                    title = line.split(".", 1)[1].strip()
                     current_suggestion = InvestigationSuggestion(
-                        title=title,
-                        description="",
-                        priority="medium"
+                        title=title, description="", priority="medium"
                     )
                 elif current_suggestion:
                     # Add to description
@@ -342,17 +333,19 @@ MITRE ATT&CK Techniques:
                 timeline_summary=timeline_result.answer,
                 key_findings=[],
                 attck_techniques=[],
-                recommendations=[]
+                recommendations=[],
             )
 
             # Extract IOCs
             for source in iocs_result.sources:
-                if source.metadata.get('type') == 'ioc':
-                    summary.iocs_detected.append({
-                        'type': source.metadata.get('ioc_type', 'unknown'),
-                        'value': source.metadata.get('value', 'N/A'),
-                        'severity': source.metadata.get('severity', 'unknown')
-                    })
+                if source.metadata.get("type") == "ioc":
+                    summary.iocs_detected.append(
+                        {
+                            "type": source.metadata.get("ioc_type", "unknown"),
+                            "value": source.metadata.get("value", "N/A"),
+                            "severity": source.metadata.get("severity", "unknown"),
+                        }
+                    )
 
             self.logger.info(f"Generated case summary for {self.case_id}")
             return summary
@@ -360,8 +353,7 @@ MITRE ATT&CK Techniques:
         except Exception as e:
             self.logger.error(f"Error generating summary: {e}")
             return CaseSummary(
-                case_id=self.case_id,
-                executive_summary=f"Error generating summary: {e}"
+                case_id=self.case_id, executive_summary=f"Error generating summary: {e}"
             )
 
     def search_similar(self, text: str, top_k: int = 5) -> List[SourceDocument]:
@@ -380,9 +372,7 @@ MITRE ATT&CK Techniques:
 
             return [
                 SourceDocument(
-                    content=doc.page_content,
-                    metadata=doc.metadata,
-                    relevance_score=1.0 / (i + 1)
+                    content=doc.page_content, metadata=doc.metadata, relevance_score=1.0 / (i + 1)
                 )
                 for i, doc in enumerate(docs)
             ]
@@ -403,11 +393,13 @@ MITRE ATT&CK Techniques:
             count = collection.count()
 
             return {
-                'case_id': self.case_id,
-                'document_count': count,
-                'llm_type': self.config.get('llm_type', 'ollama'),
-                'embedding_model': self.config.get('embedding_model', 'sentence-transformers/all-MiniLM-L6-v2'),
-                'vector_store_dir': self.vector_store_dir
+                "case_id": self.case_id,
+                "document_count": count,
+                "llm_type": self.config.get("llm_type", "ollama"),
+                "embedding_model": self.config.get(
+                    "embedding_model", "sentence-transformers/all-MiniLM-L6-v2"
+                ),
+                "vector_store_dir": self.vector_store_dir,
             }
 
         except Exception as e:
@@ -428,9 +420,9 @@ MITRE ATT&CK Techniques:
             ForensicQueryEngine instance
         """
         if base_dir is None:
-            base_dir = os.getenv('RIVENDELL_DATA_DIR', '/opt/rivendell/data')
+            base_dir = os.getenv("RIVENDELL_DATA_DIR", "/opt/rivendell/data")
 
-        vector_store_dir = os.path.join(base_dir, case_id, 'vector_db')
+        vector_store_dir = os.path.join(base_dir, case_id, "vector_db")
 
         if not os.path.exists(vector_store_dir):
             raise FileNotFoundError(

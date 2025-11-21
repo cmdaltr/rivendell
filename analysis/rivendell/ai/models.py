@@ -4,7 +4,7 @@ AI Agent Data Models
 
 Data structures for AI query results and metadata.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -23,14 +23,15 @@ class SourceDocument:
         metadata: Document metadata (type, timestamp, source, etc.)
         relevance_score: Similarity/relevance score (0.0 to 1.0)
     """
+
     content: str
     metadata: Dict[str, Any]
     relevance_score: float = 0.0
 
     def __str__(self) -> str:
         """String representation."""
-        doc_type = self.metadata.get('type', 'unknown')
-        source = self.metadata.get('source', 'unknown')
+        doc_type = self.metadata.get("type", "unknown")
+        source = self.metadata.get("source", "unknown")
         return f"[{doc_type}] {source} (score: {self.relevance_score:.2f})"
 
 
@@ -48,6 +49,7 @@ class QueryResult:
         processing_time: Time taken to process query (seconds)
         metadata: Additional metadata
     """
+
     question: str
     answer: str
     sources: List[SourceDocument] = field(default_factory=list)
@@ -59,42 +61,44 @@ class QueryResult:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'question': self.question,
-            'answer': self.answer,
-            'sources': [
+            "question": self.question,
+            "answer": self.answer,
+            "sources": [
                 {
-                    'content': src.content,
-                    'metadata': src.metadata,
-                    'relevance_score': src.relevance_score
+                    "content": src.content,
+                    "metadata": src.metadata,
+                    "relevance_score": src.relevance_score,
                 }
                 for src in self.sources
             ],
-            'confidence': self.confidence,
-            'timestamp': self.timestamp.isoformat(),
-            'processing_time': self.processing_time,
-            'metadata': self.metadata
+            "confidence": self.confidence,
+            "timestamp": self.timestamp.isoformat(),
+            "processing_time": self.processing_time,
+            "metadata": self.metadata,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'QueryResult':
+    def from_dict(cls, data: Dict[str, Any]) -> "QueryResult":
         """Create from dictionary."""
         sources = [
             SourceDocument(
-                content=src['content'],
-                metadata=src['metadata'],
-                relevance_score=src.get('relevance_score', 0.0)
+                content=src["content"],
+                metadata=src["metadata"],
+                relevance_score=src.get("relevance_score", 0.0),
             )
-            for src in data.get('sources', [])
+            for src in data.get("sources", [])
         ]
 
         return cls(
-            question=data['question'],
-            answer=data['answer'],
+            question=data["question"],
+            answer=data["answer"],
             sources=sources,
-            confidence=data.get('confidence', 0.0),
-            timestamp=datetime.fromisoformat(data['timestamp']) if 'timestamp' in data else datetime.now(),
-            processing_time=data.get('processing_time', 0.0),
-            metadata=data.get('metadata', {})
+            confidence=data.get("confidence", 0.0),
+            timestamp=(
+                datetime.fromisoformat(data["timestamp"]) if "timestamp" in data else datetime.now()
+            ),
+            processing_time=data.get("processing_time", 0.0),
+            metadata=data.get("metadata", {}),
         )
 
 
@@ -111,6 +115,7 @@ class InvestigationSuggestion:
         artifacts_to_check: List of artifact types to examine
         queries: Suggested queries to run
     """
+
     title: str
     description: str
     priority: str = "medium"
@@ -121,12 +126,12 @@ class InvestigationSuggestion:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'title': self.title,
-            'description': self.description,
-            'priority': self.priority,
-            'attck_techniques': self.attck_techniques,
-            'artifacts_to_check': self.artifacts_to_check,
-            'queries': self.queries
+            "title": self.title,
+            "description": self.description,
+            "priority": self.priority,
+            "attck_techniques": self.attck_techniques,
+            "artifacts_to_check": self.artifacts_to_check,
+            "queries": self.queries,
         }
 
 
@@ -145,6 +150,7 @@ class CaseSummary:
         recommendations: Investigation recommendations
         generated_at: When summary was generated
     """
+
     case_id: str
     executive_summary: str
     key_findings: List[str] = field(default_factory=list)
@@ -157,14 +163,14 @@ class CaseSummary:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary."""
         return {
-            'case_id': self.case_id,
-            'executive_summary': self.executive_summary,
-            'key_findings': self.key_findings,
-            'timeline_summary': self.timeline_summary,
-            'iocs_detected': self.iocs_detected,
-            'attck_techniques': self.attck_techniques,
-            'recommendations': self.recommendations,
-            'generated_at': self.generated_at.isoformat()
+            "case_id": self.case_id,
+            "executive_summary": self.executive_summary,
+            "key_findings": self.key_findings,
+            "timeline_summary": self.timeline_summary,
+            "iocs_detected": self.iocs_detected,
+            "attck_techniques": self.attck_techniques,
+            "recommendations": self.recommendations,
+            "generated_at": self.generated_at.isoformat(),
         }
 
     def to_markdown(self) -> str:

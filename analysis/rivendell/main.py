@@ -23,9 +23,7 @@ from rivendell.post.elastic.config import configure_elastic_stack
 from rivendell.post.mitre.nav_config import configure_navigator
 from rivendell.post.splunk.config import configure_splunk_stack
 from rivendell.post.yara import run_yara_signatures
-
-# SIEM auto-installer
-from elrond.tools.siem_installer import SIEMInstaller
+from rivendell.utils import safe_input
 
 
 def main(
@@ -76,11 +74,14 @@ def main(
     partitions = []
     subprocess.Popen(["clear"])
     time.sleep(2)
-    print(
-        "\n\n    \033[1;36m        .__                               .___\n      ____  |  |  _______   ____    ____    __| _/\n    _/ __ \\ |  |  \\_  __ \\ /  _ \\  /    \\  / __ |\n    \\  ___/ |  |__ |  | \\/(  <_> )|   |  \\/ /_/ |\n     \\___  >|____/ |__|    \\____/ |___|  /\\____ |\n         \\/                            \\/      \\/\n\n     {}\033[1;m\n\n".format(
-            random.choice(quotes)
+    if lotr:
+        print(
+            "\n\n    \033[1;36m        .__                               .___\n      ____  |  |  _______   ____    ____    __| _/\n    _/ __ \\ |  |  \\_  __ \\ /  _ \\  /    \\  / __ |\n    \\  ___/ |  |__ |  | \\/(  <_> )|   |  \\/ /_/ |\n     \\___  >|____/ |__|    \\____/ |___|  /\\____ |\n         \\/                            \\/      \\/\n\n     {}\033[1;m\n\n".format(
+                random.choice(quotes)
+            )
         )
-    )
+    else:
+        print("\n\n    \033[1;36mElrond DFIR Analysis\033[1;m\n\n")
     if not collect and not gandalf and not reorganise:
         print(
             "\n  You MUST use the collect switch (-C), gandalf switch (-G) or the reorganise switch (-O)\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C)\n   If you have previously collected artefacts having used gandalf, you must invoke the gandalf switch (-G)\n   If you have previously collected artefacts NOT having used gandalf, you must invoke the reorganise switch (-O)\n\n  Please try again.\n\n\n"
@@ -161,7 +162,7 @@ def main(
         sys.exit()
     if lotr:
         print(random.choice(asciitext))
-        input("\n\n\n\n\n\n     Press Enter to continue... ")
+        safe_input("\n\n\n\n\n\n     Press Enter to continue... ", default="")
         subprocess.Popen(["clear"])
         time.sleep(2)
     starttime, ot, imgs, foundimgs, doneimgs, d, vssmem = (
@@ -204,40 +205,8 @@ def main(
                 )
             )
             sys.exit()
-    # check architecture - if arm do not prompt for apfs-fuse
-    if "aarch" not in str(
-        subprocess.Popen(
-            [
-                "uname",
-                "-m",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).communicate()[0]
-    ):
-        apfsexists = str(
-            subprocess.Popen(
-                [
-                    "locate",
-                    "apfs",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()[0]
-        )
-        if not "/usr/local/bin/apfs" in apfsexists:
-            if (
-                input(
-                    "  apfs-fuse and associated libraries are not installed. This is required for macOS disk images.\n   Continue? Y/n [Y] "
-                )
-                == "n"
-            ):
-                print(
-                    "\n  Please run https://github.com/cyberg3cko/elrond/elrond/tools/scripts/apfs-fuse.sh and try again.\n\n"
-                )
-                if os.path.exists("/usr/local/bin/apfs"):
-                    shutil.rmtree("/usr/local/bin/apfs")
-                sys.exit()
+    # apfs-fuse is now installed by default in the Docker container
+    # No need to check or prompt for installation
     if os.path.exists("/opt/elrond/elrond/tools/.profiles"):
         os.remove("/opt/elrond/elrond/tools/.profiles")
     if len(directory) > 1:
@@ -246,10 +215,11 @@ def main(
             od = od + "/"
         if not os.path.isdir(od):
             if not auto:
-                make_od = input(
+                make_od = safe_input(
                     "  You have specified an output directory that does not currently exist.\n    Would you like to create '{}'? Y/n [Y] ".format(
                         od
-                    )
+                    ),
+                    default="y"
                 )
             else:
                 make_od = "y"
@@ -290,6 +260,18 @@ def main(
         output_directory = os.path.dirname(od) + "/"
     else:
         output_directory = "./"
+
+    # Handle case where d is a file path (e.g., /path/to/image.E01) instead of a directory
+    if os.path.isfile(d):
+        # Extract directory from file path
+        d = os.path.dirname(d)
+        if not d:
+            d = "./"
+        elif not d.endswith("/"):
+            d = d + "/"
+        # Update directory array as well for consistency
+        directory[0] = d
+
     if not os.path.isdir(d) or len(os.listdir(d)) == 0:
         print(
             "\n  [directory] - '{}' does not exist, is not a directory or is empty, please try again.\n\n".format(
@@ -314,27 +296,8 @@ def main(
     if not unmount:
         unmount_images(elrond_mount, ewf_mount)
     if volatility:
-        volchoice, volcheck = (
-            "2.6",
-            str(
-                subprocess.Popen(
-                    ["locate", "volatility3"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                ).communicate()[0]
-            )[2:-1],
-        )
-        if volcheck != "":
-            if not auto:
-                volchoose = input(
-                    "  Which version of volatility do you wish to use? 3/2.6/Both [Both] "
-                )
-                if volchoose != "3" and volchoose != "2.6":
-                    volchoice = "Both"
-                elif volchoose == "3":
-                    volchoice = "3"
-            else:
-                volchoice = "Both"
+        # Always use Volatility3 (installed by default in Docker container)
+        volchoice = "3"
         if memorytimeline:
             memtimeline = memorytimeline
         else:
@@ -447,8 +410,9 @@ def main(
             ):
                 time.sleep(2)
                 if not auto:
-                    wish_to_mount = input(
-                        "  Do you wish to mount '{}'? Y/n [Y] ".format(f)
+                    wish_to_mount = safe_input(
+                        "  Do you wish to mount '{}'? Y/n [Y] ".format(f),
+                        default="y"
                     )
                 else:
                     wish_to_mount = "y"
@@ -642,7 +606,7 @@ def main(
             )
     else:
         if not auto:
-            nodisks = input(
+            nodisks = safe_input(
                 "  No disk images exist in the provided directory.\n   Do you wish to continue? Y/n [Y] "
             )
             if nodisks == "n":
@@ -815,7 +779,7 @@ def main(
             time.sleep(1)
             for loc, img in imgs.items():
                 if not auto:
-                    yes_clam = input(
+                    yes_clam = safe_input(
                         "  Do you wish to conduct ClamAV scanning for '{}'? Y/n [Y] ".format(
                             img.split("::")[0]
                         )
@@ -839,7 +803,7 @@ def main(
                         yara_files.append(os.path.join(yroot, yfile))
             for loc, img in imgs.items():
                 if not auto:
-                    yes_yara = input(
+                    yes_yara = safe_input(
                         "  Do you wish to conduct Yara analysis for '{}'? Y/n [Y] ".format(
                             img.split("::")[0]
                         )
@@ -855,8 +819,14 @@ def main(
             time.sleep(1)
         if splunk:
             # Ensure Splunk is installed before configuring
-            siem_installer = SIEMInstaller()
-            if not siem_installer.ensure_siem_installed('splunk'):
+            try:
+                from elrond.tools.siem_installer import SIEMInstaller
+                siem_installer = SIEMInstaller()
+                splunk_installed = siem_installer.ensure_siem_installed('splunk')
+            except (ImportError, Exception):
+                splunk_installed = True  # Assume installed if checker unavailable
+
+            if not splunk_installed:
                 print("\n  \033[1;31mWARNING: Splunk is not installed. Skipping Splunk phase.\033[0m\n")
             else:
                 usercred, pswdcred = configure_splunk_stack(
@@ -873,9 +843,14 @@ def main(
             time.sleep(1)
         if elastic:
             # Ensure Elasticsearch and Kibana are installed before configuring
-            siem_installer = SIEMInstaller()
-            es_installed = siem_installer.ensure_siem_installed('elasticsearch')
-            kb_installed = siem_installer.ensure_siem_installed('kibana')
+            try:
+                from elrond.tools.siem_installer import SIEMInstaller
+                siem_installer = SIEMInstaller()
+                es_installed = siem_installer.ensure_siem_installed('elasticsearch')
+                kb_installed = siem_installer.ensure_siem_installed('kibana')
+            except (ImportError, Exception):
+                es_installed = True  # Assume installed if checker unavailable
+                kb_installed = True
 
             if not (es_installed and kb_installed):
                 print("\n  \033[1;31mWARNING: Elastic Stack is not fully installed. Skipping Elastic phase.\033[0m\n")
@@ -1011,11 +986,14 @@ def main(
                     )
                 else:
                     partition_insert = ""
-                inspectedvss = input(
-                    "\n\n  ----------------------------------------\n   Have you reviewed the Volume Shadow Copies for '{}'{}? Y/n [Y] ".format(
-                        eachimg.split("::")[0], partition_insert
+                if not auto:
+                    inspectedvss = safe_input(
+                        "\n\n  ----------------------------------------\n   Have you reviewed the Volume Shadow Copies for '{}'{}? Y/n [Y] ".format(
+                            eachimg.split("::")[0], partition_insert
+                        )
                     )
-                )
+                else:
+                    inspectedvss = "y"
                 if inspectedvss != "n":
                     unmount_images(elrond_mount, ewf_mount)
                     print(
@@ -1098,5 +1076,6 @@ def main(
         print()
         print("  ----------------------------------------")
         print("\n")
-    print("\n\n     \033[1;36m{}\033[1;m".format(random.choice(quotes) + "\n\n\n"))
+    if lotr:
+        print("\n\n     \033[1;36m{}\033[1;m".format(random.choice(quotes) + "\n\n\n"))
     os.chdir(cwd)

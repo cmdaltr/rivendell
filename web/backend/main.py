@@ -6,6 +6,7 @@ FastAPI backend for the Elrond web interface.
 
 import os
 import uuid
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -15,6 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 from .models.job import (
     Job,
     JobCreate,
@@ -163,15 +167,53 @@ async def create_job(job_request: JobCreate):
                     detail=f"Source path does not exist: {path}",
                 )
 
+        # Validate option dependencies
+        if job_request.options.navigator and not (job_request.options.splunk or job_request.options.elastic):
+            raise HTTPException(
+                status_code=400,
+                detail="Navigator requires either Splunk or Elastic to be enabled. Please enable Splunk or Elastic, or disable Navigator.",
+            )
+
+        # Check for duplicate case IDs (unless force_overwrite is set)
+        if not job_request.options.force_overwrite:
+            all_jobs = job_storage.list_jobs()
+            for existing_job in all_jobs:
+                if existing_job.case_number == job_request.case_number:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"A job with case ID '{job_request.case_number}' already exists. Please use a different case ID or delete the existing job first.",
+                    )
+
         # Generate job ID
         job_id = str(uuid.uuid4())
+
+        # Set destination path - if not specified, create a directory named after the source file
+        destination_path = job_request.destination_path
+        if not destination_path and job_request.source_paths:
+            first_source = Path(job_request.source_paths[0])
+            # Create output directory with same name as input file (e.g., /Volumes/USB/Disk.E01_output/)
+            if first_source.is_file():
+                # Remove the file extension and add _output
+                destination_path = str(first_source.parent / (first_source.stem + '_output'))
+            else:
+                destination_path = str(first_source / 'output')
+
+        # Check if destination directory already exists (unless force_overwrite is set)
+        if not job_request.options.force_overwrite and destination_path:
+            dest_path = Path(destination_path)
+            # Only check if it exists as a directory, not as a file
+            if dest_path.exists() and dest_path.is_dir():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"[Errno 17] File exists: '{destination_path}'",
+                )
 
         # Create job
         job = Job(
             id=job_id,
             case_number=job_request.case_number,
             source_paths=job_request.source_paths,
-            destination_path=job_request.destination_path,
+            destination_path=destination_path,
             options=job_request.options,
             status=JobStatus.PENDING,
             created_at=datetime.now(),
@@ -188,6 +230,9 @@ async def create_job(job_request: JobCreate):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        logger.error(f"Error creating job: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 

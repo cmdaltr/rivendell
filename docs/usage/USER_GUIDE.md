@@ -1,4 +1,4 @@
-# Rivendell DFIR Suite - User Guide
+# Rivendell DF Acceleration Suite - User Guide
 
 **Version:** 2.1.0
 **Last Updated:** 2025-11-12
@@ -703,4 +703,4 @@ See: [FEATURE2_COVERAGE_ANALYSIS.md](FEATURE2_COVERAGE_ANALYSIS.md)
 
 **Version:** 2.1.0
 **License:** See LICENSE
-**Authors:** Rivendell DFIR Suite Contributors
+**Authors:** Rivendell DF Acceleration Suite Contributors

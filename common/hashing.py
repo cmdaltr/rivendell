@@ -1,5 +1,5 @@
 """
-Unified hashing utilities for Rivendell DFIR Suite
+Unified hashing utilities for Rivendell DF Acceleration Suite
 
 Provides consistent file hashing across acquisition and analysis modules.
 Eliminates duplicate SHA256 code found in 10+ files.
@@ -14,10 +14,7 @@ from typing import Optional, Dict, BinaryIO
 DEFAULT_CHUNK_SIZE = 262144
 
 
-def calculate_sha256(
-    filepath: str,
-    chunk_size: int = DEFAULT_CHUNK_SIZE
-) -> str:
+def calculate_sha256(filepath: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> str:
     """
     Calculate SHA256 hash of a file.
 
@@ -54,10 +51,7 @@ def calculate_sha256(
     return sha256.hexdigest()
 
 
-def calculate_md5(
-    filepath: str,
-    chunk_size: int = DEFAULT_CHUNK_SIZE
-) -> str:
+def calculate_md5(filepath: str, chunk_size: int = DEFAULT_CHUNK_SIZE) -> str:
     """
     Calculate MD5 hash of a file.
 
@@ -86,9 +80,7 @@ def calculate_md5(
 
 
 def calculate_hash(
-    filepath: str,
-    algorithm: str = "sha256",
-    chunk_size: int = DEFAULT_CHUNK_SIZE
+    filepath: str, algorithm: str = "sha256", chunk_size: int = DEFAULT_CHUNK_SIZE
 ) -> str:
     """
     Calculate hash of a file using specified algorithm.
@@ -126,9 +118,7 @@ def calculate_hash(
 
 
 def calculate_multiple_hashes(
-    filepath: str,
-    algorithms: list = None,
-    chunk_size: int = DEFAULT_CHUNK_SIZE
+    filepath: str, algorithms: list = None, chunk_size: int = DEFAULT_CHUNK_SIZE
 ) -> Dict[str, str]:
     """
     Calculate multiple hashes of a file in a single pass.
@@ -149,7 +139,7 @@ def calculate_multiple_hashes(
         {'sha256': 'abc123...', 'md5': 'def456...'}
     """
     if algorithms is None:
-        algorithms = ['sha256', 'md5']
+        algorithms = ["sha256", "md5"]
 
     # Initialize all hashers
     hashers = {}
@@ -172,11 +162,7 @@ def calculate_multiple_hashes(
     return {algo: hasher.hexdigest() for algo, hasher in hashers.items()}
 
 
-def verify_hash(
-    filepath: str,
-    expected_hash: str,
-    algorithm: str = "sha256"
-) -> bool:
+def verify_hash(filepath: str, expected_hash: str, algorithm: str = "sha256") -> bool:
     """
     Verify a file's hash matches expected value.
 
@@ -212,7 +198,7 @@ def hash_string(data: str, algorithm: str = "sha256") -> str:
         'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f'
     """
     hasher = hashlib.new(algorithm)
-    hasher.update(data.encode('utf-8'))
+    hasher.update(data.encode("utf-8"))
     return hasher.hexdigest()
 
 
@@ -237,9 +223,7 @@ def hash_bytes(data: bytes, algorithm: str = "sha256") -> str:
 
 
 def hash_stream(
-    stream: BinaryIO,
-    algorithm: str = "sha256",
-    chunk_size: int = DEFAULT_CHUNK_SIZE
+    stream: BinaryIO, algorithm: str = "sha256", chunk_size: int = DEFAULT_CHUNK_SIZE
 ) -> str:
     """
     Calculate hash of a binary stream.
@@ -281,11 +265,7 @@ class HashRegistry:
     def __init__(self):
         self.hashes: Dict[str, Dict[str, str]] = {}
 
-    def add_file(
-        self,
-        filepath: str,
-        algorithms: list = None
-    ) -> Dict[str, str]:
+    def add_file(self, filepath: str, algorithms: list = None) -> Dict[str, str]:
         """
         Add a file to the registry and calculate its hashes.
 

@@ -1,4 +1,4 @@
-# Artifact Parsing - Rivendell DFIR Suite
+# Artifact Parsing - Rivendell DF Acceleration Suite
 
 **Version:** 2.1.0
 

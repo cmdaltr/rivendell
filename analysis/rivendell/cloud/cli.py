@@ -4,7 +4,7 @@ Unified Cloud Forensics CLI
 
 Command-line interface for cloud forensics operations across AWS, Azure, and GCP.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -33,28 +33,28 @@ def load_credentials(provider: str, cred_file: Optional[str] = None) -> dict:
         Credentials dictionary
     """
     if cred_file and os.path.exists(cred_file):
-        with open(cred_file, 'r') as f:
+        with open(cred_file, "r") as f:
             return json.load(f)
 
     # Try environment variables
-    if provider == 'aws':
+    if provider == "aws":
         return {
-            'access_key': os.getenv('AWS_ACCESS_KEY_ID'),
-            'secret_key': os.getenv('AWS_SECRET_ACCESS_KEY'),
-            'region': os.getenv('AWS_REGION', 'us-east-1'),
-            'session_token': os.getenv('AWS_SESSION_TOKEN')
+            "access_key": os.getenv("AWS_ACCESS_KEY_ID"),
+            "secret_key": os.getenv("AWS_SECRET_ACCESS_KEY"),
+            "region": os.getenv("AWS_REGION", "us-east-1"),
+            "session_token": os.getenv("AWS_SESSION_TOKEN"),
         }
-    elif provider == 'azure':
+    elif provider == "azure":
         return {
-            'tenant_id': os.getenv('AZURE_TENANT_ID'),
-            'client_id': os.getenv('AZURE_CLIENT_ID'),
-            'client_secret': os.getenv('AZURE_CLIENT_SECRET'),
-            'subscription_id': os.getenv('AZURE_SUBSCRIPTION_ID')
+            "tenant_id": os.getenv("AZURE_TENANT_ID"),
+            "client_id": os.getenv("AZURE_CLIENT_ID"),
+            "client_secret": os.getenv("AZURE_CLIENT_SECRET"),
+            "subscription_id": os.getenv("AZURE_SUBSCRIPTION_ID"),
         }
-    elif provider == 'gcp':
+    elif provider == "gcp":
         return {
-            'project_id': os.getenv('GCP_PROJECT_ID'),
-            'service_account_file': os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+            "project_id": os.getenv("GCP_PROJECT_ID"),
+            "service_account_file": os.getenv("GOOGLE_APPLICATION_CREDENTIALS"),
         }
 
     return {}
@@ -65,17 +65,17 @@ def list_instances_command(args):
     credentials = load_credentials(args.provider, args.credentials)
 
     try:
-        if args.provider == 'aws':
+        if args.provider == "aws":
             client = AWSForensics(credentials)
             client.authenticate()
             instances = client.list_instances(region=args.region)
 
-        elif args.provider == 'azure':
+        elif args.provider == "azure":
             client = AzureForensics(credentials)
             client.authenticate()
             instances = client.list_instances(resource_group=args.resource_group)
 
-        elif args.provider == 'gcp':
+        elif args.provider == "gcp":
             client = GCPForensics(credentials)
             client.authenticate()
             instances = client.list_instances(zone=args.zone)
@@ -86,13 +86,15 @@ def list_instances_command(args):
 
         # Output
         if args.output:
-            with open(args.output, 'w') as f:
+            with open(args.output, "w") as f:
                 json.dump(instances, f, indent=2, default=str)
             print(f"Instances saved to {args.output}")
         else:
             print(f"\nFound {len(instances)} instances:")
             for instance in instances:
-                print(f"  - {instance['name']} ({instance['id']}) - {instance.get('state', instance.get('status', 'N/A'))}")
+                print(
+                    f"  - {instance['name']} ({instance['id']}) - {instance.get('state', instance.get('status', 'N/A'))}"
+                )
 
         return 0
 
@@ -104,46 +106,38 @@ def list_instances_command(args):
 def acquire_disk_command(args):
     """Acquire disk snapshots."""
     credentials = load_credentials(args.provider, args.credentials)
-    output_dir = args.output or '.'
+    output_dir = args.output or "."
 
     os.makedirs(output_dir, exist_ok=True)
 
     try:
-        if args.provider == 'aws':
+        if args.provider == "aws":
             client = AWSForensics(credentials)
             client.authenticate()
-            result = client.acquire_disk_image(
-                args.instance_id,
-                output_dir,
-                wait=args.wait
-            )
+            result = client.acquire_disk_image(args.instance_id, output_dir, wait=args.wait)
 
-        elif args.provider == 'azure':
+        elif args.provider == "azure":
             client = AzureForensics(credentials)
             client.authenticate()
             result = client.acquire_disk_image(
-                args.instance_id,
-                output_dir,
-                resource_group=args.resource_group
+                args.instance_id, output_dir, resource_group=args.resource_group
             )
 
-        elif args.provider == 'gcp':
+        elif args.provider == "gcp":
             client = GCPForensics(credentials)
             client.authenticate()
-            result = client.acquire_disk_image(
-                args.instance_id,
-                output_dir,
-                zone=args.zone
-            )
+            result = client.acquire_disk_image(args.instance_id, output_dir, zone=args.zone)
 
         else:
             print(f"Unknown provider: {args.provider}")
             return 1
 
         print(f"\nDisk acquisition complete:")
-        print(f"  Instance: {result.get('instance_id', result.get('vm_name', result.get('instance_name')))}")
+        print(
+            f"  Instance: {result.get('instance_id', result.get('vm_name', result.get('instance_name')))}"
+        )
         print(f"  Snapshots created: {len(result['snapshots'])}")
-        for snapshot in result['snapshots']:
+        for snapshot in result["snapshots"]:
             print(f"    - {snapshot.get('snapshot_id', snapshot.get('snapshot_name'))}")
 
         return 0
@@ -156,7 +150,7 @@ def acquire_disk_command(args):
 def acquire_logs_command(args):
     """Acquire cloud audit logs."""
     credentials = load_credentials(args.provider, args.credentials)
-    output_dir = args.output or '.'
+    output_dir = args.output or "."
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -165,23 +159,27 @@ def acquire_logs_command(args):
         end_time = datetime.now()
         start_time = end_time - timedelta(days=args.days)
     else:
-        start_time = datetime.fromisoformat(args.start_time) if args.start_time else datetime.now() - timedelta(days=1)
+        start_time = (
+            datetime.fromisoformat(args.start_time)
+            if args.start_time
+            else datetime.now() - timedelta(days=1)
+        )
         end_time = datetime.fromisoformat(args.end_time) if args.end_time else datetime.now()
 
     try:
-        if args.provider == 'aws':
+        if args.provider == "aws":
             session = AWSForensics(credentials).session
             analyzer = CloudTrailAnalyzer(session)
             output_files = analyzer.acquire_logs(start_time, end_time, output_dir)
 
-        elif args.provider == 'azure':
+        elif args.provider == "azure":
             client = AzureForensics(credentials)
             client.authenticate()
             analyzer = ActivityLogAnalyzer(client.credential, client.subscription_id)
             output_files = analyzer.acquire_logs(start_time, end_time, output_dir)
 
-        elif args.provider == 'gcp':
-            project_id = credentials.get('project_id')
+        elif args.provider == "gcp":
+            project_id = credentials.get("project_id")
             analyzer = CloudLoggingAnalyzer(project_id)
             output_files = analyzer.acquire_logs(start_time, end_time, output_dir)
 
@@ -215,29 +213,31 @@ def analyze_logs_command(args):
     return analyze_logs_command_impl(args.provider, credentials, args.log_file, output_dir)
 
 
-def analyze_logs_command_impl(provider: str, credentials: dict, log_file: str, output_dir: str) -> int:
+def analyze_logs_command_impl(
+    provider: str, credentials: dict, log_file: str, output_dir: str
+) -> int:
     """Implementation of log analysis."""
     try:
-        if provider == 'aws':
+        if provider == "aws":
             analyzer = CloudTrailAnalyzer()
             findings = analyzer.analyze_logs(log_file)
-            report_file = os.path.join(output_dir, 'cloudtrail_analysis.json')
+            report_file = os.path.join(output_dir, "cloudtrail_analysis.json")
             analyzer.generate_report(findings, report_file)
 
-        elif provider == 'azure':
+        elif provider == "azure":
             # Get required credentials
             client = AzureForensics(credentials)
             client.authenticate()
             analyzer = ActivityLogAnalyzer(client.credential, client.subscription_id)
             findings = analyzer.analyze_logs(log_file)
-            report_file = os.path.join(output_dir, 'activity_log_analysis.json')
+            report_file = os.path.join(output_dir, "activity_log_analysis.json")
             analyzer.generate_report(findings, report_file)
 
-        elif provider == 'gcp':
-            project_id = credentials.get('project_id')
+        elif provider == "gcp":
+            project_id = credentials.get("project_id")
             analyzer = CloudLoggingAnalyzer(project_id)
             findings = analyzer.analyze_logs(log_file)
-            report_file = os.path.join(output_dir, 'cloud_logging_analysis.json')
+            report_file = os.path.join(output_dir, "cloud_logging_analysis.json")
             analyzer.generate_report(findings, report_file)
 
         else:
@@ -246,7 +246,9 @@ def analyze_logs_command_impl(provider: str, credentials: dict, log_file: str, o
 
         print(f"\nLog analysis complete:")
         print(f"  Total events: {findings['statistics']['total_events']}")
-        print(f"  Suspicious events: {len(findings.get('suspicious_events', findings.get('suspicious_operations', findings.get('suspicious_methods', []))))}")
+        print(
+            f"  Suspicious events: {len(findings.get('suspicious_events', findings.get('suspicious_operations', findings.get('suspicious_methods', []))))}"
+        )
         print(f"  Report saved to: {report_file}")
 
         # Show MITRE ATT&CK mapping summary
@@ -266,9 +268,9 @@ def analyze_logs_command_impl(provider: str, credentials: dict, log_file: str, o
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Rivendell Cloud Forensics CLI',
+        description="Rivendell Cloud Forensics CLI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog='''
+        epilog="""
 Examples:
   # List AWS instances
   %(prog)s aws list --credentials aws_creds.json
@@ -281,45 +283,47 @@ Examples:
 
   # Analyze existing logs
   %(prog)s aws analyze-logs --log-file cloudtrail_logs.json
-        '''
+        """,
     )
 
-    parser.add_argument('provider', choices=['aws', 'azure', 'gcp'], help='Cloud provider')
+    parser.add_argument("provider", choices=["aws", "azure", "gcp"], help="Cloud provider")
 
-    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
     # List instances command
-    list_parser = subparsers.add_parser('list', help='List cloud instances')
-    list_parser.add_argument('--credentials', '-c', help='Credentials file path')
-    list_parser.add_argument('--region', help='AWS region or Azure location')
-    list_parser.add_argument('--resource-group', help='Azure resource group')
-    list_parser.add_argument('--zone', help='GCP zone')
-    list_parser.add_argument('--output', '-o', help='Output file path')
+    list_parser = subparsers.add_parser("list", help="List cloud instances")
+    list_parser.add_argument("--credentials", "-c", help="Credentials file path")
+    list_parser.add_argument("--region", help="AWS region or Azure location")
+    list_parser.add_argument("--resource-group", help="Azure resource group")
+    list_parser.add_argument("--zone", help="GCP zone")
+    list_parser.add_argument("--output", "-o", help="Output file path")
 
     # Acquire disk command
-    disk_parser = subparsers.add_parser('acquire-disk', help='Acquire disk snapshots')
-    disk_parser.add_argument('--instance-id', '-i', required=True, help='Instance ID/name')
-    disk_parser.add_argument('--credentials', '-c', help='Credentials file path')
-    disk_parser.add_argument('--region', help='AWS region')
-    disk_parser.add_argument('--resource-group', help='Azure resource group')
-    disk_parser.add_argument('--zone', help='GCP zone')
-    disk_parser.add_argument('--output', '-o', help='Output directory')
-    disk_parser.add_argument('--wait', action='store_true', help='Wait for snapshots to complete')
+    disk_parser = subparsers.add_parser("acquire-disk", help="Acquire disk snapshots")
+    disk_parser.add_argument("--instance-id", "-i", required=True, help="Instance ID/name")
+    disk_parser.add_argument("--credentials", "-c", help="Credentials file path")
+    disk_parser.add_argument("--region", help="AWS region")
+    disk_parser.add_argument("--resource-group", help="Azure resource group")
+    disk_parser.add_argument("--zone", help="GCP zone")
+    disk_parser.add_argument("--output", "-o", help="Output directory")
+    disk_parser.add_argument("--wait", action="store_true", help="Wait for snapshots to complete")
 
     # Acquire logs command
-    logs_parser = subparsers.add_parser('acquire-logs', help='Acquire audit logs')
-    logs_parser.add_argument('--credentials', '-c', help='Credentials file path')
-    logs_parser.add_argument('--days', type=int, help='Number of days to retrieve (from now)')
-    logs_parser.add_argument('--start-time', help='Start time (ISO format)')
-    logs_parser.add_argument('--end-time', help='End time (ISO format)')
-    logs_parser.add_argument('--output', '-o', help='Output directory')
-    logs_parser.add_argument('--analyze', action='store_true', help='Analyze logs after acquisition')
+    logs_parser = subparsers.add_parser("acquire-logs", help="Acquire audit logs")
+    logs_parser.add_argument("--credentials", "-c", help="Credentials file path")
+    logs_parser.add_argument("--days", type=int, help="Number of days to retrieve (from now)")
+    logs_parser.add_argument("--start-time", help="Start time (ISO format)")
+    logs_parser.add_argument("--end-time", help="End time (ISO format)")
+    logs_parser.add_argument("--output", "-o", help="Output directory")
+    logs_parser.add_argument(
+        "--analyze", action="store_true", help="Analyze logs after acquisition"
+    )
 
     # Analyze logs command
-    analyze_parser = subparsers.add_parser('analyze-logs', help='Analyze audit logs')
-    analyze_parser.add_argument('--log-file', '-f', required=True, help='Log file to analyze')
-    analyze_parser.add_argument('--credentials', '-c', help='Credentials file path')
-    analyze_parser.add_argument('--output', '-o', help='Output directory')
+    analyze_parser = subparsers.add_parser("analyze-logs", help="Analyze audit logs")
+    analyze_parser.add_argument("--log-file", "-f", required=True, help="Log file to analyze")
+    analyze_parser.add_argument("--credentials", "-c", help="Credentials file path")
+    analyze_parser.add_argument("--output", "-o", help="Output directory")
 
     args = parser.parse_args()
 
@@ -328,18 +332,18 @@ Examples:
         return 1
 
     # Route to command handler
-    if args.command == 'list':
+    if args.command == "list":
         return list_instances_command(args)
-    elif args.command == 'acquire-disk':
+    elif args.command == "acquire-disk":
         return acquire_disk_command(args)
-    elif args.command == 'acquire-logs':
+    elif args.command == "acquire-logs":
         return acquire_logs_command(args)
-    elif args.command == 'analyze-logs':
+    elif args.command == "analyze-logs":
         return analyze_logs_command(args)
     else:
         parser.print_help()
         return 1
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     sys.exit(main())

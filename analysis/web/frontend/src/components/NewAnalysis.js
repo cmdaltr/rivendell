@@ -83,7 +83,7 @@ function NewAnalysis() {
               id="destinationPath"
               value={destinationPath}
               onChange={(e) => setDestinationPath(e.target.value)}
-              placeholder="Leave empty to use default location"
+              placeholder="Leave empty to use default location (same as input)"
             />
           </div>
 

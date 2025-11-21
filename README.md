@@ -1,16 +1,93 @@
-# Rivendell DFIR Suite
+# Rivendell DF Acceleration Suite
 
 <div align="center">
   <img src="./docs/images/rivendell.png" alt="Rivendell - The Last Homely House" width="800"/>
 
-  **Digital Forensics Suite v2.1.0**
+  **Digital Forensics Suite v1.0.0**
 </div>
-
-**Rivendell** is a comprehensive digital forensics and incident response (DFIR) platform that combines remote acquisition, automated analysis, AI-powered investigation, and cloud forensics capabilities into a unified suite.
+<div align="center">
+  <i>The Last Homely House</i><br><br>
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg)]()
+</div>
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Clone repository
+git clone https://github.com/cmdaltr/rivendell.git
+cd rivendell
+```
+<div align="left">
+  <table><tr><td>
+        <img src="./docs/images/readme/linux.png" alt="Rivendell - The Last Homely House" width="42"/>
+      </td><td>
+        <code>sudo ./scripts/install_linux.sh</code>
+      </td></tr><tr><td>
+        <img src="./docs/images/readme/apple.png" alt="Rivendell - The Last Homely House" width="42"/>
+      </td><td>
+        <code>sudo ./scripts/install_macos.sh</code>
+      </td></tr><tr><td>
+        <img src="./docs/images/readme/microsoft.png" alt="Rivendell - The Last Homely House" width="42"/>
+      </td><td>
+        <code>.\scripts\install_windows_wsl.ps1</code>
+  </td></tr></table>
+</div>
+
+```
+elrond --check-dependencies
+```
+
+### Basic Usage
+
+**Web Investigation Workflow:**
+
+
+---
+
+**CLI Investigation Workflow:**
+
+_1. Acquire evidence from remote system_
+
+<div align="left">
+  <table><tr><td>
+        <img src="./docs/images/readme/python.png" alt="Rivendell - The Last Homely House" width="42"/>
+      </td><td>
+        <code>python3 acquisition/python/gandalf.py Password 192.168.1.100 -u administrator -M -o /evidence/CASE-001</code>
+      </td></tr><tr><td>
+        <img src="./docs/images/readme/bash.png" alt="Rivendell - The Last Homely House" width="42"/>
+      </td><td>
+        <code>sudo ./scripts/install_macos.sh</code>
+      </td></tr><tr><td>
+        <img src="./docs/images/readme/powershell.png" alt="Rivendell - The Last Homely House" width="42"/>
+      </td><td>
+        <code>.\scripts\install_windows_wsl.ps1</code>
+  </td></tr></table>
+</div>
+
+_2. Process and analyze evidence_
+
+`elrond -C -c CASE-001 -s /evidence/CASE-001 -m /evidence/CASE-001/memory.dmp -o /cases/CASE-001`
+
+_3. Additional optional features_
+  
+&ensp;&ensp;&ensp;Map to MITRE ATT&CK<br>
+&ensp;&ensp;&ensp;`python3 -m rivendell.mitre.mapper /cases/CASE-001`
+
+&ensp;&ensp;&ensp;Index for AI analysis<br>
+&ensp;&ensp;&ensp;`rivendell-ai index CASE-001 /cases/CASE-001`
+
+&ensp;&ensp;&ensp;Query with natural language<br>
+&ensp;&ensp;&ensp;`rivendell-ai query CASE-001 "What PowerShell commands were executed?"`
+
+&ensp;&ensp;&ensp;Generate report<br>
+&ensp;&ensp;&ensp;`rivendell-ai summary CASE-001 --format markdown --output report.md`
 
 ---
 
@@ -30,78 +107,27 @@
 ### 🎯 Core Components
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                     Rivendell Suite                  │
-├──────────────────────────────────────────────────────┤
-│                                                      │
-│  ┌──────────────┐  ┌──────────────┐   ┌───────────┐  │
-│  │   Gandalf    │  │    Elrond    │   │    AI     │  │
-│  │ Acquisition  │→ │   Analysis   │ → │  Agent    │  │
-│  └──────────────┘  └──────────────┘   └───────────┘  │
-│         ↓                  ↓               ↓         │
-│  ┌───────────────────────────────────────────────┐   │
-│  │     MITRE ATT&CK • Cloud • SIEM • Reports     │   │
-│  └───────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────┘
-```
-
----
-
-## 🚀 Quick Start
-
-### Installation
-
-```bash
-# Clone repository
-git clone https://github.com/yourusername/rivendell.git
-cd rivendell
-
-# Linux
-sudo ./scripts/install_linux.sh
-
-# macOS
-./scripts/install_macos.sh
-
-# Windows (WSL2)
-.\scripts\install_windows_wsl.ps1
-
-# Verify installation
-elrond --check-dependencies
-```
-
-### Basic Usage
-
-**Complete Investigation Workflow:**
-
-```bash
-# 1. Acquire evidence from remote system
-python3 acquisition/python/gandalf.py Password 192.168.1.100 \
-  -u administrator -M -o /evidence/CASE-001
-
-# 2. Process and analyze evidence
-elrond -C -c CASE-001 \
-  -s /evidence/CASE-001 \
-  -m /evidence/CASE-001/memory.dmp \
-  -o /cases/CASE-001
-
-# 3. Map to MITRE ATT&CK
-python3 -m rivendell.mitre.mapper /cases/CASE-001
-
-# 4. Index for AI analysis
-rivendell-ai index CASE-001 /cases/CASE-001
-
-# 5. Query with natural language
-rivendell-ai query CASE-001 "What PowerShell commands were executed?"
-
-# 6. Generate report
-rivendell-ai summary CASE-001 --format markdown --output report.md
+            ┌─────────────────────────────────────────────────────────┐
+            │                      Rivendell Suite                    │
+            ├─────────────────────────────────────────────────────────┤
+            │                                                         │
+            │   ┌──────────────┐   ┌──────────────┐   ┌───────────┐   │
+            │   │   Gandalf    │   │    Elrond    │   │    AI     │   │
+            │   │ Acquisition  │ → │   Analysis   │ → │   Agent   │   │
+            │   └──────────────┘   └──────────────┘   └───────────┘   │
+            │          ↓                  ↓                 ↓         │
+            │   ┌─────────────────────────────────────────────────┐   │
+            │   │      MITRE ATT&CK • Cloud • SIEM • Reports      │   │
+            │   └─────────────────────────────────────────────────┘   │
+            │                                                         │
+            └─────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## 📋 Features Overview
 
-### Gandalf - Remote Acquisition
+### 🧙 Gandalf - Remote Acquisition
 
 Collect forensic artifacts from local and remote systems.
 
@@ -113,17 +139,6 @@ Collect forensic artifacts from local and remote systems.
 - SHA256 hashing and audit trails
 - Comprehensive artifact collection
 
-**Usage:**
-```bash
-# Local acquisition
-sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence
-
-# Remote Windows system
-python3 acquisition/python/gandalf.py Password 192.168.1.100 -u admin -M -o /evidence
-
-# Remote Linux system via SSH
-python3 acquisition/python/gandalf.py Password 192.168.1.100 -u root -M -o /evidence
-```
 
 **Collected Artifacts:**
 - System information
@@ -142,7 +157,7 @@ python3 acquisition/python/gandalf.py Password 192.168.1.100 -u root -M -o /evid
 
 ---
 
-### Elrond - Automated Analysis
+### 🧝‍♂️ Elrond - Automated Analysis
 
 Process and analyze forensic evidence with integrated tools.
 
@@ -155,21 +170,6 @@ Process and analyze forensic evidence with integrated tools.
 - IOC detection
 - Browser artifact extraction
 - Multi-OS support (Windows, Linux, macOS)
-
-**Usage:**
-```bash
-# Process evidence (Collect mode)
-elrond -C -c CASE-001 -s /evidence -o /output
-
-# Analyze existing extraction (Gandalf mode)
-elrond -G -c CASE-001 -s /extracted_data -o /output
-
-# With memory analysis
-elrond -C -c CASE-001 -s /evidence -m /memory.dmp -o /output
-
-# Timeline generation
-elrond -C -c CASE-001 -s /evidence -t -o /output
-```
 
 **Integrated Tools:**
 - Volatility 3 (memory analysis)
@@ -351,23 +351,7 @@ python3 -m rivendell.ai.web_interface
 
 ## 🛠️ Installation Requirements
 
-### System Requirements
-
-**Minimum:**
-- CPU: 4 cores
-- RAM: 8 GB
-- Storage: 50 GB
-- Python 3.8+
-
-**Recommended:**
-- CPU: 8+ cores
-- RAM: 16+ GB
-- GPU: NVIDIA GPU with 8GB+ VRAM (for AI features)
-- Storage: 100+ GB NVMe/SSD
-
-### Dependencies
-
-**Core Tools:**
+**Core Requirements:**
 - Python 3.8+
 - Volatility 3
 - Plaso/log2timeline
@@ -378,15 +362,20 @@ python3 -m rivendell.ai.web_interface
 - Docker (for containerized deployment)
 - Splunk/Elasticsearch (for SIEM integration)
 
-**See:** [TOOLS.md](docs/TOOLS.md)
+**For complete installation guide, see:** [REQUIREMENTS.md](REQUIREMENTS.md)
 
 ---
 
 ## 📚 Documentation
 
+### Getting Started
+- **[Quick Start](QUICKSTART.md)** - Get started in 5 minutes
+- **[Usage Guide](USAGE.md)** - Complete command reference for all features
+- **[Workflows](WORKFLOWS.md)** - Common investigation workflows
+- **[Requirements](REQUIREMENTS.md)** - Installation requirements and dependencies
+
 ### User Documentation
 - **[User Guide](docs/USER_GUIDE.md)** - Comprehensive user guide
-- **[Quick Start](QUICKSTART.md)** - Get started in 5 minutes
 - **[Configuration](docs/CONFIG.md)** - Configuration options
 - **[Support](docs/SUPPORT.md)** - Troubleshooting and help
 
@@ -405,67 +394,35 @@ python3 -m rivendell.ai.web_interface
 
 ## 💡 Example Workflows
 
-### Incident Response
+### Quick Examples
 
+**Incident Response:**
 ```bash
-# 1. Quick triage acquisition
+# Quick triage → Analysis → MITRE mapping → AI query → SIEM export
 python3 acquisition/python/gandalf.py Password 192.168.1.100 -u admin -o /evidence
-
-# 2. Rapid analysis
 elrond -C -c IR-2024-001 -s /evidence -o /cases/IR-2024-001
-
-# 3. Identify attack techniques
 python3 -m rivendell.mitre.mapper /cases/IR-2024-001
-
-# 4. Query for indicators
 rivendell-ai query IR-2024-001 "What lateral movement occurred?"
-
-# 5. Export to SIEM for correlation
-python3 -m rivendell.siem.splunk_exporter \
-  --case-id IR-2024-001 \
-  --data-dir /cases/IR-2024-001 \
-  --hec-url https://splunk:8088 \
-  --hec-token TOKEN
 ```
 
-### Malware Analysis
-
+**Malware Analysis:**
 ```bash
-# 1. Acquire infected system
+# Acquire → Memory analysis → IOC extraction → Report
 python3 acquisition/python/gandalf.py Password 192.168.1.50 -M -o /evidence
-
-# 2. Analyze with focus on persistence
 elrond -C -c MAL-001 -s /evidence -m /evidence/memory.dmp -o /output
-
-# 3. Extract IOCs
 rivendell-ai query MAL-001 "What IOCs were detected?"
-
-# 4. Map to MITRE ATT&CK
-python3 -m rivendell.mitre.mapper /output
-
-# 5. Generate malware report
-rivendell-ai summary MAL-001 --format markdown --output malware_report.md
+rivendell-ai summary MAL-001 --format markdown --output report.md
 ```
 
-### Cloud Investigation
-
+**Cloud Investigation:**
 ```bash
-# 1. Acquire cloud logs
+# Acquire logs → Analyze → Query
 python3 -m rivendell.cloud.cli aws acquire-logs --days 30 --output ./logs
-
-# 2. Acquire VM snapshot
-python3 -m rivendell.cloud.cli aws acquire-disk \
-  --instance-id i-1234567890 \
-  --output ./snapshots
-
-# 3. Analyze logs
-python3 -m rivendell.cloud.cli aws analyze-logs \
-  --log-file ./logs/cloudtrail.json
-
-# 4. Index and query
-rivendell-ai index CLOUD-001 ./logs
+python3 -m rivendell.cloud.cli aws analyze-logs --log-file ./logs/cloudtrail.json
 rivendell-ai query CLOUD-001 "What suspicious AWS API calls were made?"
 ```
+
+**For complete workflows, see:** [WORKFLOWS.md](WORKFLOWS.md)
 
 ---
 

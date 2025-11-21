@@ -1,5 +1,5 @@
 """
-Default configuration values for Rivendell DFIR Suite
+Default configuration values for Rivendell DF Acceleration Suite
 
 Centralizes hardcoded values found throughout the codebase.
 """
@@ -11,16 +11,16 @@ from pathlib import Path
 # ===== Directory Paths =====
 
 # Default temporary directory
-DEFAULT_TEMP_DIR = os.getenv('RIVENDELL_TEMP_DIR', '/tmp/rivendell')
+DEFAULT_TEMP_DIR = os.getenv("RIVENDELL_TEMP_DIR", "/tmp/rivendell")
 
 # Default acquisition output directory
-DEFAULT_ACQUISITION_DIR = os.getenv('RIVENDELL_ACQUISITION_DIR', '/tmp/gandalf/acquisitions')
+DEFAULT_ACQUISITION_DIR = os.getenv("RIVENDELL_ACQUISITION_DIR", "/tmp/gandalf/acquisitions")
 
 # Default analysis output directory
-DEFAULT_ANALYSIS_DIR = os.getenv('RIVENDELL_ANALYSIS_DIR', '/output')
+DEFAULT_ANALYSIS_DIR = os.getenv("RIVENDELL_ANALYSIS_DIR", "/output")
 
 # Default evidence directory
-DEFAULT_EVIDENCE_DIR = os.getenv('RIVENDELL_EVIDENCE_DIR', '/evidence')
+DEFAULT_EVIDENCE_DIR = os.getenv("RIVENDELL_EVIDENCE_DIR", "/evidence")
 
 
 # ===== File Operations =====
@@ -48,11 +48,11 @@ DEFAULT_KEY_FILENAME = "shadowfax.key"
 
 # Memory thresholds for heap size calculation (bytes)
 MEMORY_THRESHOLDS = {
-    '256m': 2_000_000_000,      # < 2GB
-    '512m': 4_000_000_000,      # 2-4GB
-    '1g': 8_000_000_000,        # 4-8GB
-    '2g': 16_000_000_000,       # 8-16GB
-    '4g': 32_000_000_000,       # 16-32GB
+    "256m": 2_000_000_000,  # < 2GB
+    "512m": 4_000_000_000,  # 2-4GB
+    "1g": 8_000_000_000,  # 4-8GB
+    "2g": 16_000_000_000,  # 8-16GB
+    "4g": 32_000_000_000,  # 16-32GB
 }
 
 
@@ -81,39 +81,39 @@ KIBANA_DEFAULT_PORT = 5601
 
 # Common tool installation paths (searched in order)
 TOOL_SEARCH_PATHS = [
-    '/usr/bin',
-    '/usr/local/bin',
-    '/opt/local/bin',
-    '/usr/sbin',
-    '/usr/local/sbin',
-    '/opt',
+    "/usr/bin",
+    "/usr/local/bin",
+    "/opt/local/bin",
+    "/usr/sbin",
+    "/usr/local/sbin",
+    "/opt",
 ]
 
 # Specific tool paths (override if needed)
 TOOL_PATHS = {
-    'volatility': '/usr/local/bin/vol.py',
-    'plaso': '/usr/local/bin/log2timeline.py',
-    'yara': '/usr/bin/yara',
-    'clamscan': '/usr/bin/clamscan',
-    'exiftool': '/usr/bin/exiftool',
-    'tsk_recover': '/usr/bin/tsk_recover',
-    'mmls': '/usr/bin/mmls',
-    'fls': '/usr/bin/fls',
-    'icat': '/usr/bin/icat',
+    "volatility": "/usr/local/bin/vol.py",
+    "plaso": "/usr/local/bin/log2timeline.py",
+    "yara": "/usr/bin/yara",
+    "clamscan": "/usr/bin/clamscan",
+    "exiftool": "/usr/bin/exiftool",
+    "tsk_recover": "/usr/bin/tsk_recover",
+    "mmls": "/usr/bin/mmls",
+    "fls": "/usr/bin/fls",
+    "icat": "/usr/bin/icat",
 }
 
 # Splunk installation paths
 SPLUNK_INSTALL_PATHS = [
-    '/opt/splunk',
-    '/Applications/Splunk',
-    'C:\\Program Files\\Splunk',
+    "/opt/splunk",
+    "/Applications/Splunk",
+    "C:\\Program Files\\Splunk",
 ]
 
 # Elasticsearch installation paths
 ELASTIC_INSTALL_PATHS = [
-    '/usr/share/elasticsearch',
-    '/opt/elasticsearch',
-    '/etc/elasticsearch',
+    "/usr/share/elasticsearch",
+    "/opt/elasticsearch",
+    "/etc/elasticsearch",
 ]
 
 
@@ -121,22 +121,22 @@ ELASTIC_INSTALL_PATHS = [
 
 # Elasticsearch configuration files
 ELASTIC_CONFIG_FILES = {
-    'service': '/usr/lib/systemd/system/elasticsearch.service',
-    'jvm': '/etc/elasticsearch/jvm.options',
-    'config': '/etc/elasticsearch/elasticsearch.yml',
+    "service": "/usr/lib/systemd/system/elasticsearch.service",
+    "jvm": "/etc/elasticsearch/jvm.options",
+    "config": "/etc/elasticsearch/elasticsearch.yml",
 }
 
 # Kibana configuration files
 KIBANA_CONFIG_FILES = {
-    'config': '/etc/kibana/kibana.yml',
+    "config": "/etc/kibana/kibana.yml",
 }
 
 # Splunk configuration files
 SPLUNK_CONFIG_FILES = {
-    'inputs': 'etc/apps/rivendell/local/inputs.conf',
-    'props': 'etc/apps/rivendell/local/props.conf',
-    'tags': 'etc/apps/rivendell/local/tags.conf',
-    'indexes': 'etc/system/local/indexes.conf',
+    "inputs": "etc/apps/rivendell/local/inputs.conf",
+    "props": "etc/apps/rivendell/local/props.conf",
+    "tags": "etc/apps/rivendell/local/tags.conf",
+    "indexes": "etc/system/local/indexes.conf",
 }
 
 
@@ -144,42 +144,42 @@ SPLUNK_CONFIG_FILES = {
 
 # Standard artifact subdirectories
 ARTIFACT_SUBDIRS = [
-    'memory',
-    'logs',
-    'registry',
-    'prefetch',
-    'browsers',
-    'users',
-    'system',
-    'network',
-    'tmp',
+    "memory",
+    "logs",
+    "registry",
+    "prefetch",
+    "browsers",
+    "users",
+    "system",
+    "network",
+    "tmp",
 ]
 
 # Browser artifact types
-BROWSER_TYPES = ['chrome', 'firefox', 'edge', 'safari']
+BROWSER_TYPES = ["chrome", "firefox", "edge", "safari"]
 
 # Browser artifact files
 BROWSER_ARTIFACTS = {
-    'chrome': ['History', 'Bookmarks', 'Preferences', 'Web Data', 'Cookies'],
-    'firefox': ['places.sqlite', 'favicons.sqlite', 'cookies.sqlite', 'prefs.js'],
-    'edge': ['History', 'Bookmarks', 'Preferences', 'Web Data'],
-    'safari': ['History.db', 'Bookmarks.plist', 'Cookies.binarycookies'],
+    "chrome": ["History", "Bookmarks", "Preferences", "Web Data", "Cookies"],
+    "firefox": ["places.sqlite", "favicons.sqlite", "cookies.sqlite", "prefs.js"],
+    "edge": ["History", "Bookmarks", "Preferences", "Web Data"],
+    "safari": ["History.db", "Bookmarks.plist", "Cookies.binarycookies"],
 }
 
 
 # ===== Log Configuration =====
 
 # Default log format
-DEFAULT_LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+DEFAULT_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 # Default log level
-DEFAULT_LOG_LEVEL = 'INFO'
+DEFAULT_LOG_LEVEL = "INFO"
 
 # Audit log filename
-DEFAULT_AUDIT_LOG = 'log.audit'
+DEFAULT_AUDIT_LOG = "log.audit"
 
 # Metadata log filename
-DEFAULT_META_LOG = 'log.meta'
+DEFAULT_META_LOG = "log.meta"
 
 
 # ===== Network Configuration =====
@@ -199,10 +199,10 @@ DEFAULT_HTTP_TIMEOUT = 30
 # ===== Archive Configuration =====
 
 # Default archive format
-DEFAULT_ARCHIVE_FORMAT = 'tar.gz'
+DEFAULT_ARCHIVE_FORMAT = "tar.gz"
 
 # Supported archive formats
-SUPPORTED_ARCHIVE_FORMATS = ['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz']
+SUPPORTED_ARCHIVE_FORMATS = ["zip", "tar", "tar.gz", "tar.bz2", "tar.xz"]
 
 # Default compression level (0-9)
 DEFAULT_COMPRESSION_LEVEL = 6
@@ -211,28 +211,28 @@ DEFAULT_COMPRESSION_LEVEL = 6
 # ===== Analysis Configuration =====
 
 # Timeline analysis tools
-TIMELINE_TOOL = 'plaso'
+TIMELINE_TOOL = "plaso"
 
 # Memory analysis tool
-MEMORY_TOOL = 'volatility3'
+MEMORY_TOOL = "volatility3"
 
 # Default Volatility plugins
 DEFAULT_VOLATILITY_PLUGINS = [
-    'windows.pslist',
-    'windows.psscan',
-    'windows.netscan',
-    'windows.malfind',
-    'windows.dlllist',
+    "windows.pslist",
+    "windows.psscan",
+    "windows.netscan",
+    "windows.malfind",
+    "windows.dlllist",
 ]
 
 
 # ===== Output Configuration =====
 
 # Output formats
-OUTPUT_FORMATS = ['csv', 'json', 'xlsx']
+OUTPUT_FORMATS = ["csv", "json", "xlsx"]
 
 # Default output format
-DEFAULT_OUTPUT_FORMAT = 'csv'
+DEFAULT_OUTPUT_FORMAT = "csv"
 
 
 # ===== Resource Limits =====
@@ -250,16 +250,16 @@ DEFAULT_MAX_FILE_SIZE = 10_737_418_240
 # ===== Web Interface =====
 
 # Default web server host
-DEFAULT_WEB_HOST = '0.0.0.0'
+DEFAULT_WEB_HOST = "0.0.0.0"
 
 # Default web server port
 DEFAULT_WEB_PORT = 8000
 
 # API prefix
-API_PREFIX = '/api'
+API_PREFIX = "/api"
 
 # WebSocket endpoint
-WS_ENDPOINT = '/ws'
+WS_ENDPOINT = "/ws"
 
 
 def get_temp_dir() -> str:

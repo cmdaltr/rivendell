@@ -43,7 +43,7 @@ test.describe('Application Navigation', () => {
     const footer = page.locator('.App-footer');
     await expect(footer).toBeVisible();
     await expect(footer).toContainText('Elrond v2.1.0');
-    await expect(footer).toContainText('Digital Forensics Analysis Platform');
+    await expect(footer).toContainText('Digital Forensics Acceleration Suite');
   });
 
   test('should have correct page title', async ({ page }) => {

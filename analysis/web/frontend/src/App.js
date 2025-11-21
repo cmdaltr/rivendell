@@ -27,7 +27,7 @@ function App() {
 
         <footer className="App-footer">
           <p>
-            Elrond v2.1.0 - Digital Forensics Analysis Platform
+            Rivendell v1.0.0 - Digital Forensics Acceleration Suite
           </p>
         </footer>
       </div>

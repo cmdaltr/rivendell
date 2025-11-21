@@ -4,7 +4,7 @@ AI Chat Web Interface
 
 FastAPI-based web interface for AI-powered forensic queries.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -20,6 +20,7 @@ try:
     from fastapi.staticfiles import StaticFiles
     from fastapi.middleware.cors import CORSMiddleware
     import asyncio
+
     FASTAPI_AVAILABLE = True
 except ImportError:
     FASTAPI_AVAILABLE = False
@@ -45,9 +46,9 @@ query_engines: Dict[str, ForensicQueryEngine] = {}
 
 # Configuration
 config = {
-    'base_dir': os.getenv('RIVENDELL_DATA_DIR', '/opt/rivendell/data'),
-    'llm_type': os.getenv('RIVENDELL_LLM_TYPE', 'ollama'),
-    'model_name': os.getenv('RIVENDELL_MODEL_NAME', 'llama3')
+    "base_dir": os.getenv("RIVENDELL_DATA_DIR", "/opt/rivendell/data"),
+    "llm_type": os.getenv("RIVENDELL_LLM_TYPE", "ollama"),
+    "model_name": os.getenv("RIVENDELL_MODEL_NAME", "llama3"),
 }
 
 logger = logging.getLogger(__name__)
@@ -67,11 +68,8 @@ def get_query_engine(case_id: str) -> ForensicQueryEngine:
         try:
             engine = ForensicQueryEngine.load(
                 case_id=case_id,
-                base_dir=config['base_dir'],
-                config={
-                    'llm_type': config['llm_type'],
-                    'model_name': config['model_name']
-                }
+                base_dir=config["base_dir"],
+                config={"llm_type": config["llm_type"], "model_name": config["model_name"]},
             )
             query_engines[case_id] = engine
             logger.info(f"Loaded query engine for case {case_id}")
@@ -85,31 +83,23 @@ def get_query_engine(case_id: str) -> ForensicQueryEngine:
 @app.get("/")
 async def root():
     """Root endpoint."""
-    return {
-        "name": "Rivendell AI Assistant",
-        "version": "2.1.0",
-        "status": "running"
-    }
+    return {"name": "Rivendell AI Assistant", "version": "2.1.0", "status": "running"}
 
 
 @app.get("/ai/cases")
 async def list_cases():
     """List available cases."""
     try:
-        base_dir = config['base_dir']
+        base_dir = config["base_dir"]
         cases = []
 
         if os.path.exists(base_dir):
             for case_dir in os.listdir(base_dir):
                 case_path = os.path.join(base_dir, case_dir)
-                vector_db_path = os.path.join(case_path, 'vector_db')
+                vector_db_path = os.path.join(case_path, "vector_db")
 
                 if os.path.isdir(case_path) and os.path.exists(vector_db_path):
-                    cases.append({
-                        'case_id': case_dir,
-                        'path': case_path,
-                        'indexed': True
-                    })
+                    cases.append({"case_id": case_dir, "path": case_path, "indexed": True})
 
         return {"cases": cases}
 
@@ -143,7 +133,7 @@ async def query_case(case_id: str, request: Request):
     """
     try:
         body = await request.json()
-        question = body.get('question')
+        question = body.get("question")
 
         if not question:
             raise HTTPException(status_code=400, detail="Question is required")
@@ -167,10 +157,7 @@ async def get_suggestions(case_id: str):
         engine = get_query_engine(case_id)
         suggestions = engine.suggest_investigation_paths()
 
-        return {
-            "case_id": case_id,
-            "suggestions": [s.to_dict() for s in suggestions]
-        }
+        return {"case_id": case_id, "suggestions": [s.to_dict() for s in suggestions]}
 
     except Exception as e:
         logger.error(f"Error getting suggestions: {e}")
@@ -584,7 +571,7 @@ async def websocket_endpoint(websocket: WebSocket, case_id: str):
         while True:
             # Receive question
             data = await websocket.receive_json()
-            question = data.get('question')
+            question = data.get("question")
 
             if not question:
                 await websocket.send_json({"error": "Question is required"})
@@ -625,6 +612,7 @@ def start_server(host: str = "0.0.0.0", port: int = 5687):
 
     try:
         import uvicorn
+
         logger.info(f"Starting Rivendell AI Assistant web interface on {host}:{port}")
         uvicorn.run(app, host=host, port=port)
     except ImportError:

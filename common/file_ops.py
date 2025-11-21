@@ -1,5 +1,5 @@
 """
-Unified file operations for Rivendell DFIR Suite
+Unified file operations for Rivendell DF Acceleration Suite
 
 Provides safe file handling with consistent error handling and permissions.
 Eliminates duplicate file operation code found across acquisition modules.
@@ -43,7 +43,7 @@ def safe_copy_file(
     dst: str,
     preserve_metadata: bool = True,
     follow_symlinks: bool = False,
-    handle_permissions: bool = True
+    handle_permissions: bool = True,
 ) -> bool:
     """
     Safely copy a file with error handling.
@@ -96,7 +96,7 @@ def safe_copy_tree(
     dst: str,
     max_depth: Optional[int] = None,
     follow_symlinks: bool = False,
-    ignore_patterns: Optional[List[str]] = None
+    ignore_patterns: Optional[List[str]] = None,
 ) -> int:
     """
     Safely copy directory tree with depth limit.
@@ -156,7 +156,7 @@ def collect_with_hash(
     src: str,
     dst: str,
     meta_callback: Optional[Callable[[str, str, str], None]] = None,
-    preserve_metadata: bool = True
+    preserve_metadata: bool = True,
 ) -> Optional[str]:
     """
     Copy file and calculate hash in one operation.
@@ -195,10 +195,7 @@ def collect_with_hash(
         return None
 
 
-def make_artifact_structure(
-    base_dir: str,
-    subdirs: Optional[List[str]] = None
-) -> Path:
+def make_artifact_structure(base_dir: str, subdirs: Optional[List[str]] = None) -> Path:
     """
     Create standard artifact directory structure.
 
@@ -284,22 +281,22 @@ def get_file_info(filepath: str) -> dict:
     stat_info = path.stat()
 
     return {
-        'path': str(path),
-        'name': path.name,
-        'size': stat_info.st_size,
-        'mode': stat.filemode(stat_info.st_mode),
-        'uid': stat_info.st_uid,
-        'gid': stat_info.st_gid,
-        'atime': stat_info.st_atime,
-        'mtime': stat_info.st_mtime,
-        'ctime': stat_info.st_ctime,
-        'is_file': path.is_file(),
-        'is_dir': path.is_dir(),
-        'is_symlink': path.is_symlink(),
+        "path": str(path),
+        "name": path.name,
+        "size": stat_info.st_size,
+        "mode": stat.filemode(stat_info.st_mode),
+        "uid": stat_info.st_uid,
+        "gid": stat_info.st_gid,
+        "atime": stat_info.st_atime,
+        "mtime": stat_info.st_mtime,
+        "ctime": stat_info.st_ctime,
+        "is_file": path.is_file(),
+        "is_dir": path.is_dir(),
+        "is_symlink": path.is_symlink(),
     }
 
 
-def sanitize_filename(filename: str, replacement: str = '_') -> str:
+def sanitize_filename(filename: str, replacement: str = "_") -> str:
     """
     Sanitize filename for safe storage.
 
@@ -319,24 +316,21 @@ def sanitize_filename(filename: str, replacement: str = '_') -> str:
         'C__Windows_System32_config_SAM'
     """
     # Replace path separators
-    sanitized = filename.replace('/', replacement).replace('\\', replacement)
+    sanitized = filename.replace("/", replacement).replace("\\", replacement)
 
     # Replace other problematic characters
-    problematic_chars = [':', '*', '?', '"', '<', '>', '|']
+    problematic_chars = [":", "*", "?", '"', "<", ">", "|"]
     for char in problematic_chars:
         sanitized = sanitized.replace(char, replacement)
 
     # Remove leading/trailing spaces and dots
-    sanitized = sanitized.strip('. ')
+    sanitized = sanitized.strip(". ")
 
     return sanitized
 
 
 def find_files_by_pattern(
-    directory: str,
-    pattern: str = "*",
-    recursive: bool = True,
-    max_depth: Optional[int] = None
+    directory: str, pattern: str = "*", recursive: bool = True, max_depth: Optional[int] = None
 ) -> List[str]:
     """
     Find files matching pattern in directory.
@@ -363,7 +357,7 @@ def find_files_by_pattern(
     matching_files = []
 
     if recursive:
-        pattern_str = f"**/{pattern}" if '/' not in pattern else pattern
+        pattern_str = f"**/{pattern}" if "/" not in pattern else pattern
         for file_path in dir_path.glob(pattern_str):
             if file_path.is_file():
                 # Check depth if specified
@@ -425,7 +419,7 @@ def format_size(size_bytes: int) -> str:
         >>> format_size(2048)
         '2.00 KB'
     """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
         if size_bytes < 1024.0:
             return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024.0

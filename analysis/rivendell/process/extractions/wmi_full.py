@@ -5,7 +5,7 @@ Comprehensive WMI Artifact Parser
 Parses Windows Management Instrumentation (WMI) artifacts for forensic analysis.
 Focuses on persistence mechanisms via WMI Event Subscriptions.
 
-Author: Rivendell DFIR Suite
+Author: Rivendell DF Acceleration Suite
 Version: 2.1.0
 """
 
@@ -46,11 +46,11 @@ class WmiArtifactParser:
 
     # Event Consumer types
     CONSUMER_TYPES = [
-        'ActiveScriptEventConsumer',
-        'CommandLineEventConsumer',
-        'LogFileEventConsumer',
-        'NTEventLogEventConsumer',
-        'SMTPEventConsumer',
+        "ActiveScriptEventConsumer",
+        "CommandLineEventConsumer",
+        "LogFileEventConsumer",
+        "NTEventLogEventConsumer",
+        "SMTPEventConsumer",
     ]
 
     def __init__(self):
@@ -67,13 +67,7 @@ class WmiArtifactParser:
         Returns:
             Dictionary with consumers, filters, and bindings
         """
-        results = {
-            'consumers': [],
-            'filters': [],
-            'bindings': [],
-            'namespaces': [],
-            'errors': []
-        }
+        results = {"consumers": [], "filters": [], "bindings": [], "namespaces": [], "errors": []}
 
         # Try each repository path
         for repo_path in self.WMI_REPOSITORY_PATHS:
@@ -91,22 +85,19 @@ class WmiArtifactParser:
                     objects = self._parse_objects_data(objects_file)
 
                     # Extract different artifact types
-                    results['consumers'].extend(self._extract_event_consumers(objects))
-                    results['filters'].extend(self._extract_event_filters(objects))
-                    results['bindings'].extend(self._extract_bindings(objects))
+                    results["consumers"].extend(self._extract_event_consumers(objects))
+                    results["filters"].extend(self._extract_event_filters(objects))
+                    results["bindings"].extend(self._extract_bindings(objects))
 
                 # Parse INDEX.BTR for namespace info
                 index_file = os.path.join(full_path, "INDEX.BTR")
                 if os.path.exists(index_file):
                     namespaces = self._parse_index_btr(index_file)
-                    results['namespaces'].extend(namespaces)
+                    results["namespaces"].extend(namespaces)
 
             except Exception as e:
                 self.logger.error(f"Error parsing WMI repository {full_path}: {e}")
-                results['errors'].append({
-                    'path': full_path,
-                    'error': str(e)
-                })
+                results["errors"].append({"path": full_path, "error": str(e)})
 
         return results
 
@@ -130,15 +121,15 @@ class WmiArtifactParser:
 
         # WMI-related cmdlets and patterns
         wmi_patterns = [
-            r'Get-WmiObject',
-            r'Get-CimInstance',
-            r'Set-WmiInstance',
-            r'Invoke-WmiMethod',
-            r'Register-WmiEvent',
-            r'Remove-WmiObject',
-            r'__EventConsumer',
-            r'__EventFilter',
-            r'__FilterToConsumerBinding',
+            r"Get-WmiObject",
+            r"Get-CimInstance",
+            r"Set-WmiInstance",
+            r"Invoke-WmiMethod",
+            r"Register-WmiEvent",
+            r"Remove-WmiObject",
+            r"__EventConsumer",
+            r"__EventFilter",
+            r"__FilterToConsumerBinding",
         ]
 
         for pattern_path in ps_history_paths:
@@ -146,19 +137,22 @@ class WmiArtifactParser:
 
             try:
                 from glob import glob
+
                 for file_path in glob(full_pattern):
                     if os.path.exists(file_path):
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
                             for line_num, line in enumerate(f, 1):
                                 for pattern in wmi_patterns:
                                     if re.search(pattern, line, re.IGNORECASE):
-                                        wmi_commands.append({
-                                            'file': file_path,
-                                            'line_number': line_num,
-                                            'command': line.strip(),
-                                            'pattern_matched': pattern,
-                                            'attck_techniques': ['T1047', 'T1059.001']
-                                        })
+                                        wmi_commands.append(
+                                            {
+                                                "file": file_path,
+                                                "line_number": line_num,
+                                                "command": line.strip(),
+                                                "pattern_matched": pattern,
+                                                "attck_techniques": ["T1047", "T1059.001"],
+                                            }
+                                        )
                                         break
 
             except Exception as e:
@@ -182,7 +176,7 @@ class WmiArtifactParser:
         objects = []
 
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 data = f.read()
 
             # Simple string extraction for WMI classes
@@ -190,7 +184,7 @@ class WmiArtifactParser:
 
             # Event Consumers
             for consumer_type in self.CONSUMER_TYPES:
-                pattern = consumer_type.encode('utf-16-le')
+                pattern = consumer_type.encode("utf-16-le")
                 offset = 0
                 while True:
                     offset = data.find(pattern, offset)
@@ -205,28 +199,28 @@ class WmiArtifactParser:
                     offset += len(pattern)
 
             # Event Filters
-            filter_pattern = b'__EventFilter'
+            filter_pattern = b"__EventFilter"
             offset = 0
             while True:
                 offset = data.find(filter_pattern, offset)
                 if offset == -1:
                     break
 
-                obj = self._extract_wmi_object(data, offset, '__EventFilter')
+                obj = self._extract_wmi_object(data, offset, "__EventFilter")
                 if obj:
                     objects.append(obj)
 
                 offset += len(filter_pattern)
 
             # Filter-to-Consumer Bindings
-            binding_pattern = b'__FilterToConsumerBinding'
+            binding_pattern = b"__FilterToConsumerBinding"
             offset = 0
             while True:
                 offset = data.find(binding_pattern, offset)
                 if offset == -1:
                     break
 
-                obj = self._extract_wmi_object(data, offset, '__FilterToConsumerBinding')
+                obj = self._extract_wmi_object(data, offset, "__FilterToConsumerBinding")
                 if obj:
                     objects.append(obj)
 
@@ -237,7 +231,9 @@ class WmiArtifactParser:
 
         return objects
 
-    def _extract_wmi_object(self, data: bytes, offset: int, class_name: str) -> Optional[Dict[str, Any]]:
+    def _extract_wmi_object(
+        self, data: bytes, offset: int, class_name: str
+    ) -> Optional[Dict[str, Any]]:
         """
         Extract WMI object properties from binary data.
 
@@ -259,43 +255,49 @@ class WmiArtifactParser:
 
             # Try to find common property names
             obj = {
-                '__CLASS': class_name,
-                '_offset': offset,
-                '_extracted': datetime.utcnow().isoformat()
+                "__CLASS": class_name,
+                "_offset": offset,
+                "_extracted": datetime.utcnow().isoformat(),
             }
 
             # Extract Name property
-            name_match = re.search(rb'Name.{1,200}?([\x20-\x7E]{3,100})', window)
+            name_match = re.search(rb"Name.{1,200}?([\x20-\x7E]{3,100})", window)
             if name_match:
                 try:
-                    obj['Name'] = name_match.group(1).decode('utf-8', errors='ignore').strip()
+                    obj["Name"] = name_match.group(1).decode("utf-8", errors="ignore").strip()
                 except:
                     pass
 
             # For CommandLineEventConsumer: CommandLineTemplate
-            if 'CommandLine' in class_name:
-                cmdline_match = re.search(rb'CommandLineTemplate.{1,200}?([\x20-\x7E]{3,500})', window)
+            if "CommandLine" in class_name:
+                cmdline_match = re.search(
+                    rb"CommandLineTemplate.{1,200}?([\x20-\x7E]{3,500})", window
+                )
                 if cmdline_match:
                     try:
-                        obj['CommandLineTemplate'] = cmdline_match.group(1).decode('utf-8', errors='ignore').strip()
+                        obj["CommandLineTemplate"] = (
+                            cmdline_match.group(1).decode("utf-8", errors="ignore").strip()
+                        )
                     except:
                         pass
 
             # For ActiveScriptEventConsumer: ScriptText
-            if 'ActiveScript' in class_name:
-                script_match = re.search(rb'ScriptText.{1,200}?([\x20-\x7E]{10,1000})', window)
+            if "ActiveScript" in class_name:
+                script_match = re.search(rb"ScriptText.{1,200}?([\x20-\x7E]{10,1000})", window)
                 if script_match:
                     try:
-                        obj['ScriptText'] = script_match.group(1).decode('utf-8', errors='ignore').strip()
+                        obj["ScriptText"] = (
+                            script_match.group(1).decode("utf-8", errors="ignore").strip()
+                        )
                     except:
                         pass
 
             # For EventFilter: Query
-            if '__EventFilter' in class_name:
-                query_match = re.search(rb'Query.{1,200}?(SELECT.{10,500})', window, re.IGNORECASE)
+            if "__EventFilter" in class_name:
+                query_match = re.search(rb"Query.{1,200}?(SELECT.{10,500})", window, re.IGNORECASE)
                 if query_match:
                     try:
-                        obj['Query'] = query_match.group(1).decode('utf-8', errors='ignore').strip()
+                        obj["Query"] = query_match.group(1).decode("utf-8", errors="ignore").strip()
                     except:
                         pass
 
@@ -318,25 +320,22 @@ class WmiArtifactParser:
         namespaces = []
 
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 data = f.read()
 
             # Look for common namespace patterns
             namespace_patterns = [
-                b'root\\subscription',
-                b'root\\cimv2',
-                b'root\\default',
-                b'root\\security',
+                b"root\\subscription",
+                b"root\\cimv2",
+                b"root\\default",
+                b"root\\security",
             ]
 
             for pattern in namespace_patterns:
                 if pattern in data:
                     try:
-                        namespace_name = pattern.decode('utf-8')
-                        namespaces.append({
-                            'namespace': namespace_name,
-                            'file': file_path
-                        })
+                        namespace_name = pattern.decode("utf-8")
+                        namespaces.append({"namespace": namespace_name, "file": file_path})
                     except:
                         pass
 
@@ -358,25 +357,25 @@ class WmiArtifactParser:
         consumers = []
 
         for obj in objects:
-            if obj.get('__CLASS') in self.CONSUMER_TYPES:
+            if obj.get("__CLASS") in self.CONSUMER_TYPES:
                 consumer = {
-                    'artifact_type': 'wmi_event_consumer',
-                    'consumer_type': obj['__CLASS'],
-                    'name': obj.get('Name', 'Unknown'),
-                    'command_line': obj.get('CommandLineTemplate', ''),
-                    'script_text': obj.get('ScriptText', ''),
-                    'extracted_time': obj.get('_extracted'),
-                    'offset': obj.get('_offset'),
-                    'attck_techniques': ['T1546.003', 'T1047'],
-                    'severity': 'high',  # WMI persistence is suspicious
-                    'description': f"{obj['__CLASS']} found in WMI repository"
+                    "artifact_type": "wmi_event_consumer",
+                    "consumer_type": obj["__CLASS"],
+                    "name": obj.get("Name", "Unknown"),
+                    "command_line": obj.get("CommandLineTemplate", ""),
+                    "script_text": obj.get("ScriptText", ""),
+                    "extracted_time": obj.get("_extracted"),
+                    "offset": obj.get("_offset"),
+                    "attck_techniques": ["T1546.003", "T1047"],
+                    "severity": "high",  # WMI persistence is suspicious
+                    "description": f"{obj['__CLASS']} found in WMI repository",
                 }
 
                 # Add context based on consumer type
-                if 'CommandLine' in obj['__CLASS'] and consumer['command_line']:
-                    consumer['context'] = consumer['command_line']
-                elif 'ActiveScript' in obj['__CLASS'] and consumer['script_text']:
-                    consumer['context'] = consumer['script_text']
+                if "CommandLine" in obj["__CLASS"] and consumer["command_line"]:
+                    consumer["context"] = consumer["command_line"]
+                elif "ActiveScript" in obj["__CLASS"] and consumer["script_text"]:
+                    consumer["context"] = consumer["script_text"]
 
                 consumers.append(consumer)
 
@@ -395,22 +394,22 @@ class WmiArtifactParser:
         filters = []
 
         for obj in objects:
-            if obj.get('__CLASS') == '__EventFilter':
+            if obj.get("__CLASS") == "__EventFilter":
                 filter_obj = {
-                    'artifact_type': 'wmi_event_filter',
-                    'name': obj.get('Name', 'Unknown'),
-                    'query': obj.get('Query', ''),
-                    'query_language': obj.get('QueryLanguage', 'WQL'),
-                    'event_namespace': obj.get('EventNamespace', 'root\\cimv2'),
-                    'extracted_time': obj.get('_extracted'),
-                    'offset': obj.get('_offset'),
-                    'attck_techniques': ['T1546.003', 'T1047'],
-                    'severity': 'high',
-                    'description': 'WMI Event Filter found in repository'
+                    "artifact_type": "wmi_event_filter",
+                    "name": obj.get("Name", "Unknown"),
+                    "query": obj.get("Query", ""),
+                    "query_language": obj.get("QueryLanguage", "WQL"),
+                    "event_namespace": obj.get("EventNamespace", "root\\cimv2"),
+                    "extracted_time": obj.get("_extracted"),
+                    "offset": obj.get("_offset"),
+                    "attck_techniques": ["T1546.003", "T1047"],
+                    "severity": "high",
+                    "description": "WMI Event Filter found in repository",
                 }
 
-                if filter_obj['query']:
-                    filter_obj['context'] = filter_obj['query']
+                if filter_obj["query"]:
+                    filter_obj["context"] = filter_obj["query"]
 
                 filters.append(filter_obj)
 
@@ -429,16 +428,16 @@ class WmiArtifactParser:
         bindings = []
 
         for obj in objects:
-            if obj.get('__CLASS') == '__FilterToConsumerBinding':
+            if obj.get("__CLASS") == "__FilterToConsumerBinding":
                 binding = {
-                    'artifact_type': 'wmi_binding',
-                    'filter': obj.get('Filter', ''),
-                    'consumer': obj.get('Consumer', ''),
-                    'extracted_time': obj.get('_extracted'),
-                    'offset': obj.get('_offset'),
-                    'attck_techniques': ['T1546.003', 'T1047'],
-                    'severity': 'critical',  # Binding completes the persistence
-                    'description': 'WMI Filter-to-Consumer binding (active persistence)'
+                    "artifact_type": "wmi_binding",
+                    "filter": obj.get("Filter", ""),
+                    "consumer": obj.get("Consumer", ""),
+                    "extracted_time": obj.get("_extracted"),
+                    "offset": obj.get("_offset"),
+                    "attck_techniques": ["T1546.003", "T1047"],
+                    "severity": "critical",  # Binding completes the persistence
+                    "description": "WMI Filter-to-Consumer binding (active persistence)",
                 }
 
                 bindings.append(binding)
@@ -464,8 +463,8 @@ class WmiArtifactParser:
         ]
 
         wmi_keys = [
-            r'SOFTWARE\Microsoft\Wbem',
-            r'SYSTEM\CurrentControlSet\Services\Winmgmt',
+            r"SOFTWARE\Microsoft\Wbem",
+            r"SYSTEM\CurrentControlSet\Services\Winmgmt",
         ]
 
         # This is a placeholder - actual registry parsing would require
@@ -491,9 +490,9 @@ class WmiArtifactParser:
         report.append("")
 
         # Summary
-        consumer_count = len(results.get('consumers', []))
-        filter_count = len(results.get('filters', []))
-        binding_count = len(results.get('bindings', []))
+        consumer_count = len(results.get("consumers", []))
+        filter_count = len(results.get("filters", []))
+        binding_count = len(results.get("bindings", []))
 
         report.append(f"SUMMARY:")
         report.append(f"  Event Consumers: {consumer_count}")
@@ -510,12 +509,12 @@ class WmiArtifactParser:
         if consumer_count > 0:
             report.append("EVENT CONSUMERS:")
             report.append("-" * 80)
-            for consumer in results['consumers']:
+            for consumer in results["consumers"]:
                 report.append(f"  Name: {consumer['name']}")
                 report.append(f"  Type: {consumer['consumer_type']}")
-                if consumer.get('command_line'):
+                if consumer.get("command_line"):
                     report.append(f"  Command: {consumer['command_line']}")
-                if consumer.get('script_text'):
+                if consumer.get("script_text"):
                     report.append(f"  Script: {consumer['script_text'][:200]}...")
                 report.append(f"  ATT&CK: {', '.join(consumer['attck_techniques'])}")
                 report.append("")
@@ -524,9 +523,9 @@ class WmiArtifactParser:
         if filter_count > 0:
             report.append("EVENT FILTERS:")
             report.append("-" * 80)
-            for filter_obj in results['filters']:
+            for filter_obj in results["filters"]:
                 report.append(f"  Name: {filter_obj['name']}")
-                if filter_obj.get('query'):
+                if filter_obj.get("query"):
                     report.append(f"  Query: {filter_obj['query']}")
                 report.append(f"  ATT&CK: {', '.join(filter_obj['attck_techniques'])}")
                 report.append("")
@@ -535,7 +534,7 @@ class WmiArtifactParser:
         if binding_count > 0:
             report.append("FILTER-TO-CONSUMER BINDINGS (Active Persistence):")
             report.append("-" * 80)
-            for binding in results['bindings']:
+            for binding in results["bindings"]:
                 report.append(f"  Filter: {binding['filter']}")
                 report.append(f"  Consumer: {binding['consumer']}")
                 report.append(f"  Severity: {binding['severity'].upper()}")
@@ -545,6 +544,7 @@ class WmiArtifactParser:
 
 
 # Convenience functions
+
 
 def parse_wmi_artifacts(mount_point: str) -> Dict[str, List[Dict[str, Any]]]:
     """
@@ -561,7 +561,7 @@ def parse_wmi_artifacts(mount_point: str) -> Dict[str, List[Dict[str, Any]]]:
 
     # Also parse PowerShell logs for WMI usage
     ps_wmi = parser.parse_wmi_powershell(mount_point)
-    results['powershell_wmi'] = ps_wmi
+    results["powershell_wmi"] = ps_wmi
 
     return results
 
@@ -576,7 +576,7 @@ def export_wmi_to_json(results: Dict[str, List[Dict[str, Any]]], output_file: st
     """
     import json
 
-    with open(output_file, 'w') as f:
+    with open(output_file, "w") as f:
         json.dump(results, f, indent=2)
 
 
@@ -595,52 +595,72 @@ def export_wmi_to_csv(results: Dict[str, List[Dict[str, Any]]], output_dir: str)
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Export consumers
-    if results.get('consumers'):
-        with open(output_path / 'wmi_consumers.csv', 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                'name', 'consumer_type', 'command_line', 'script_text',
-                'severity', 'attck_techniques'
-            ])
+    if results.get("consumers"):
+        with open(output_path / "wmi_consumers.csv", "w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "name",
+                    "consumer_type",
+                    "command_line",
+                    "script_text",
+                    "severity",
+                    "attck_techniques",
+                ],
+            )
             writer.writeheader()
-            for consumer in results['consumers']:
-                writer.writerow({
-                    'name': consumer['name'],
-                    'consumer_type': consumer['consumer_type'],
-                    'command_line': consumer.get('command_line', ''),
-                    'script_text': consumer.get('script_text', '')[:200],
-                    'severity': consumer['severity'],
-                    'attck_techniques': ', '.join(consumer['attck_techniques'])
-                })
+            for consumer in results["consumers"]:
+                writer.writerow(
+                    {
+                        "name": consumer["name"],
+                        "consumer_type": consumer["consumer_type"],
+                        "command_line": consumer.get("command_line", ""),
+                        "script_text": consumer.get("script_text", "")[:200],
+                        "severity": consumer["severity"],
+                        "attck_techniques": ", ".join(consumer["attck_techniques"]),
+                    }
+                )
 
     # Export filters
-    if results.get('filters'):
-        with open(output_path / 'wmi_filters.csv', 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                'name', 'query', 'query_language', 'event_namespace',
-                'severity', 'attck_techniques'
-            ])
+    if results.get("filters"):
+        with open(output_path / "wmi_filters.csv", "w", newline="") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=[
+                    "name",
+                    "query",
+                    "query_language",
+                    "event_namespace",
+                    "severity",
+                    "attck_techniques",
+                ],
+            )
             writer.writeheader()
-            for filter_obj in results['filters']:
-                writer.writerow({
-                    'name': filter_obj['name'],
-                    'query': filter_obj.get('query', ''),
-                    'query_language': filter_obj.get('query_language', ''),
-                    'event_namespace': filter_obj.get('event_namespace', ''),
-                    'severity': filter_obj['severity'],
-                    'attck_techniques': ', '.join(filter_obj['attck_techniques'])
-                })
+            for filter_obj in results["filters"]:
+                writer.writerow(
+                    {
+                        "name": filter_obj["name"],
+                        "query": filter_obj.get("query", ""),
+                        "query_language": filter_obj.get("query_language", ""),
+                        "event_namespace": filter_obj.get("event_namespace", ""),
+                        "severity": filter_obj["severity"],
+                        "attck_techniques": ", ".join(filter_obj["attck_techniques"]),
+                    }
+                )
 
     # Export bindings
-    if results.get('bindings'):
-        with open(output_path / 'wmi_bindings.csv', 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=[
-                'filter', 'consumer', 'severity', 'attck_techniques'
-            ])
+    if results.get("bindings"):
+        with open(output_path / "wmi_bindings.csv", "w", newline="") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["filter", "consumer", "severity", "attck_techniques"]
+            )
             writer.writeheader()
-            for binding in results['bindings']:
-                writer.writerow({
-                    'filter': binding.get('filter', ''),
-                    'consumer': binding.get('consumer', ''),
-                    'severity': binding['severity'],
-                    'attck_techniques': ', '.join(binding['attck_techniques'])
-                })
+            for binding in results["bindings"]:
+                writer.writerow(
+                    {
+                        "filter": binding.get("filter", ""),
+                        "consumer": binding.get("consumer", ""),
+                        "severity": binding["severity"],
+                        "attck_techniques": ", ".join(binding["attck_techniques"]),
+                    }
+                )

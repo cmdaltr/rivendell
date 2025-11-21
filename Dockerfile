@@ -1,4 +1,4 @@
-# Rivendell DFIR Suite Dockerfile
+# Rivendell DF Acceleration Suite Dockerfile
 # Multi-stage build for optimized production image
 
 FROM python:3.11-slim as base
@@ -17,10 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     make \
     git \
+    cmake \
     # Forensic tools
     sleuthkit \
     libewf-dev \
-    libewf-tools \
     afflib-tools \
     ewf-tools \
     # Utilities
@@ -37,12 +37,51 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clamav-daemon \
     # Network tools
     netcat-openbsd \
+    # APFS-fuse dependencies
+    libbz2-dev \
+    libattr1-dev \
+    libfuse-dev \
+    fuse3 \
+    # Volatility dependencies
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
+
+# Install apfs-fuse for macOS image support
+RUN cd /tmp && \
+    git clone https://github.com/sgan81/apfs-fuse.git && \
+    cd apfs-fuse && \
+    git submodule init && \
+    git submodule update && \
+    mkdir build && cd build && \
+    cmake .. && \
+    make && \
+    make install && \
+    cd / && rm -rf /tmp/apfs-fuse
+
+# Install Volatility3
+RUN cd /opt && \
+    git clone https://github.com/volatilityfoundation/volatility3.git && \
+    cd volatility3 && \
+    pip install -r requirements.txt && \
+    python3 setup.py install && \
+    # Download Windows symbol tables
+    mkdir -p volatility3/symbols/windows && \
+    cd /tmp && \
+    git clone https://github.com/JPCERTCC/Windows-Symbol-Tables.git && \
+    cp -r Windows-Symbol-Tables/symbols/windows/*.json /opt/volatility3/volatility3/symbols/windows/ 2>/dev/null || true && \
+    rm -rf /tmp/Windows-Symbol-Tables && \
+    # Make volatility3 accessible
+    ln -s /opt/volatility3/vol.py /usr/local/bin/vol3 && \
+    chmod +x /usr/local/bin/vol3
 
 # Create rivendell user
 RUN useradd -m -s /bin/bash rivendell && \
-    mkdir -p /app /data /evidence /output && \
+    mkdir -p /app /data /evidence /output /data/mordor && \
     chown -R rivendell:rivendell /app /data /evidence /output
+
+# Clone Mordor Security Datasets
+RUN git clone https://github.com/OTRF/Security-Datasets.git /data/mordor && \
+    chown -R rivendell:rivendell /data/mordor
 
 WORKDIR /app
 

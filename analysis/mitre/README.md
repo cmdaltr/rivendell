@@ -512,11 +512,11 @@ techniques = mapper.map_artifact_to_techniques(
 - [MITRE ATT&CK Framework](https://attack.mitre.org/)
 - [ATT&CK STIX Data](https://github.com/mitre/cti)
 - [ATT&CK Navigator](https://mitre-attack.github.io/attack-navigator/)
-- [Rivendell DFIR Suite](https://github.com/yourusername/rivendell)
+- [Rivendell DF Acceleration Suite](https://github.com/yourusername/rivendell)
 
 ## License
 
-Part of Rivendell DFIR Suite - See LICENSE file
+Part of Rivendell DF Acceleration Suite - See LICENSE file
 
 ## Support
 

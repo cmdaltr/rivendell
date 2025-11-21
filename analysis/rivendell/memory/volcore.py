@@ -10,26 +10,38 @@ from zipfile import ZipFile
 from rivendell.memory.plugins import (
     extract_memory_artefacts,
 )
-from rivendell.memory.volatility.CentOS73 import CentOS73
-from rivendell.memory.volatility.Debian94 import Debian94
-from rivendell.memory.volatility.macOS10126 import (
-    macOS10126,
-)
-from rivendell.memory.volatility.macOS10136 import (
-    macOS10136,
-)
-from rivendell.memory.volatility.RHELServer59 import (
-    RHELServer59,
-)
-from rivendell.memory.volatility.RHELServer67 import (
-    RHELServer67,
-)
-from rivendell.memory.volatility.Ubuntu16045 import (
-    Ubuntu16045,
-)
-from rivendell.memory.volatility.Ubuntu18043 import (
-    Ubuntu18043,
-)
+
+# Try to import volatility profiles - they may not be installed
+try:
+    from rivendell.memory.volatility.CentOS73 import CentOS73
+    from rivendell.memory.volatility.Debian94 import Debian94
+    from rivendell.memory.volatility.macOS10126 import (
+        macOS10126,
+    )
+    from rivendell.memory.volatility.macOS10136 import (
+        macOS10136,
+    )
+    from rivendell.memory.volatility.RHELServer59 import (
+        RHELServer59,
+    )
+    from rivendell.memory.volatility.RHELServer67 import (
+        RHELServer67,
+    )
+    from rivendell.memory.volatility.Ubuntu16045 import (
+        Ubuntu16045,
+    )
+    from rivendell.memory.volatility.Ubuntu18043 import (
+        Ubuntu18043,
+    )
+except ImportError:
+    CentOS73 = None
+    Debian94 = None
+    macOS10126 = None
+    macOS10136 = None
+    RHELServer59 = None
+    RHELServer67 = None
+    Ubuntu16045 = None
+    Ubuntu18043 = None
 
 
 def assess_volatility_choice(

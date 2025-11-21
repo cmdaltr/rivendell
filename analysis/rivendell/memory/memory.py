@@ -16,9 +16,16 @@ from rivendell.memory.volcore import (
 from rivendell.memory.volcore import (
     choose_custom_profile,
 )
-from rivendell.memory.volatility3.Linux import Linux
-from rivendell.memory.volatility3.macOS1 import macOS1
-from rivendell.memory.volatility3.macOS2 import macOS2
+
+# Try to import volatility3 profiles - they may not be installed
+try:
+    from rivendell.memory.volatility3.Linux import Linux
+    from rivendell.memory.volatility3.macOS1 import macOS1
+    from rivendell.memory.volatility3.macOS2 import macOS2
+except ImportError:
+    Linux = None
+    macOS1 = None
+    macOS2 = None
 
 
 def vol3_check_os(artefact, memext, plugin):

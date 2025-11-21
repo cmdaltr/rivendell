@@ -1,5 +1,5 @@
 """
-Unified archiving utilities for Rivendell DFIR Suite
+Unified archiving utilities for Rivendell DF Acceleration Suite
 
 Provides consistent archive creation with encryption support.
 Eliminates duplicate archiving code found in acquisition modules.
@@ -20,16 +20,16 @@ from .crypto import encrypt_archive_with_key, encrypt_archive_with_password
 from .file_ops import calculate_directory_size, format_size
 
 
-ArchiveFormat = Literal['zip', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz']
-EncryptionMethod = Literal['key', 'password', 'none']
+ArchiveFormat = Literal["zip", "tar", "tar.gz", "tar.bz2", "tar.xz"]
+EncryptionMethod = Literal["key", "password", "none"]
 
 
 def create_archive(
     source_dir: str,
     output_path: Optional[str] = None,
-    format: ArchiveFormat = 'tar.gz',
+    format: ArchiveFormat = "tar.gz",
     compression_level: int = 6,
-    handle_old_timestamps: bool = True
+    handle_old_timestamps: bool = True,
 ) -> str:
     """
     Create archive from directory.
@@ -66,9 +66,9 @@ def create_archive(
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Create archive based on format
-    if format == 'zip':
+    if format == "zip":
         _create_zip(source_path, output_file, compression_level, handle_old_timestamps)
-    elif format.startswith('tar'):
+    elif format.startswith("tar"):
         _create_tar(source_path, output_file, format, compression_level)
     else:
         raise ValueError(f"Unsupported archive format: {format}")
@@ -77,19 +77,13 @@ def create_archive(
 
 
 def _create_zip(
-    source_path: Path,
-    output_file: Path,
-    compression_level: int,
-    handle_old_timestamps: bool
+    source_path: Path, output_file: Path, compression_level: int, handle_old_timestamps: bool
 ):
     """Create ZIP archive."""
     compression = zipfile.ZIP_DEFLATED
 
     with zipfile.ZipFile(
-        output_file,
-        'w',
-        compression=compression,
-        compresslevel=compression_level
+        output_file, "w", compression=compression, compresslevel=compression_level
     ) as zipf:
         for root, dirs, files in os.walk(source_path):
             for file in files:
@@ -100,31 +94,29 @@ def _create_zip(
                     zipf.write(file_path, arc_name)
                 except ValueError as e:
                     # Handle pre-1980 timestamp error
-                    if handle_old_timestamps and "ZIP does not support timestamps before 1980" in str(e):
+                    if (
+                        handle_old_timestamps
+                        and "ZIP does not support timestamps before 1980" in str(e)
+                    ):
                         # Read file and write with current timestamp
-                        with open(file_path, 'rb') as f:
+                        with open(file_path, "rb") as f:
                             data = f.read()
                         zipf.writestr(str(arc_name), data)
                     else:
                         raise
 
 
-def _create_tar(
-    source_path: Path,
-    output_file: Path,
-    format: str,
-    compression_level: int
-):
+def _create_tar(source_path: Path, output_file: Path, format: str, compression_level: int):
     """Create TAR archive."""
     # Determine compression mode
-    if format == 'tar':
-        mode = 'w'
-    elif format == 'tar.gz':
-        mode = 'w:gz'
-    elif format == 'tar.bz2':
-        mode = 'w:bz2'
-    elif format == 'tar.xz':
-        mode = 'w:xz'
+    if format == "tar":
+        mode = "w"
+    elif format == "tar.gz":
+        mode = "w:gz"
+    elif format == "tar.bz2":
+        mode = "w:bz2"
+    elif format == "tar.xz":
+        mode = "w:xz"
     else:
         raise ValueError(f"Unsupported tar format: {format}")
 
@@ -136,10 +128,10 @@ def create_evidence_archive(
     source_dir: str,
     hostname: str,
     output_dir: Optional[str] = None,
-    format: ArchiveFormat = 'tar.gz',
-    encryption: EncryptionMethod = 'none',
+    format: ArchiveFormat = "tar.gz",
+    encryption: EncryptionMethod = "none",
     password: Optional[str] = None,
-    key_path: Optional[str] = None
+    key_path: Optional[str] = None,
 ) -> dict:
     """
     Create forensic evidence archive with optional encryption.
@@ -189,13 +181,13 @@ def create_evidence_archive(
     archive_path = create_archive(source_dir, archive_path, format)
 
     result = {
-        'archive_path': archive_path,
-        'encrypted': False,
-        'size': Path(archive_path).stat().st_size,
+        "archive_path": archive_path,
+        "encrypted": False,
+        "size": Path(archive_path).stat().st_size,
     }
 
     # Apply encryption if requested
-    if encryption == 'key':
+    if encryption == "key":
         if key_path is None:
             key_path = str(Path(output_dir) / "shadowfax.key")
 
@@ -204,12 +196,12 @@ def create_evidence_archive(
         # Remove unencrypted archive
         Path(archive_path).unlink()
 
-        result['archive_path'] = encrypted_path
-        result['encrypted'] = True
-        result['encryption_method'] = 'key'
-        result['key_path'] = key_file
+        result["archive_path"] = encrypted_path
+        result["encrypted"] = True
+        result["encryption_method"] = "key"
+        result["key_path"] = key_file
 
-    elif encryption == 'password':
+    elif encryption == "password":
         if password is None:
             raise ValueError("Password required for password encryption")
 
@@ -218,21 +210,19 @@ def create_evidence_archive(
         # Remove unencrypted archive
         Path(archive_path).unlink()
 
-        result['archive_path'] = encrypted_path
-        result['encrypted'] = True
-        result['encryption_method'] = 'password'
+        result["archive_path"] = encrypted_path
+        result["encrypted"] = True
+        result["encryption_method"] = "password"
 
     # Add formatted size
-    result['size'] = Path(result['archive_path']).stat().st_size
-    result['size_formatted'] = format_size(result['size'])
+    result["size"] = Path(result["archive_path"]).stat().st_size
+    result["size_formatted"] = format_size(result["size"])
 
     return result
 
 
 def extract_archive(
-    archive_path: str,
-    output_dir: Optional[str] = None,
-    format: Optional[ArchiveFormat] = None
+    archive_path: str, output_dir: Optional[str] = None, format: Optional[ArchiveFormat] = None
 ) -> str:
     """
     Extract archive to directory.
@@ -257,16 +247,16 @@ def extract_archive(
 
     # Auto-detect format if not specified
     if format is None:
-        if archive_path.endswith('.tar.gz') or archive_path.endswith('.tgz'):
-            format = 'tar.gz'
-        elif archive_path.endswith('.tar.bz2'):
-            format = 'tar.bz2'
-        elif archive_path.endswith('.tar.xz'):
-            format = 'tar.xz'
-        elif archive_path.endswith('.tar'):
-            format = 'tar'
-        elif archive_path.endswith('.zip'):
-            format = 'zip'
+        if archive_path.endswith(".tar.gz") or archive_path.endswith(".tgz"):
+            format = "tar.gz"
+        elif archive_path.endswith(".tar.bz2"):
+            format = "tar.bz2"
+        elif archive_path.endswith(".tar.xz"):
+            format = "tar.xz"
+        elif archive_path.endswith(".tar"):
+            format = "tar"
+        elif archive_path.endswith(".zip"):
+            format = "zip"
         else:
             raise ValueError(f"Cannot detect archive format: {archive_path}")
 
@@ -274,20 +264,20 @@ def extract_archive(
     if output_dir is None:
         # Remove all archive extensions
         output_dir = str(archive_file)
-        for ext in ['.tar.gz', '.tar.bz2', '.tar.xz', '.tar', '.zip', '.tgz']:
+        for ext in [".tar.gz", ".tar.bz2", ".tar.xz", ".tar", ".zip", ".tgz"]:
             if output_dir.endswith(ext):
-                output_dir = output_dir[:-len(ext)]
+                output_dir = output_dir[: -len(ext)]
                 break
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
     # Extract based on format
-    if format == 'zip':
-        with zipfile.ZipFile(archive_file, 'r') as zipf:
+    if format == "zip":
+        with zipfile.ZipFile(archive_file, "r") as zipf:
             zipf.extractall(output_path)
-    elif format.startswith('tar'):
-        mode = 'r' if format == 'tar' else f'r:{format.split(".")[-1]}'
+    elif format.startswith("tar"):
+        mode = "r" if format == "tar" else f'r:{format.split(".")[-1]}'
         with tarfile.open(archive_file, mode) as tar:
             tar.extractall(output_path)
     else:
@@ -316,11 +306,11 @@ def validate_archive(archive_path: str) -> bool:
         return False
 
     try:
-        if archive_path.endswith('.zip'):
-            with zipfile.ZipFile(archive_file, 'r') as zipf:
+        if archive_path.endswith(".zip"):
+            with zipfile.ZipFile(archive_file, "r") as zipf:
                 return zipf.testzip() is None
-        elif '.tar' in archive_path:
-            with tarfile.open(archive_file, 'r') as tar:
+        elif ".tar" in archive_path:
+            with tarfile.open(archive_file, "r") as tar:
                 # Try to read all members
                 for member in tar.getmembers():
                     pass
@@ -355,29 +345,33 @@ def list_archive_contents(archive_path: str, detailed: bool = False) -> list:
     contents = []
 
     try:
-        if archive_path.endswith('.zip'):
-            with zipfile.ZipFile(archive_file, 'r') as zipf:
+        if archive_path.endswith(".zip"):
+            with zipfile.ZipFile(archive_file, "r") as zipf:
                 for info in zipf.infolist():
                     if detailed:
-                        contents.append({
-                            'path': info.filename,
-                            'size': info.file_size,
-                            'compressed_size': info.compress_size,
-                            'date_time': datetime(*info.date_time)
-                        })
+                        contents.append(
+                            {
+                                "path": info.filename,
+                                "size": info.file_size,
+                                "compressed_size": info.compress_size,
+                                "date_time": datetime(*info.date_time),
+                            }
+                        )
                     else:
                         contents.append(info.filename)
 
-        elif '.tar' in archive_path:
-            with tarfile.open(archive_file, 'r') as tar:
+        elif ".tar" in archive_path:
+            with tarfile.open(archive_file, "r") as tar:
                 for member in tar.getmembers():
                     if detailed:
-                        contents.append({
-                            'path': member.name,
-                            'size': member.size,
-                            'mode': member.mode,
-                            'mtime': datetime.fromtimestamp(member.mtime)
-                        })
+                        contents.append(
+                            {
+                                "path": member.name,
+                                "size": member.size,
+                                "mode": member.mode,
+                                "mtime": datetime.fromtimestamp(member.mtime),
+                            }
+                        )
                     else:
                         contents.append(member.name)
 

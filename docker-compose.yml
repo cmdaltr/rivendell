@@ -10,7 +10,7 @@ services:
     image: rivendell:dev
     container_name: rivendell-app
     ports:
-      - "8000:8000"
+      - "5688:8000"
     volumes:
       # Mount code for development
       - .:/app
@@ -18,6 +18,9 @@ services:
       - rivendell-evidence:/evidence
       - rivendell-output:/output
       - rivendell-data:/data
+      - rivendell-tmp:/tmp/elrond
+      # Mount macOS volumes for access to external drives
+      - /Volumes:/Volumes
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
@@ -80,11 +83,15 @@ services:
       - rivendell-evidence:/evidence
       - rivendell-output:/output
       - rivendell-data:/data
+      - rivendell-tmp:/tmp/elrond
+      # Mount macOS volumes for access to external drives
+      - /Volumes:/Volumes
     environment:
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
       - REDIS_URL=redis://redis:6379/0
       - DATABASE_URL=postgresql://rivendell:rivendell@postgres:5432/rivendell
+      - ELROND_HOME=/app/analysis
     depends_on:
       - redis
       - postgres
@@ -112,6 +119,27 @@ services:
     networks:
       - rivendell-network
     command: celery -A web.backend.tasks flower --port=5555
+
+  # React frontend for web UI
+  frontend:
+    build:
+      context: ./web/frontend
+      dockerfile: Dockerfile
+      target: development
+    image: rivendell-frontend:dev
+    container_name: rivendell-frontend
+    ports:
+      - "5687:3000"
+    environment:
+      - PORT=3000
+      - REACT_APP_API_URL=http://localhost:5688
+    volumes:
+      - ./web/frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - rivendell
+    networks:
+      - rivendell-network
 
   # Nginx reverse proxy (for production)
   nginx:
@@ -141,7 +169,11 @@ volumes:
     driver: local
   rivendell-data:
     driver: local
+  rivendell-tmp:
+    driver: local
   rivendell-redis:
     driver: local
   rivendell-postgres:
+    driver: local
+  frontend-node-modules:
     driver: local
