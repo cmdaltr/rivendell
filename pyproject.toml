@@ -73,13 +73,13 @@ all = [
 ]
 
 [project.scripts]
-rivendell = "cli.rivendell:main"
-rivendell-acquire = "acquisition.python.gandalf:main"
-rivendell-analyze = "analysis.cli:main"
-rivendell-web = "web.backend.main:start_server"
+rivendell = "src.cli.rivendell:main"
+rivendell-acquire = "src.acquisition.python.gandalf:main"
+rivendell-analyze = "src.analysis.cli:main"
+rivendell-web = "src.web.backend.main:start_server"
 # Legacy compatibility
-elrond = "analysis.cli:main"
-gandalf = "acquisition.python.gandalf:main"
+elrond = "src.analysis.cli:main"
+gandalf = "src.acquisition.python.gandalf:main"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/rivendell"
@@ -88,9 +88,9 @@ Repository = "https://github.com/yourusername/rivendell.git"
 Issues = "https://github.com/yourusername/rivendell/issues"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["acquisition*", "analysis*", "web*", "cli*", "config*"]
-exclude = ["tests*", "docs*", "docker*"]
+where = ["src"]
+include = ["*"]
+exclude = []
 
 [tool.black]
 line-length = 100
@@ -115,4 +115,4 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=acquisition --cov=analysis --cov=web --cov=cli --cov-report=html --cov-report=term"
+addopts = "-v --cov=src/acquisition --cov=src/analysis --cov=src/web --cov=src/cli --cov-report=html --cov-report=term"

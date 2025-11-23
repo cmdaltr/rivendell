@@ -1,0 +1,108 @@
+digraph SystemArchitecture {
+    rankdir=TB;
+
+    // Graph styling
+    graph [fontname="Arial", fontsize=12, bgcolor="#0f0f23", pad=0.5];
+    node [fontname="Arial", fontsize=10, style=filled, shape=box, fillcolor="#2d2d44", fontcolor="#f0dba5", color="#3f4b2a"];
+    edge [fontname="Arial", fontsize=9, color="#66d9ef", fontcolor="#a7db6c"];
+
+    // Client Layer
+    subgraph cluster_client {
+        label="Client Layer";
+        style=filled;
+        fillcolor="#1a1a2e";
+        fontcolor="#66d9ef";
+        fontsize=14;
+
+        browser [label="Browser\n(React UI)", shape=box3d, fillcolor="#3a506b"];
+        mobile [label="Mobile Web\n(React UI)", shape=box3d, fillcolor="#3a506b"];
+        api_client [label="API Client\n(REST)", shape=box3d, fillcolor="#3a506b"];
+    }
+
+    // Presentation Layer
+    subgraph cluster_presentation {
+        label="Presentation Layer";
+        style=filled;
+        fillcolor="#1a1a2e";
+        fontcolor="#66d9ef"];
+        fontsize=14;
+
+        nginx [label="Nginx\nReverse Proxy\nPort: 80/443", shape=cylinder, fillcolor="#5c7cfa"];
+        frontend [label="React Frontend\nPort: 3000", shape=component, fillcolor="#4dabf7"];
+        backend [label="FastAPI Backend\nPort: 8000", shape=component, fillcolor="#51cf66"];
+    }
+
+    // Application Layer
+    subgraph cluster_application {
+        label="Application Layer";
+        style=filled;
+        fillcolor="#1a1a2e";
+        fontcolor="#66d9ef";
+        fontsize=14;
+
+        subgraph cluster_routes {
+            label="API Routes";
+            style=dashed;
+            fontcolor="#a7db6c";
+
+            auth_routes [label="Auth\nRoutes", fillcolor="#ffd43b"];
+            job_routes [label="Job\nRoutes", fillcolor="#ffd43b"];
+            export_routes [label="Export\nRoutes", fillcolor="#ffd43b"];
+        }
+
+        business_logic [label="Business Logic Layer\n• Authentication & Authorization\n• Job Management\n• Data Export/Import\n• File System Operations", shape=folder, fillcolor="#74c0fc"];
+    }
+
+    // Task Processing Layer
+    subgraph cluster_processing {
+        label="Task Processing Layer";
+        style=filled;
+        fillcolor="#1a1a2e";
+        fontcolor="#66d9ef";
+        fontsize=14;
+
+        celery_workers [label="Celery Workers\n• Analysis Worker\n• Acquisition Worker\n• Export Worker", shape=hexagon, fillcolor="#ffa94d"];
+        forensic_engine [label="Forensic Analysis Engine\n• Elrond (Analysis)\n• Gandalf (Acquisition)\n• Plaso (Timeline)\n• Volatility3 (Memory)", shape=box3d, fillcolor="#ff6b6b"];
+    }
+
+    // Data Layer
+    subgraph cluster_data {
+        label="Data Layer";
+        style=filled;
+        fillcolor="#1a1a2e";
+        fontcolor="#66d9ef";
+        fontsize=14;
+
+        postgresql [label="PostgreSQL\nDatabase\n• Users\n• Jobs\n• Settings\n• Accounts", shape=cylinder, fillcolor="#20c997"];
+        redis [label="Redis\nCache\n• Sessions\n• Task Queue\n• Results", shape=cylinder, fillcolor="#fa5252"];
+        filesystem [label="File System\nStorage\n• Evidence\n• Artifacts\n• Reports", shape=folder, fillcolor="#845ef7"];
+    }
+
+    // Connections - Client to Presentation
+    browser -> nginx [label="HTTPS"];
+    mobile -> nginx [label="HTTPS"];
+    api_client -> nginx [label="HTTPS"];
+
+    // Connections - Presentation Layer
+    nginx -> frontend [label="Static\nFiles"];
+    nginx -> backend [label="API\nRequests"];
+
+    // Connections - Application Layer
+    backend -> auth_routes [label="Routes"];
+    backend -> job_routes [label="Routes"];
+    backend -> export_routes [label="Routes"];
+    auth_routes -> business_logic;
+    job_routes -> business_logic;
+    export_routes -> business_logic;
+
+    // Connections - Processing Layer
+    business_logic -> celery_workers [label="Dispatch\nTasks"];
+    celery_workers -> forensic_engine [label="Execute\nAnalysis"];
+
+    // Connections - Data Layer
+    business_logic -> postgresql [label="CRUD\nOperations"];
+    business_logic -> redis [label="Cache/\nQueue"];
+    forensic_engine -> filesystem [label="Read/Write\nEvidence"];
+    celery_workers -> redis [label="Task\nQueue"];
+    backend -> postgresql [label="Query"];
+}

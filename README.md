@@ -59,7 +59,7 @@ _1. Acquire evidence from remote system_
   <table><tr><td>
         <img src="./docs/images/readme/python.png" alt="Rivendell - The Last Homely House" width="42"/>
       </td><td>
-        <code>python3 acquisition/python/gandalf.py Password 192.168.1.100 -u administrator -M -o /evidence/CASE-001</code>
+        <code>python3 src/acquisition/python/gandalf.py Password 192.168.1.100 -u administrator -M -o /evidence/CASE-001</code>
       </td></tr><tr><td>
         <img src="./docs/images/readme/bash.png" alt="Rivendell - The Last Homely House" width="42"/>
       </td><td>

@@ -1,0 +1,36 @@
+digraph DatabaseERD {
+    rankdir=LR;
+
+    // Graph styling
+    graph [fontname="Arial", fontsize=12, bgcolor="#0f0f23", pad=0.5, splines=ortho];
+    node [fontname="Arial", fontsize=9, style=filled, shape=record, fillcolor="#2d2d44", fontcolor="#f0dba5", color="#3f4b2a"];
+    edge [fontname="Arial", fontsize=8, color="#66d9ef", fontcolor="#a7db6c"];
+
+    // Users table
+    users [label="<f0> USERS|<f1> PK: id (UUID)|email (unique)|username (unique)|hashed_password|full_name|role (ENUM)|is_active (bool)|created_at|last_login|password_reset_token|password_reset_expires", fillcolor="#4dabf7"];
+
+    // UserSettings table
+    user_settings [label="<f0> USER_SETTINGS|<f1> PK: id (UUID)|<f2> FK: user_id → users.id|theme|notifications_enabled|auto_refresh_interval|default_analysis_options (JSON)|custom_settings (JSON)|created_at|updated_at", fillcolor="#51cf66"];
+
+    // Accounts table
+    accounts [label="<f0> ACCOUNTS|<f1> PK: id (UUID)|<f2> FK: user_id → users.id|account_type|name|credentials (JSON, encrypted)|endpoint_url|is_active|created_at|updated_at", fillcolor="#ffd43b"];
+
+    // Jobs table
+    jobs [label="<f0> JOBS|<f1> PK: id (UUID)|<f2> FK: user_id → users.id|case_number|source_paths (JSON array)|destination_path|options (JSON)|status (ENUM)|progress (INT 0-100)|log (JSON array)|result (JSON)|error (TEXT)|celery_task_id|created_at|started_at|completed_at|archived_at", fillcolor="#ff6b6b"];
+
+    // Sessions table
+    sessions [label="<f0> SESSIONS|<f1> PK: id (UUID)|<f2> FK: user_id → users.id|token (JWT)|ip_address|user_agent|is_active|created_at|expires_at|last_activity", fillcolor="#fa5252"];
+
+    // AuditLogs table
+    audit_logs [label="<f0> AUDIT_LOGS|<f1> PK: id (UUID)|<f2> FK: user_id → users.id|action|resource_type|resource_id|details (JSON)|ip_address|timestamp", fillcolor="#845ef7"];
+
+    // Relationships
+    users:f1 -> user_settings:f2 [label="1:1", color="#51cf66"];
+    users:f1 -> accounts:f2 [label="1:N", color="#ffd43b"];
+    users:f1 -> jobs:f2 [label="1:N", color="#ff6b6b"];
+    users:f1 -> sessions:f2 [label="1:N", color="#fa5252"];
+    users:f1 -> audit_logs:f2 [label="1:N", color="#845ef7"];
+
+    // Indexes annotation
+    indexes [shape=note, fillcolor="#20c997", label="INDEXES:\n• users: email, username, role\n• accounts: user_id, account_type\n• jobs: user_id, status, case_number, created_at\n• sessions: token, user_id, expires_at\n• audit_logs: user_id, timestamp, action"];
+}
