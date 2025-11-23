@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-function OptionsPanel({ options, onChange, disabled = false, onSubmit, loading = false, error = null }) {
+function OptionsPanel({ options, onChange, disabled = false, hasImages = false, onSubmit, loading = false, error = null }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [operationMode, setOperationMode] = useState(''); // 'gandalf' or 'local'
   const [eta, setEta] = useState(0);
@@ -108,10 +108,19 @@ function OptionsPanel({ options, onChange, disabled = false, onSubmit, loading =
     if (!currentStepData.options) return [];
 
     // Return all options with disabled flag instead of filtering
-    return currentStepData.options.map(opt => ({
-      ...opt,
-      disabled: operationMode === 'gandalf' && opt.disabledForGandalf
-    }));
+    return currentStepData.options.map(opt => {
+      let isDisabled = operationMode === 'gandalf' && opt.disabledForGandalf;
+
+      // Disable collection options if no images are selected
+      if (currentStepData.key === 'collection' && !hasImages) {
+        isDisabled = true;
+      }
+
+      return {
+        ...opt,
+        disabled: isDisabled
+      };
+    });
   }
 
   // Calculate ETA whenever options change

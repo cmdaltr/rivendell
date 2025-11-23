@@ -8,6 +8,7 @@ This version runs Elrond directly in the same container environment.
 import subprocess
 import sys
 import os
+import traceback
 from datetime import datetime
 from pathlib import Path
 
@@ -176,7 +177,15 @@ def start_analysis(self, job_id: str):
         logger.exception(f"Error running analysis for job {job_id}")
         job.status = JobStatus.FAILED
         job.error = str(e)
-        job.log.append(f"[{datetime.now().isoformat()}] Error: {str(e)}")
+
+        # Capture full traceback in the log
+        tb_str = traceback.format_exc()
+        job.log.append(f"[{datetime.now().isoformat()}] ========== ERROR ==========")
+        job.log.append(f"[{datetime.now().isoformat()}] {str(e)}")
+        job.log.append(f"[{datetime.now().isoformat()}] Traceback:")
+        for line in tb_str.split('\n'):
+            if line.strip():
+                job.log.append(f"[{datetime.now().isoformat()}] {line}")
 
     finally:
         job.completed_at = datetime.now()

@@ -287,9 +287,8 @@ function AIAssistant() {
           fontSize: '0.875rem',
           color: '#ffc107'
         }}>
-          <strong>Note:</strong> AI Agent integration is currently under development.
-          This interface will connect to advanced language models to provide intelligent
-          assistance with forensic workflows, case analysis, and technical guidance.
+          <strong>Note:</strong> AI results are never 100%, always validate the results and/or guidance!
+          AI Agent integration is currently under development.
         </div>
       </div>
 

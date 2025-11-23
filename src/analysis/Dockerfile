@@ -28,12 +28,18 @@ RUN apt-get update && apt-get install -y \
     g++ \
     make \
     cmake \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
     # Forensic imaging tools
     ewf-tools \
     libewf-dev \
     afflib-tools \
     libafflib-dev \
     sleuthkit \
+    # Volume Shadow Copy tools
+    libvshadow-utils \
     # File system tools
     ntfs-3g \
     exfat-fuse \
@@ -43,7 +49,6 @@ RUN apt-get update && apt-get install -y \
     e2fsprogs \
     xfsprogs \
     # Mounting tools
-    fuse \
     fuse3 \
     libfuse3-dev \
     kpartx \
@@ -96,18 +101,38 @@ WORKDIR /tmp
 # Upgrade pip and install build tools
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install plaso (timeline analysis)
+# Install plaso dependencies from apt
 RUN apt-get update && apt-get install -y \
-    plaso-tools \
-    python3-plaso \
+    libbde-utils \
+    libesedb-utils \
+    libevt-utils \
+    libevtx-utils \
+    libfsapfs-utils \
+    libfsntfs-utils \
+    libfvde-utils \
+    libfwnt-utils \
+    libluksde-utils \
+    libqcow-utils \
+    libsigscan-utils \
+    libsmdev-utils \
+    libsmraw-utils \
+    libvhdi-utils \
+    libvmdk-utils \
+    libvsapm-utils \
+    libvsgpt-utils \
+    libvshadow-utils \
+    libvslvm-utils \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* || true
 
 # Install volatility3 (memory analysis)
 RUN pip3 install --no-cache-dir \
     volatility3 \
     pycryptodome \
     pycryptodomex
+
+# Install plaso (timeline analysis) from pip
+RUN pip3 install --no-cache-dir plaso || true
 
 # Install core forensic Python packages
 RUN pip3 install --no-cache-dir \
@@ -124,9 +149,8 @@ RUN pip3 install --no-cache-dir \
     oletools \
     pyopenssl
 
-# Install additional analysis tools
+# Install additional analysis tools (rekall-core removed due to Python 2 incompatibility)
 RUN pip3 install --no-cache-dir \
-    rekall-core \
     libscca-python \
     libesedb-python \
     libevtx-python \
@@ -137,13 +161,12 @@ RUN pip3 install --no-cache-dir \
     libmsiecf-python \
     libolecf-python \
     libregf-python \
-    libscca-python \
     libsigscan-python \
     libsmraw-python \
     libvshadow-python \
     libvslvm-python \
     construct \
-    unicodecsv
+    unicodecsv || true
 
 # Install network and malware analysis tools
 RUN pip3 install --no-cache-dir \

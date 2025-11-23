@@ -14,6 +14,9 @@ function NewAnalysis() {
   const [options, setOptions] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [showAvWarning, setShowAvWarning] = useState(false);
+  const [showOverwriteModal, setShowOverwriteModal] = useState(false);
+  const [overwriteModalData, setOverwriteModalData] = useState({ type: '', message: '', path: '' });
 
   // Clear error when options change
   const handleOptionsChange = (newOptions) => {
@@ -83,6 +86,12 @@ function NewAnalysis() {
       return;
     }
 
+    // Show AV warning modal before proceeding
+    setShowAvWarning(true);
+  };
+
+  const handleAvWarningConfirm = async () => {
+    setShowAvWarning(false);
     setLoading(true);
     setError(null);
 
@@ -114,33 +123,13 @@ function NewAnalysis() {
 
       // Check if error is duplicate case ID
       if (errorDetail.includes('already exists')) {
-        const confirmed = window.confirm(
-          `A job with case ID "${caseNumber}" already exists.\n\nDo you want to overwrite the existing job and continue?`
-        );
-
-        if (confirmed) {
-          // User confirmed - retry with force overwrite flag
-          try {
-            const job = await createJob({
-              case_number: caseNumber,
-              source_paths: selectedFiles,
-              destination_path: destinationPath || null,
-              options: {
-                ...options,
-                local: analysisMode === 'local',
-                gandalf: analysisMode === 'gandalf',
-                force_overwrite: true
-              },
-            });
-
-            console.log('Job created successfully with overwrite:', job);
-            navigate(`/jobs/${job.id}`);
-            return;
-          } catch (retryErr) {
-            console.error('Error creating job with overwrite:', retryErr);
-            setError(retryErr.response?.data?.detail || retryErr.message || 'Failed to create analysis job');
-          }
-        }
+        setOverwriteModalData({
+          type: 'case_id',
+          message: `A job with case ID "${caseNumber}" already exists.`,
+          path: caseNumber
+        });
+        setShowOverwriteModal(true);
+        return;
       }
       // Check if error is "File exists" (errno 17)
       else if (errorDetail.includes('[Errno 17]') || errorDetail.includes('File exists')) {
@@ -148,33 +137,13 @@ function NewAnalysis() {
         const pathMatch = errorDetail.match(/'([^']+)'/);
         const existingPath = pathMatch ? pathMatch[1] : (destinationPath || selectedFiles[0]);
 
-        const confirmed = window.confirm(
-          `The output directory already exists:\n\n${existingPath}\n\nDo you want to delete the existing directory and continue?`
-        );
-
-        if (confirmed) {
-          // User confirmed - retry with force overwrite flag
-          try {
-            const job = await createJob({
-              case_number: caseNumber,
-              source_paths: selectedFiles,
-              destination_path: destinationPath || null,
-              options: {
-                ...options,
-                local: analysisMode === 'local',
-                gandalf: analysisMode === 'gandalf',
-                force_overwrite: true
-              },
-            });
-
-            console.log('Job created successfully with overwrite:', job);
-            navigate(`/jobs/${job.id}`);
-            return;
-          } catch (retryErr) {
-            console.error('Error creating job with overwrite:', retryErr);
-            setError(retryErr.response?.data?.detail || retryErr.message || 'Failed to create analysis job');
-          }
-        }
+        setOverwriteModalData({
+          type: 'directory',
+          message: 'The output directory already exists:',
+          path: existingPath
+        });
+        setShowOverwriteModal(true);
+        return;
       } else {
         setError(errorDetail);
       }
@@ -183,8 +152,267 @@ function NewAnalysis() {
     }
   };
 
+  const handleAvWarningCancel = () => {
+    setShowAvWarning(false);
+  };
+
+  const handleOverwriteConfirm = async () => {
+    setShowOverwriteModal(false);
+    setLoading(true);
+    setError(null);
+
+    try {
+      const job = await createJob({
+        case_number: caseNumber,
+        source_paths: selectedFiles,
+        destination_path: destinationPath || null,
+        options: {
+          ...options,
+          local: analysisMode === 'local',
+          gandalf: analysisMode === 'gandalf',
+          force_overwrite: true
+        },
+      });
+
+      console.log('Job created successfully with overwrite:', job);
+      navigate(`/jobs/${job.id}`);
+    } catch (retryErr) {
+      console.error('Error creating job with overwrite:', retryErr);
+      setError(retryErr.response?.data?.detail || retryErr.message || 'Failed to create analysis job');
+      setLoading(false);
+    }
+  };
+
+  const handleOverwriteCancel = () => {
+    setShowOverwriteModal(false);
+    setLoading(false);
+  };
+
   return (
     <div className="new-analysis">
+      {/* AV Warning Modal */}
+      {showAvWarning && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15, 15, 35, 0.98) 0%, rgba(25, 25, 45, 0.98) 100%)',
+            border: '2px solid rgba(240, 219, 165, 0.5)',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '680px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
+          }}>
+            <h3 style={{
+              color: '#ffc107',
+              marginBottom: '1rem',
+              fontFamily: "'Cinzel', 'Times New Roman', serif",
+              fontSize: '1.5rem',
+              textAlign: 'center'
+            }}>
+              ⚠️ Antivirus Warning
+            </h3>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '1.5rem',
+              fontSize: '1rem'
+            }}>
+              During forensic analysis, malware or suspicious files may be identified and extracted.
+              Your antivirus software may interfere with the analysis process by quarantining or deleting evidence.
+            </p>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '2rem',
+              fontSize: '1rem',
+              fontWeight: 'bold'
+            }}>
+              Consider temporarily disabling antivirus protection or adding exclusions for the analysis output directory before proceeding.
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={handleAvWarningCancel}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(244, 67, 54, 0.2)',
+                  border: '1px solid rgba(244, 67, 54, 0.5)',
+                  borderRadius: '4px',
+                  color: '#f44336',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.2)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAvWarningConfirm}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(102, 217, 239, 0.3)',
+                  border: '1px solid rgba(102, 217, 239, 0.5)',
+                  borderRadius: '4px',
+                  color: '#66d9ef',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(102, 217, 239, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(102, 217, 239, 0.3)';
+                }}
+              >
+                Continue with Analysis
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Overwrite Confirmation Modal */}
+      {showOverwriteModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15, 15, 35, 0.98) 0%, rgba(25, 25, 45, 0.98) 100%)',
+            border: '2px solid rgba(240, 219, 165, 0.5)',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '680px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
+          }}>
+            <h3 style={{
+              color: '#ffc107',
+              marginBottom: '1rem',
+              fontFamily: "'Cinzel', 'Times New Roman', serif",
+              fontSize: '1.5rem',
+              textAlign: 'center'
+            }}>
+              ⚠️ Overwrite Confirmation
+            </h3>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '1rem',
+              fontSize: '1rem'
+            }}>
+              {overwriteModalData.message}
+            </p>
+            <div style={{
+              background: 'rgba(240, 219, 165, 0.1)',
+              border: '1px solid rgba(240, 219, 165, 0.3)',
+              borderRadius: '4px',
+              padding: '0.75rem 1rem',
+              marginBottom: '1.5rem',
+              fontFamily: 'monospace',
+              color: '#66d9ef',
+              wordBreak: 'break-all'
+            }}>
+              {overwriteModalData.path}
+            </div>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '2rem',
+              fontSize: '1rem',
+              fontWeight: 'bold'
+            }}>
+              {overwriteModalData.type === 'case_id'
+                ? 'Do you want to overwrite the existing job and continue?'
+                : 'Do you want to delete the existing directory and continue?'}
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={handleOverwriteCancel}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(244, 67, 54, 0.2)',
+                  border: '1px solid rgba(244, 67, 54, 0.5)',
+                  borderRadius: '4px',
+                  color: '#f44336',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.2)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleOverwriteConfirm}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(255, 152, 0, 0.3)',
+                  border: '1px solid rgba(255, 152, 0, 0.5)',
+                  borderRadius: '4px',
+                  color: '#ff9800',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(255, 152, 0, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(255, 152, 0, 0.3)';
+                }}
+              >
+                Overwrite and Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2>New Forensic Analysis</h2>
 
@@ -222,9 +450,9 @@ function NewAnalysis() {
                   Please enter a valid case number to select analysis mode.
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '1rem', marginTop: '1.0rem' }}>
+              <div style={{ display: 'flex', gap: '3rem', marginTop: '1.0rem' }}>
                 <label
-                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, flex: '0 0 40%', fontSize: '1.4rem' }}
+                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
                   title="Disk/Memory Images"
                 >
                   <input
@@ -234,12 +462,12 @@ function NewAnalysis() {
                     checked={analysisMode === 'local'}
                     onChange={(e) => setAnalysisMode(e.target.value)}
                     disabled={!isCaseNumberValid}
-                    style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
+                    style={{ marginLeft: '1rem', marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
                   Local Analysis
                 </label>
                 <label
-                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, flex: '0 0 40%', fontSize: '1.4rem' }}
+                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
                   title="Gandalf Acquisition Jobs"
                 >
                   <input
@@ -251,7 +479,7 @@ function NewAnalysis() {
                     disabled={!isCaseNumberValid}
                     style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
-                  Gandalf Jobs
+                  Gandalf Acquisition
                 </label>
               </div>
             </div>
@@ -259,7 +487,7 @@ function NewAnalysis() {
 
           <div className="form-group">
             <label>
-              {analysisMode === 'local' ? 'Select Disk/Memory Images *' : 'Select Gandalf Jobs *'}
+              {analysisMode === 'local' ? 'Select Disk/Memory Images *' : 'Select Gandalf Acquisitions *'}
             </label>
             {!isCaseNumberValid && (
               <div className="info-message">
@@ -288,10 +516,16 @@ function NewAnalysis() {
                 Please enter a valid case number to configure processing options.
               </div>
             )}
+            {isCaseNumberValid && selectedFiles.length === 0 && (
+              <div className="info-message">
+                Please select at least one disk or memory image to configure processing options.
+              </div>
+            )}
             <OptionsPanel
               options={options}
               onChange={handleOptionsChange}
-              disabled={!isCaseNumberValid}
+              disabled={!isCaseNumberValid || selectedFiles.length === 0}
+              hasImages={selectedFiles.length > 0}
               onSubmit={handleSubmit}
               loading={loading}
               error={error}

@@ -20,13 +20,13 @@ function GandalfJobBrowser({ onSelectJobs, selectedJobs, disabled = false }) {
     try {
       const items = await browsePath(path);
 
-      // Filter to show only directories (Gandalf jobs are directories)
+      // Filter to show only directories (Gandalf acquisitions are directories)
       const directories = items.filter(item => item.is_directory && item.name !== '..');
 
       setJobs(directories);
     } catch (err) {
       // Check if it's a "path not found" or "access denied" error
-      const errorMsg = err.response?.data?.detail || 'Failed to load Gandalf jobs';
+      const errorMsg = err.response?.data?.detail || 'Failed to load Gandalf acquisitions';
 
       // If the directory doesn't exist, don't show it as an error
       if (errorMsg.includes('Path not found') || errorMsg.includes('not found')) {
@@ -142,7 +142,7 @@ function GandalfJobBrowser({ onSelectJobs, selectedJobs, disabled = false }) {
 
       {selectedJobs.length > 0 && (
         <div className="selected-jobs">
-          <h4>Selected Gandalf Jobs ({selectedJobs.length}):</h4>
+          <h4>Selected Gandalf Acquisitions ({selectedJobs.length}):</h4>
           <ul>
             {selectedJobs.map((jobPath) => (
               <li key={jobPath}>

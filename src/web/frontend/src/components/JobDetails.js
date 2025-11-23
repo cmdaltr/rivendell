@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getJob, cancelJob, deleteJob } from '../api';
 
@@ -11,6 +11,9 @@ function JobDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const logEndRef = useRef(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     loadJob();
@@ -18,6 +21,13 @@ function JobDetails() {
     const interval = setInterval(loadJob, 3000);
     return () => clearInterval(interval);
   }, [jobId]);
+
+  // Auto-scroll to bottom of log when it updates
+  useEffect(() => {
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [job?.log]);
 
   const loadJob = async () => {
     try {
@@ -31,11 +41,12 @@ function JobDetails() {
     }
   };
 
-  const handleCancel = async () => {
-    if (!window.confirm('Are you sure you want to cancel this job?')) {
-      return;
-    }
+  const handleCancel = () => {
+    setShowCancelModal(true);
+  };
 
+  const handleCancelConfirm = async () => {
+    setShowCancelModal(false);
     setActionLoading(true);
     try {
       await cancelJob(jobId);
@@ -47,11 +58,12 @@ function JobDetails() {
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('Are you sure you want to delete this job? This cannot be undone.')) {
-      return;
-    }
+  const handleDelete = () => {
+    setShowDeleteModal(true);
+  };
 
+  const handleDeleteConfirm = async () => {
+    setShowDeleteModal(false);
     setActionLoading(true);
     try {
       await deleteJob(jobId);
@@ -171,6 +183,208 @@ function JobDetails() {
 
   return (
     <div className="job-details journey-detail">
+      {/* Cancel Job Modal */}
+      {showCancelModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15, 15, 35, 0.98) 0%, rgba(25, 25, 45, 0.98) 100%)',
+            border: '2px solid rgba(240, 219, 165, 0.5)',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '500px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
+          }}>
+            <h3 style={{
+              color: '#ffc107',
+              marginBottom: '1rem',
+              fontFamily: "'Cinzel', 'Times New Roman', serif",
+              fontSize: '1.5rem',
+              textAlign: 'center'
+            }}>
+              ⚠️ Cancel Job
+            </h3>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '2rem',
+              fontSize: '1rem',
+              textAlign: 'center'
+            }}>
+              Are you sure you want to cancel this job?
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={() => setShowCancelModal(false)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(107, 142, 63, 0.3)',
+                  border: '1px solid rgba(107, 142, 63, 0.5)',
+                  borderRadius: '4px',
+                  color: '#a7db6c',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(107, 142, 63, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(107, 142, 63, 0.3)';
+                }}
+              >
+                No, Keep Job
+              </button>
+              <button
+                onClick={handleCancelConfirm}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(244, 67, 54, 0.3)',
+                  border: '1px solid rgba(244, 67, 54, 0.5)',
+                  borderRadius: '4px',
+                  color: '#f44336',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.3)';
+                }}
+              >
+                Yes, Cancel Job
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Job Modal */}
+      {showDeleteModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15, 15, 35, 0.98) 0%, rgba(25, 25, 45, 0.98) 100%)',
+            border: '2px solid rgba(240, 219, 165, 0.5)',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '500px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
+          }}>
+            <h3 style={{
+              color: '#ffc107',
+              marginBottom: '1rem',
+              fontFamily: "'Cinzel', 'Times New Roman', serif",
+              fontSize: '1.5rem',
+              textAlign: 'center'
+            }}>
+              ⚠️ Delete Job
+            </h3>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '1rem',
+              fontSize: '1rem',
+              textAlign: 'center'
+            }}>
+              Are you sure you want to delete this job?
+            </p>
+            <p style={{
+              color: '#f44336',
+              lineHeight: '1.8',
+              marginBottom: '2rem',
+              fontSize: '0.9rem',
+              textAlign: 'center',
+              fontWeight: 'bold'
+            }}>
+              This action cannot be undone.
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(107, 142, 63, 0.3)',
+                  border: '1px solid rgba(107, 142, 63, 0.5)',
+                  borderRadius: '4px',
+                  color: '#a7db6c',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(107, 142, 63, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(107, 142, 63, 0.3)';
+                }}
+              >
+                No, Keep Job
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(244, 67, 54, 0.3)',
+                  border: '1px solid rgba(244, 67, 54, 0.5)',
+                  borderRadius: '4px',
+                  color: '#f44336',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.3)';
+                }}
+              >
+                Yes, Delete Job
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="hero-section">
         <img
           src={heroImage}
@@ -223,7 +437,7 @@ function JobDetails() {
 
         <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.8fr 0.8fr 0.8fr 1.6fr', gap: '1rem', marginBottom: '2rem' }}>
           <div className="info-item">
-            <strong>Case ID:</strong>
+            <strong>Case #:</strong>
             <span>{job.case_number}</span>
           </div>
           <div className="info-item">
@@ -311,6 +525,7 @@ function JobDetails() {
               {job.log.length > 0
                 ? job.log.join('\n')
                 : 'No log entries yet...'}
+              <div ref={logEndRef} />
             </pre>
           </div>
         </div>

@@ -44,12 +44,6 @@ def windows_users(
                 os.stat(regdest)
             except:
                 os.makedirs(regdest)
-            if verbosity != "":
-                print(
-                    "     Collecting 'NTUSER.DAT' registry hive for '{}' for {}...".format(
-                        each, vssimage
-                    )
-                )
             (
                 entry,
                 prnt,
@@ -58,8 +52,7 @@ def windows_users(
                 img.split("::")[0],
                 stage,
                 each,
-            ), " -> {} -> {} NTUSER.DAT registry hive from profile '{}'{} for '{}'".format(
-                datetime.now().isoformat().replace("T", " "),
+            ), " -> {} NTUSER.DAT registry hive from profile '{}'{} for '{}'".format(
                 stage,
                 each,
                 vsstext.replace("vss", "volume shadow copy #"),
@@ -84,12 +77,6 @@ def windows_users(
                 os.stat(regdest)
             except:
                 os.makedirs(regdest)
-            if verbosity != "":
-                print(
-                    "     Collecting 'UsrClass.dat' registry hive for '{}' for {}...".format(
-                        each, vssimage
-                    )
-                )
             (
                 entry,
                 prnt,
@@ -98,8 +85,7 @@ def windows_users(
                 img.split("::")[0],
                 stage,
                 each,
-            ), " -> {} -> {} UsrClass.dat registry hive from profile '{}'{} for '{}'".format(
-                datetime.now().isoformat().replace("T", " "),
+            ), " -> {} UsrClass.dat registry hive from profile '{}'{} for '{}'".format(
                 stage,
                 each,
                 vsstext.replace("vss", "volume shadow copy #"),
@@ -124,12 +110,6 @@ def windows_users(
                 os.stat(dest)
             except:
                 os.makedirs(dest)
-            if verbosity != "":
-                print(
-                    "     Collecting 'ConsoleHost_history.txt' PowerShell history for '{}' for {}...".format(
-                        each, vssimage
-                    )
-                )
             (
                 entry,
                 prnt,
@@ -138,8 +118,7 @@ def windows_users(
                 img.split("::")[0],
                 stage,
                 each,
-            ), " -> {} -> {} ConsoleHost_history.txt PowerShell history hive from profile '{}'{} for '{}'".format(
-                datetime.now().isoformat().replace("T", " "),
+            ), " -> {} ConsoleHost_history.txt PowerShell history hive from profile '{}'{} for '{}'".format(
                 stage,
                 each,
                 vsstext.replace("vss", "volume shadow copy #"),
@@ -164,12 +143,6 @@ def windows_users(
                 os.stat(clipdest)
             except:
                 os.makedirs(clipdest)
-            if verbosity != "":
-                print(
-                    "     Collecting clipboard artefacts for '{}' for {}...".format(
-                        each, vssimage
-                    )
-                )
             (
                 entry,
                 prnt,
@@ -178,8 +151,7 @@ def windows_users(
                 img.split("::")[0],
                 stage,
                 each,
-            ), " -> {} -> {} clipboard artefacts for profile '{}'{} for '{}'".format(
-                datetime.now().isoformat().replace("T", " "),
+            ), " -> {} clipboard artefacts for profile '{}'{} for '{}'".format(
                 stage,
                 each,
                 vsstext.replace("vss", "volume shadow copy #"),
@@ -264,12 +236,6 @@ def windows_users(
                 os.stat(jumpdest)
             except:
                 os.makedirs(jumpdest)
-            if verbosity != "":
-                print(
-                    "     Collecting jumplists for '{}' for {}...".format(
-                        each, vssimage
-                    )
-                )
             (
                 entry,
                 prnt,
@@ -278,8 +244,7 @@ def windows_users(
                 img.split("::")[0],
                 stage,
                 each,
-            ), " -> {} -> {} jumplist artefacts for profile '{}'{} for '{}'".format(
-                datetime.now().isoformat().replace("T", " "),
+            ), " -> {} jumplist artefacts for profile '{}'{} for '{}'".format(
                 stage,
                 each,
                 vsstext.replace("vss", "volume shadow copy #"),
@@ -377,12 +342,6 @@ def windows_users(
             if os.path.exists(item + each + "/Documents/Outlook Files/"):
                 mail_dirs.append(item + each + "/Documents/Outlook Files/")
             if len(mail_dirs) > 0:
-                if verbosity != "":
-                    print(
-                        "     Collecting Outlook artefacts for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -391,8 +350,7 @@ def windows_users(
                     img.split("::")[0],
                     stage,
                     each,
-                ), " -> {} -> {} outlook artefacts for '{}'{} for '{}'".format(
-                    datetime.now().isoformat().replace("T", " "),
+                ), " -> {} outlook artefacts for '{}'{} for '{}'".format(
                     stage,
                     each,
                     vsstext.replace(
@@ -445,12 +403,6 @@ def windows_users(
                 if os.path.exists(
                     item + each + "/AppData/Local/Microsoft/Edge/User Data/Default/"
                 ):
-                    if verbosity != "":
-                        print(
-                            "     Collecting Edge browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     (
                         entry,
                         prnt,
@@ -458,8 +410,7 @@ def windows_users(
                         datetime.now().isoformat(),
                         img.split("::")[0],
                         stage,
-                    ), " -> {} -> {} Edge artefacts{} for '{}'".format(
-                        datetime.now().isoformat().replace("T", " "),
+                    ), " -> {} Edge artefacts{} for '{}'".format(
                         stage,
                         vsstext.replace(
                             "vss",
@@ -501,12 +452,6 @@ def windows_users(
                 elif os.path.exists(
                     item + each + "/AppData/Local/Microsoft/Windows/History/"
                 ):
-                    if verbosity != "":
-                        print(
-                            "     Collecting Internet Explorer browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     (
                         entry,
                         prnt,
@@ -514,8 +459,7 @@ def windows_users(
                         datetime.now().isoformat(),
                         img.split("::")[0],
                         stage,
-                    ), " -> {} -> {} Internet Explorer artefacts{} for '{}'".format(
-                        datetime.now().isoformat().replace("T", " "),
+                    ), " -> {} Internet Explorer artefacts{} for '{}'".format(
                         stage,
                         vsstext.replace(
                             "vss",
@@ -565,12 +509,6 @@ def windows_users(
                                     pass
 
                 else:
-                    if verbosity != "":
-                        print(
-                            "     Collecting Temporary Internet Files for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     (
                         entry,
                         prnt,
@@ -578,8 +516,7 @@ def windows_users(
                         datetime.now().isoformat(),
                         img.split("::")[0],
                         stage,
-                    ), " -> {} -> {} Temporary Internet Files{} for '{}'".format(
-                        datetime.now().isoformat().replace("T", " "),
+                    ), " -> {} Temporary Internet Files{} for '{}'".format(
                         stage,
                         vsstext.replace(
                             "vss",
@@ -649,12 +586,6 @@ def windows_users(
                     )
                     > 0
                 ):
-                    if verbosity != "":
-                        print(
-                            "     Collecting Google Chrome browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     (
                         entry,
                         prnt,
@@ -662,8 +593,7 @@ def windows_users(
                         datetime.now().isoformat(),
                         img.split("::")[0],
                         stage,
-                    ), " -> {} -> {} Google Chrome artefacts{} for '{}'".format(
-                        datetime.now().isoformat().replace("T", " "),
+                    ), " -> {} Google Chrome artefacts{} for '{}'".format(
                         stage,
                         vsstext.replace(
                             "vss",
@@ -713,12 +643,6 @@ def windows_users(
                     )
                     > 0
                 ):
-                    if verbosity != "":
-                        print(
-                            "     Collecting Mozilla Firefox browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     (
                         entry,
                         prnt,
@@ -726,8 +650,7 @@ def windows_users(
                         datetime.now().isoformat(),
                         img.split("::")[0],
                         stage,
-                    ), " -> {} -> {} Mozilla Firefox artefacts{} for '{}'".format(
-                        datetime.now().isoformat().replace("T", " "),
+                    ), " -> {} Mozilla Firefox artefacts{} for '{}'".format(
                         stage,
                         vsstext.replace(
                             "vss",
@@ -773,12 +696,6 @@ def windows_users(
             except:
                 os.makedirs(userdest)
             if os.path.isdir(item + each):
-                if verbosity != "":
-                    print(
-                        "     Collecting user profile for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -787,8 +704,7 @@ def windows_users(
                     img.split("::")[0],
                     stage,
                     each,
-                ), " -> {} -> {} '{}' user profile{} for '{}'".format(
-                    datetime.now().isoformat().replace("T", " "),
+                ), " -> {} '{}' user profile{} for '{}'".format(
                     stage,
                     each,
                     vsstext.replace(

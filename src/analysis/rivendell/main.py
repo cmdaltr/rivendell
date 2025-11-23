@@ -72,6 +72,13 @@ def main(
     asciitext,
 ):
     partitions = []
+
+    # Print startup message immediately
+    print("Initializing Elrond DFIR Analysis...")
+    print(f"Case: {case}")
+    print(f"Mode: {'Collect' if collect else 'Gandalf' if gandalf else 'Reorganise'}")
+    sys.stdout.flush()
+
     # Only clear screen in interactive mode
     if not is_noninteractive():
         subprocess.Popen(["clear"])

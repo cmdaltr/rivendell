@@ -9,6 +9,20 @@ from rivendell.audit import write_audit_log_entry
 def extract_shimcache(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage
 ):
+    # Check if ShimCacheParser.py exists
+    shimcache_parser = "/usr/local/bin/ShimCacheParser.py"
+    if not os.path.exists(shimcache_parser):
+        entry, prnt = "{},{},{},'ShimCache (skipped - parser not found)'\n".format(
+            datetime.now().isoformat(),
+            vssimage.replace("'", ""),
+            stage,
+        ), " -> {} ShimCache for {} (skipped - ShimCacheParser.py not found)".format(
+            stage,
+            vssimage,
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        return
+
     with open(
         output_directory
         + img.split("::")[0]
@@ -21,15 +35,14 @@ def extract_shimcache(
             datetime.now().isoformat(),
             vssimage.replace("'", ""),
             stage,
-        ), " -> {} -> {} ShimCache for {}".format(
-            datetime.now().isoformat().replace("T", " "),
+        ), " -> {} ShimCache for {}".format(
             stage,
             vssimage,
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
         subprocess.Popen(
             [
-                "/usr/local/bin/ShimCacheParser.py",
+                shimcache_parser,
                 "-i",
                 output_directory
                 + img.split("::")[0]
