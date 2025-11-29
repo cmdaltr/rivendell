@@ -63,8 +63,17 @@ def collect_windows_artefacts(
                 dest = check_existence(item, dest, 1)
             try:
                 shutil.copy2(item, dest)
-            except:
-                pass
+                # Verify the file was copied successfully for $MFT and similar critical files
+                dest_file = os.path.join(dest, item.split("/")[-1])
+                if not os.path.exists(dest_file):
+                    if verbosity != "":
+                        print(f"     Warning: Failed to copy {item.split('/')[-1]} - file not found after copy")
+                elif os.path.getsize(dest_file) == 0:
+                    if verbosity != "":
+                        print(f"     Warning: {item.split('/')[-1]} copied but is empty (0 bytes)")
+            except Exception as e:
+                if verbosity != "":
+                    print(f"     Warning: Failed to copy {item.split('/')[-1]}: {e}")
         if item == mnt + "/Windows/inf/setupapi.dev.log":
             if verbosity != "":
                 print("     Collecting 'setupapi.dev.log' for {}...".format(vssimage))

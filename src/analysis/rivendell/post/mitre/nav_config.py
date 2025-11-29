@@ -12,14 +12,28 @@ def configure_navigator(verbosity, case, splunk, elastic, usercred, pswdcred):
     print(
         "    Mapping available artefacts to MITRE ATT&CK® navigator, please stand by..."
     )
+
+    # Check if credentials are available (None if Splunk/Elastic skipped in non-interactive mode)
+    if splunk and (usercred is None or pswdcred is None):
+        print("     No Splunk credentials available - skipping MITRE ATT&CK® Navigator mapping")
+        return ""
+    if elastic and (usercred is None or pswdcred is None):
+        print("     No Elastic credentials available - skipping MITRE ATT&CK® Navigator mapping")
+        return ""
+
     if splunk:
+        # Use remote Splunk host if configured, otherwise localhost
+        splunk_host = os.environ.get('SPLUNK_HOST', 'localhost')
+        splunk_port = os.environ.get('SPLUNK_PORT', '8089')
+        splunk_url = f"https://{splunk_host}:{splunk_port}/services/search/jobs"
+
         apiout = subprocess.Popen(
             [
                 "curl",
                 "-u",
                 "{}:{}".format(usercred.strip(), pswdcred.strip()),
                 "-k",
-                "https://localhost:8089/services/search/jobs",
+                splunk_url,
                 "-d",
                 "search=search index={} host=* mitre_technique!=- | stats count BY mitre_technique | fields - count".format(
                     case
@@ -30,6 +44,7 @@ def configure_navigator(verbosity, case, splunk, elastic, usercred, pswdcred):
         ).communicate()
         time.sleep(30)
         jobid = re.findall(r"<sid>(?P<sid>[^<]+)</sid>", str(apiout[0]))
+        results_url = f"https://{splunk_host}:{splunk_port}/services/search/jobs/{jobid[0]}/results/"
         searchout, foundtechniques = (
             subprocess.Popen(
                 [
@@ -37,9 +52,7 @@ def configure_navigator(verbosity, case, splunk, elastic, usercred, pswdcred):
                     "-u",
                     "{}:{}".format(usercred.strip(), pswdcred.strip()),
                     "-k",
-                    "https://localhost:8089/services/search/jobs/{}/results/".format(
-                        jobid[0]
-                    ),
+                    results_url,
                     "--get",
                 ],
                 stdout=subprocess.PIPE,

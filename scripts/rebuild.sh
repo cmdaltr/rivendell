@@ -1,66 +1,32 @@
 #!/bin/bash
-# Rivendell Docker Image Rebuild Script
-# This script rebuilds the Docker images to apply the latest changes
+# Rebuild and start Rivendell - removes old containers, rebuilds images, and starts fresh
 
-set -e  # Exit on error
+set -e
 
-echo "=========================================="
-echo "Rivendell Docker Image Rebuild"
-echo "=========================================="
+echo "Stopping and removing old Rivendell containers..."
+docker-compose down --remove-orphans 2>/dev/null || true
+
+# Force remove any lingering containers
+docker rm -f rivendell-splunk rivendell-elasticsearch rivendell-redis rivendell-navigator \
+    rivendell-backend rivendell-celery-worker rivendell-frontend rivendell-kibana 2>/dev/null || true
+
 echo ""
-
-# Stop all containers
-echo "Step 1/4: Stopping all containers..."
-docker-compose down
-echo "✓ Containers stopped"
-echo ""
-
-# Rebuild images (this will take 15-20 minutes)
-echo "Step 2/4: Rebuilding images (this may take 15-20 minutes)..."
-echo "           - Compiling apfs-fuse from source"
-echo "           - Installing Volatility3 with symbol tables"
-echo ""
+echo "Rebuilding Rivendell images..."
 docker-compose build --no-cache
-echo "✓ Images rebuilt"
-echo ""
 
-# Start services
-echo "Step 3/4: Starting services..."
+echo ""
+echo "Starting Rivendell..."
 docker-compose up -d
-echo "✓ Services started"
-echo ""
 
-# Wait for services to be ready
-echo "Waiting for services to initialize..."
-sleep 10
-
-# Verify installations
-echo "Step 4/4: Verifying installations..."
 echo ""
-
-echo "Checking apfs-fuse installation:"
-if docker exec rivendell-app which apfs-fuse > /dev/null 2>&1; then
-    echo "✓ apfs-fuse is installed at: $(docker exec rivendell-app which apfs-fuse)"
-else
-    echo "✗ apfs-fuse not found"
-fi
+echo "Rivendell is starting up!"
 echo ""
-
-echo "Checking Volatility3 installation:"
-if docker exec rivendell-app vol3 --help > /dev/null 2>&1; then
-    echo "✓ Volatility3 is installed and accessible via 'vol3'"
-else
-    echo "✗ Volatility3 not found"
-fi
+echo "Services:"
+echo "  Frontend:      http://localhost:5687"
+echo "  Backend API:   http://localhost:5688"
+echo "  Splunk:        http://localhost:7755  (admin/rivendell)"
+echo "  Kibana:        http://localhost:5601"
+echo "  Elasticsearch: http://localhost:9200"
+echo "  Navigator:     http://localhost:5602"
 echo ""
-
-echo "=========================================="
-echo "Rebuild Complete!"
-echo "=========================================="
-echo ""
-echo "Your Rivendell instance is now running with:"
-echo "  - apfs-fuse for macOS APFS filesystem support"
-echo "  - Volatility3 for memory analysis"
-echo ""
-echo "You can access the web interface at: http://localhost:3000"
-echo ""
+echo "View logs: docker-compose logs -f"

@@ -15,20 +15,73 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .config import settings
+try:
+    from .config import settings
+    # from .startup import startup  # Disabled - using file-based storage, not database
+    # from .auth.routes import router as auth_router  # Disabled temporarily - DB dependencies
+    # from .auth.security_utils import sanitize_case_number, sanitize_path  # Disabled temporarily
+    from .models.job import (
+        Job,
+        JobCreate,
+        JobListResponse,
+        JobStatus,
+        JobUpdate,
+        FileSystemItem,
+    )
+    from .storage import JobStorage
+    from .tasks import start_analysis
+except ImportError:
+    # Fallback for standalone execution
+    from config import settings
+    # from startup import startup  # Disabled - using file-based storage, not database
+    # from auth.routes import router as auth_router  # Disabled temporarily - DB dependencies
+    # from auth.security_utils import sanitize_case_number, sanitize_path  # Disabled temporarily
+    from models.job import (
+        Job,
+        JobCreate,
+        JobListResponse,
+        JobStatus,
+        JobUpdate,
+        FileSystemItem,
+    )
+    from storage import JobStorage
+    from tasks_docker import start_analysis
+
+# Temporary replacements for security_utils
+def sanitize_case_number(case_number: str) -> str:
+    """Basic sanitization of case number."""
+    return case_number.replace("/", "_").replace("\\", "_").replace("..", "")
+
+def sanitize_path(path: str, allowed_prefixes: List[str]) -> Optional[str]:
+    """
+    Sanitize and validate file path.
+
+    Args:
+        path: Path to validate
+        allowed_prefixes: List of allowed path prefixes
+
+    Returns:
+        Sanitized path if valid, None otherwise
+    """
+    if not path:
+        return None
+
+    # Resolve to absolute path to prevent traversal
+    try:
+        abs_path = os.path.abspath(path)
+    except (ValueError, OSError):
+        return None
+
+    # Check if path starts with any allowed prefix
+    for prefix in allowed_prefixes:
+        abs_prefix = os.path.abspath(prefix)
+        if abs_path.startswith(abs_prefix):
+            return abs_path
+
+    return None
 
 # Initialize logger
 logger = logging.getLogger(__name__)
-from .models.job import (
-    Job,
-    JobCreate,
-    JobListResponse,
-    JobStatus,
-    JobUpdate,
-    FileSystemItem,
-)
-from .storage import JobStorage
-from .tasks import start_analysis
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -48,6 +101,18 @@ app.add_middleware(
 
 # Initialize storage
 job_storage = JobStorage()
+
+
+# Startup event
+@app.on_event("startup")
+async def on_startup():
+    """Run startup tasks."""
+    # startup()  # Disabled - using file-based storage, not database
+    pass
+
+
+# Include authentication routes
+# app.include_router(auth_router)  # Disabled temporarily - DB dependencies
 
 
 @app.get("/")
@@ -159,13 +224,36 @@ async def create_job(job_request: JobCreate):
         Created job
     """
     try:
-        # Validate source paths exist
+        # Sanitize case number
+        case_number = sanitize_case_number(job_request.case_number)
+
+        # Validate and sanitize source paths
+        sanitized_source_paths = []
         for path in job_request.source_paths:
-            if not Path(path).exists():
+            # Sanitize path to prevent directory traversal
+            sanitized = sanitize_path(path, settings.allowed_paths)
+            if not sanitized:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied to path: {path}",
+                )
+            if not Path(sanitized).exists():
                 raise HTTPException(
                     status_code=400,
                     detail=f"Source path does not exist: {path}",
                 )
+            sanitized_source_paths.append(sanitized)
+
+        # Sanitize destination path if provided
+        destination_path = job_request.destination_path
+        if destination_path:
+            sanitized_dest = sanitize_path(destination_path, settings.allowed_paths)
+            if not sanitized_dest:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Access denied to destination path: {destination_path}",
+                )
+            destination_path = sanitized_dest
 
         # Validate option dependencies
         if job_request.options.navigator and not (job_request.options.splunk or job_request.options.elastic):
@@ -174,23 +262,12 @@ async def create_job(job_request: JobCreate):
                 detail="Navigator requires either Splunk or Elastic to be enabled. Please enable Splunk or Elastic, or disable Navigator.",
             )
 
-        # Check for duplicate case IDs (unless force_overwrite is set)
-        if not job_request.options.force_overwrite:
-            all_jobs = job_storage.list_jobs()
-            for existing_job in all_jobs:
-                if existing_job.case_number == job_request.case_number:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"A job with case ID '{job_request.case_number}' already exists. Please use a different case ID or delete the existing job first.",
-                    )
-
         # Generate job ID
         job_id = str(uuid.uuid4())
 
         # Set destination path - if not specified, create a directory named after the source file
-        destination_path = job_request.destination_path
-        if not destination_path and job_request.source_paths:
-            first_source = Path(job_request.source_paths[0])
+        if not destination_path and sanitized_source_paths:
+            first_source = Path(sanitized_source_paths[0])
             # Create output directory with same name as input file (e.g., /Volumes/USB/Disk.E01_output/)
             if first_source.is_file():
                 # Remove the file extension and add _output
@@ -211,8 +288,8 @@ async def create_job(job_request: JobCreate):
         # Create job
         job = Job(
             id=job_id,
-            case_number=job_request.case_number,
-            source_paths=job_request.source_paths,
+            case_number=case_number,
+            source_paths=sanitized_source_paths,
             destination_path=destination_path,
             options=job_request.options,
             status=JobStatus.PENDING,
@@ -222,8 +299,10 @@ async def create_job(job_request: JobCreate):
         # Save job
         job_storage.save_job(job)
 
-        # Start analysis task
-        start_analysis.delay(job_id)
+        # Start analysis task and store Celery task ID
+        task = start_analysis.delay(job_id)
+        job.celery_task_id = task.id
+        job_storage.save_job(job)
 
         return job
 
@@ -259,6 +338,34 @@ async def list_jobs(
 
         return JobListResponse(jobs=jobs, total=total)
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/validate/case-id/{case_id}")
+async def validate_case_id(case_id: str):
+    """
+    Check if a case ID already exists.
+
+    Args:
+        case_id: Case ID to check
+
+    Returns:
+        {"exists": bool, "jobs": [list of matching job IDs]}
+    """
+    try:
+        all_jobs = job_storage.list_jobs()
+        matching_jobs = [
+            {"id": job.id, "status": job.status, "created_at": job.created_at}
+            for job in all_jobs
+            if job.case_number == case_id
+        ]
+
+        return {
+            "exists": len(matching_jobs) > 0,
+            "case_id": case_id,
+            "jobs": matching_jobs
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -392,8 +499,13 @@ async def cancel_job(job_id: str):
         if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
             raise HTTPException(
                 status_code=400,
-                detail="Can only cancel pending or running jobs",
+                detail=f"Job already {job.status.value} - can only cancel pending or running jobs",
             )
+
+        # Revoke Celery task if it exists
+        if job.celery_task_id:
+            from celery import current_app
+            current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGKILL')
 
         # Update job status
         job.status = JobStatus.CANCELLED
@@ -403,6 +515,414 @@ async def cancel_job(job_id: str):
         job_storage.save_job(job)
 
         return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/restart")
+async def restart_job(job_id: str):
+    """
+    Restart a failed or cancelled job.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status not in [JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.COMPLETED]:
+            raise HTTPException(
+                status_code=400,
+                detail="Can only restart failed, cancelled, or completed jobs",
+            )
+
+        # Reset job state
+        job.status = JobStatus.PENDING
+        job.progress = 0
+        job.error = None
+        job.started_at = None
+        job.completed_at = None
+        job.log.append(f"[{datetime.now().isoformat()}] Job restarted by user")
+
+        job_storage.save_job(job)
+
+        # Start new analysis task
+        task = start_analysis.delay(job_id)
+        job.celery_task_id = task.id
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/bulk/cancel")
+async def bulk_cancel_jobs(job_ids: list[str]):
+    """
+    Cancel multiple jobs at once.
+
+    Args:
+        job_ids: List of job IDs to cancel
+
+    Returns:
+        Results for each job
+    """
+    try:
+        results = []
+        from celery import current_app
+
+        for job_id in job_ids:
+            job = job_storage.get_job(job_id)
+
+            if not job:
+                results.append({"job_id": job_id, "success": False, "error": "Job not found"})
+                continue
+
+            if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
+                results.append({"job_id": job_id, "success": False, "error": f"Job already {job.status.value}"})
+                continue
+
+            # Revoke Celery task if it exists
+            if job.celery_task_id:
+                current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGKILL')
+
+            # Update job status
+            job.status = JobStatus.CANCELLED
+            job.completed_at = datetime.now()
+            job.log.append(f"[{datetime.now().isoformat()}] Job cancelled by user (bulk operation)")
+
+            job_storage.save_job(job)
+            results.append({"job_id": job_id, "success": True})
+
+        return {"results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/bulk/delete")
+async def bulk_delete_jobs(job_ids: list[str]):
+    """
+    Delete multiple completed/failed/cancelled jobs at once.
+
+    Args:
+        job_ids: List of job IDs to delete
+
+    Returns:
+        Results for each job
+    """
+    try:
+        results = []
+
+        for job_id in job_ids:
+            job = job_storage.get_job(job_id)
+
+            if not job:
+                results.append({"job_id": job_id, "success": False, "error": "Job not found"})
+                continue
+
+            if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+                results.append({"job_id": job_id, "success": False, "error": "Cannot delete running job"})
+                continue
+
+            job_storage.delete_job(job_id)
+            results.append({"job_id": job_id, "success": True})
+
+        return {"results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/archive")
+async def archive_job(job_id: str):
+    """
+    Archive a completed, failed, or cancelled job.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot archive pending or running jobs",
+            )
+
+        if job.status == JobStatus.ARCHIVED:
+            raise HTTPException(
+                status_code=400,
+                detail="Job is already archived",
+            )
+
+        # Update job status to archived
+        job.status = JobStatus.ARCHIVED
+        job.log.append(f"[{datetime.now().isoformat()}] Job archived by user")
+
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/unarchive")
+async def unarchive_job(job_id: str):
+    """
+    Unarchive a job, restoring it to its previous status.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status != JobStatus.ARCHIVED:
+            raise HTTPException(
+                status_code=400,
+                detail="Job is not archived",
+            )
+
+        # Determine status to restore to based on job state
+        if job.error:
+            job.status = JobStatus.FAILED
+        elif job.completed_at:
+            job.status = JobStatus.COMPLETED
+        else:
+            job.status = JobStatus.CANCELLED
+
+        job.log.append(f"[{datetime.now().isoformat()}] Job unarchived by user")
+
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/bulk/archive")
+async def bulk_archive_jobs(job_ids: list[str]):
+    """
+    Archive multiple jobs at once.
+
+    Args:
+        job_ids: List of job IDs to archive
+
+    Returns:
+        Results for each job
+    """
+    try:
+        results = []
+
+        for job_id in job_ids:
+            job = job_storage.get_job(job_id)
+
+            if not job:
+                results.append({"job_id": job_id, "success": False, "error": "Job not found"})
+                continue
+
+            if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+                results.append({"job_id": job_id, "success": False, "error": "Cannot archive running job"})
+                continue
+
+            if job.status == JobStatus.ARCHIVED:
+                results.append({"job_id": job_id, "success": False, "error": "Already archived"})
+                continue
+
+            job.status = JobStatus.ARCHIVED
+            job.log.append(f"[{datetime.now().isoformat()}] Job archived by user (bulk operation)")
+            job_storage.save_job(job)
+            results.append({"job_id": job_id, "success": True})
+
+        return {"results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/bulk/restart")
+async def bulk_restart_jobs(job_ids: list[str]):
+    """
+    Restart multiple failed, cancelled, or completed jobs at once.
+
+    Args:
+        job_ids: List of job IDs to restart
+
+    Returns:
+        Results for each job
+    """
+    try:
+        results = []
+
+        for job_id in job_ids:
+            job = job_storage.get_job(job_id)
+
+            if not job:
+                results.append({"job_id": job_id, "success": False, "error": "Job not found"})
+                continue
+
+            if job.status not in [JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.COMPLETED]:
+                results.append({"job_id": job_id, "success": False, "error": "Can only restart failed, cancelled, or completed jobs"})
+                continue
+
+            # Reset job state
+            job.status = JobStatus.PENDING
+            job.progress = 0
+            job.error = None
+            job.started_at = None
+            job.completed_at = None
+            job.log.append(f"[{datetime.now().isoformat()}] Job restarted by user (bulk operation)")
+            job_storage.save_job(job)
+
+            # Start new analysis task
+            task = start_analysis.delay(job_id)
+            job.celery_task_id = task.id
+            job_storage.save_job(job)
+
+            results.append({"job_id": job_id, "success": True})
+
+        return {"results": results}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/export-siem")
+async def trigger_siem_export(job_id: str):
+    """
+    Manually trigger SIEM export for a completed job.
+
+    This is useful for jobs that completed before automatic SIEM export was implemented,
+    or to re-run SIEM export if it failed.
+
+    Args:
+        job_id: Job ID to export
+
+    Returns:
+        Export status
+    """
+    from .tasks import run_siem_export
+    from pathlib import Path
+    import logging
+
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status != JobStatus.COMPLETED:
+            raise HTTPException(status_code=400, detail="Can only export SIEM data for completed jobs")
+
+        # Check if SIEM options are enabled
+        opts = job.options
+        if not (opts.splunk or opts.elastic or opts.navigator):
+            raise HTTPException(status_code=400, detail="Job does not have SIEM export enabled")
+
+        # Get output directory
+        if job.destination_path:
+            dest_dir = Path(job.destination_path)
+        elif job.result and job.result.get("output_directory"):
+            dest_dir = Path(job.result["output_directory"])
+        else:
+            raise HTTPException(status_code=400, detail="Cannot determine output directory for job")
+
+        if not dest_dir.exists():
+            raise HTTPException(status_code=400, detail=f"Output directory does not exist: {dest_dir}")
+
+        # Log the manual export trigger
+        job.log.append(f"[{datetime.now().isoformat()}] -> Manual SIEM export triggered by user")
+        job.log.append(f"[{datetime.now().isoformat()}] -> ")
+        job.log.append(f"[{datetime.now().isoformat()}] -> ======== COMMENCING SIEM EXPORT ========")
+        job.log.append(f"[{datetime.now().isoformat()}] -> ")
+        job_storage.save_job(job)
+
+        # Run SIEM export
+        logger = logging.getLogger(__name__)
+        run_siem_export(job, dest_dir, logger)
+
+        job.log.append(f"[{datetime.now().isoformat()}] -> ")
+        job.log.append(f"[{datetime.now().isoformat()}] -> ======== SIEM EXPORT COMPLETED ========")
+        job.log.append(f"[{datetime.now().isoformat()}] -> ")
+        job_storage.save_job(job)
+
+        return {"success": True, "message": "SIEM export completed successfully"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        if job:
+            job.log.append(f"[{datetime.now().isoformat()}] -> ❌ Manual SIEM export failed: {e}")
+            job_storage.save_job(job)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/jobs/{job_id}/navigator")
+async def get_navigator_json(job_id: str):
+    """
+    Get the MITRE ATT&CK Navigator JSON file for a job.
+    """
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+
+    try:
+        job = job_storage.get_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Get output directory
+        if job.result and "output_directory" in job.result:
+            output_dir = Path(job.result["output_directory"])
+        elif job.destination_path:
+            output_dir = Path(job.destination_path)
+        else:
+            raise HTTPException(status_code=404, detail="Job output directory not found")
+
+        # Search for navigator JSON file
+        navigator_files = list(output_dir.rglob("*navigator*.json"))
+
+        if not navigator_files:
+            raise HTTPException(status_code=404, detail="Navigator JSON file not found")
+
+        # Return the first navigator file found
+        nav_file = navigator_files[0]
+        return FileResponse(
+            path=str(nav_file),
+            media_type="application/json",
+            filename=nav_file.name
+        )
 
     except HTTPException:
         raise

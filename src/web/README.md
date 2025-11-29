@@ -13,7 +13,7 @@ A modern web application for the Elrond Digital Forensics Acceleration Suite. Th
 - **RESTful API**: Programmatic access to all features
 
 ### 🔧 Analysis Options Supported
-- **Operation Modes**: Collect, Gandalf, Reorganise, Process
+- **Operation Modes**: Collect, Gandalf, Process
 - **Collection**: User profiles, VSS, files, symlinks
 - **Analysis**: Automated analysis, IOC extraction, timelines
 - **Memory**: Volatility analysis, memory timelines
@@ -66,8 +66,11 @@ elrond-web/
 
 4. **Access the application**:
    - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+   - Backend API: http://localhost:5688
+   - API Docs: http://localhost:5688/docs
+   - Splunk: http://localhost:7755 (username: admin, password: rivendell)
+   - Kibana: http://localhost:5601
+   - Elasticsearch: http://localhost:9200
 
 5. **View logs**:
    ```bash
@@ -150,7 +153,7 @@ elrond-web/
    - Navigate through option categories using the tabs
    - Check/uncheck options as needed
    - Use "Enable All" or "Disable All" for quick configuration
-   - **Important**: At least one operation mode (Collect/Gandalf/Reorganise) must be selected
+   - **Important**: At least one operation mode (Collect or Gandalf) must be selected
 5. **Optional**: Specify destination directory (defaults to output directory)
 6. **Click "Start Analysis"**
 
@@ -172,6 +175,23 @@ On the job details page, you can:
 - Cancel running jobs
 - Delete completed jobs
 - Auto-updates every 3 seconds
+
+### SIEM Integration
+
+When SIEM export options (Splunk, Elastic, Navigator) are enabled:
+
+1. **Automatic Export**: After analysis completes, artifacts are automatically exported to selected SIEM platforms
+2. **Quick Access Links**: Click vendor icons to access SIEM dashboards:
+   - **Splunk**: Opens Splunk Web UI (http://localhost:7755)
+   - **Elastic**: Opens Kibana dashboard (http://localhost:5601)
+   - **Navigator**: Downloads MITRE ATT&CK Navigator JSON file for upload to the Navigator
+3. **Job Logs**: View detailed SIEM export progress in the job log
+
+**SIEM Credentials:**
+- Splunk: username `admin`, password `rivendell`
+- Elasticsearch/Kibana: username `elastic`, password `rivendell`
+
+**Note**: Navigator JSON files can be uploaded to https://mitre-attack.github.io/attack-navigator/ for visualization
 
 ## API Documentation
 
@@ -266,6 +286,25 @@ docker-compose logs celery-worker
 # Restart worker
 docker-compose restart celery-worker
 ```
+
+**Problem**: SIEM export not working
+```bash
+# Check if SIEM services are running
+docker ps | grep -E "splunk|elastic|kibana"
+
+# Restart SIEM services
+docker-compose restart splunk elasticsearch kibana
+
+# Check SIEM export logs
+docker-compose logs celery-worker | grep -i siem
+```
+
+**Problem**: Cannot access Splunk/Kibana
+- Verify services are running: `docker ps`
+- Check correct ports:
+  - Splunk: http://localhost:7755
+  - Kibana: http://localhost:5601
+- Wait for services to fully start (can take 1-2 minutes)
 
 ### Frontend Issues
 

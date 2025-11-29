@@ -306,7 +306,12 @@ def process_artefacts(
                 jsondict,
                 jsonlist,
             )
-        elif artefact.endswith("index.dat") and os.stat(artefact).st_size > 32768:
+        elif artefact.endswith("index.dat"):
+            # Process IE index.dat files regardless of size
+            # (removed arbitrary 32KB threshold that was skipping small history files)
+            file_size = os.stat(artefact).st_size
+            if verbosity != "" and file_size <= 32768:
+                print(f"  -> processing small IE index.dat ({file_size} bytes): {artefact.split('/')[-1]}")
             process_browser_index(
                 verbosity,
                 vssimage,

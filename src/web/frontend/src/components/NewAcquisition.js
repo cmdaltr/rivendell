@@ -406,8 +406,8 @@ function NewAcquisition() {
         destination_path: destinationPath || null,
         host_os: hostOS,
         script_language: scriptLanguage,
-        hostname: hostname || null,
-        ip_address: ipAddress || null,
+        hostname: hostnames || null,
+        ip_address: ipAddresses || null,
         collection_options: collectionOptions,
       });
 

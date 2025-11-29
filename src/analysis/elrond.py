@@ -18,26 +18,22 @@ parser.add_argument(
     help="Source directory where the artefact files are located; Optional: Provide a destination directory (default is current directory)",
 )
 parser.add_argument(
-    "-K",
     "--Keywords",
     nargs=1,
-    help="Search for keywords throughout image and artefacts based on provided Keyword File; Example syntax: -K /path/to/keyword_file.txt",
+    help="Search for keywords throughout image and artefacts based on provided Keyword File; Example syntax: --Keywords /path/to/keyword_file.txt",
 )
 parser.add_argument(
-    "-Y",
     "--Yara",
     nargs=1,
-    help="Run Yara signatures against all files on disk image or just collected files; Example syntax: -Y /path/to/directory_of_yara_files",
+    help="Run Yara signatures against all files on disk image or just collected files; Example syntax: --Yara /path/to/directory_of_yara_files",
 )
 parser.add_argument(
-    "-F",
     "--collectFiles",
     nargs="?",
-    help="Collect files from disk including binaries, documents, scripts etc.; Optional: Provide an inclusion/exclusion file; Example syntax: -F include:/path/to/include_file.txt",
+    help="Collect files from disk including binaries, documents, scripts etc.; Optional: Provide an inclusion/exclusion file; Example syntax: --collectFiles include:/path/to/include_file.txt",
     const=True,
 )
 parser.add_argument(
-    "-A",
     "--Analysis",
     help="Conduct 'automated forensic analysis' for disk artefacts; Extended Attributes; Alternate Data Streams; Timestomping",
     action="store_const",
@@ -45,23 +41,13 @@ parser.add_argument(
     default=False,
 )  # outstanding - Out-of-Sequence Windows-based file activity
 parser.add_argument(
-    "-a",
-    "--auto",
-    help="Automatic mode - minimal prompting when mounting disk images",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
-    "-B",
     "--Brisk",
-    help="'Brisk Mode.' Invokes -AacINPQqU. You MUST provide either -C (--collect), -G (--gandalf) or -O (--reorganise) depending on whether you've acquired disk images, leveraged gandalf or seperately acquired artefacts, respectively.",
+    help="'Brisk Mode.' Invokes Analysis, clamaV, extractIocs, Navigator, Process, superQuick, quick, and Userprofiles. You MUST provide either --Collect, --Gandalf or --Reorganise depending on whether you've acquired disk images, leveraged gandalf or seperately acquired artefacts, respectively.",
     action="store_const",
     const=True,
     default=False,
 )
 parser.add_argument(
-    "-C",
     "--Collect",
     help="Collect artefacts from disk image (artefacts have NOT been collected seperately)",
     action="store_const",
@@ -69,7 +55,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-c",
     "--vss",
     help="Collect & process artefacts on Volume Shadow Copies (if available)",
     action="store_const",
@@ -77,7 +62,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-D",
     "--Delete",
     help="Delete raw data after processing",
     action="store_const",
@@ -85,7 +69,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-E",
     "--Elastic",
     help="Output data and index into local Elastic instance",
     action="store_const",
@@ -93,7 +76,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-G",
     "--Gandalf",
     help="Read artefacts acquired using gandalf",
     action="store_const",
@@ -101,7 +83,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-I",
     "--extractIocs",
     help="Extract IOCs from processed files collected from disk; WARNING: This can take a long time!",
     action="store_const",
@@ -109,7 +90,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-i",
     "--imageinfo",
     help="Obtain E01 disk image metadata and information including acquired date/time; disk size, ID & sector sizes",
     action="store_const",
@@ -117,7 +97,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-l",
     "--lotr",
     help="Show Tolkien-themed ASCII art upon running elrond",
     action="store_const",
@@ -125,7 +104,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-M",
     "--Memory",
     help="Collect, process and analyse memory image using Volatility Framework",
     action="store_const",
@@ -133,7 +111,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-m",
     "--metacollected",
     help="Only hash artefacts which have been collected, processed & analysed (if applicable) and extract metadata from collected files (if applicable)",
     action="store_const",
@@ -141,15 +118,13 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-N",
     "--Navigator",
-    help="Map identified artefacts to MITRE ATT&CK® navigator (requires Splunk (-S) flag)",
+    help="Map identified artefacts to MITRE ATT&CK® navigator (requires --Splunk flag)",
     action="store_const",
     const=True,
     default=False,
 )
 parser.add_argument(
-    "-n",
     "--nsrl",
     help="Compare hashes against known-goods from NSRL database; connection to Internet required",
     action="store_const",
@@ -157,7 +132,27 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-P",
+    "--magicBytes",
+    help="Verify file signatures against magic bytes",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
+    "--hashCollected",
+    help="Hash only collected/processed artefacts and related metadata",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
+    "--hashAll",
+    help="Hash all files on mounted image(s) and collected artefacts",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
     "--Process",
     help="Process disk artefacts which have been collected",
     action="store_const",
@@ -165,7 +160,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-Q",
     "--superQuick",
     help="Super Quick mode. Do NOT obtain last access & creation times, hash files, perform entropy analysis or extract metadata; WARNING: Not invoking this flag can take a long time!",
     action="store_const",
@@ -173,7 +167,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-q",
     "--quick",
     help="Quick mode. Obtain last access & creation times but do NOT hash files, perform entropy analysis or extract metadata; WARNING: Not invoking this flag can take a long time!",
     action="store_const",
@@ -181,7 +174,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-R",
     "--Reorganise",
     help="Reorganise artefacts NOT collected using gandalf",
     action="store_const",
@@ -189,7 +181,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-S",
     "--Splunk",
     help="Output data and index into local Splunk instance",
     action="store_const",
@@ -197,7 +188,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-s",
     "--symlinks",
     help="Copy contents of folders, including following full paths of symbolic links; WARNING: This can take a long time!",
     action="store_const",
@@ -205,7 +195,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-T",
     "--Timeline",
     help="Create Timeline of disk image using plaso; WARNING: This can take a VERY long time!",
     action="store_const",
@@ -213,7 +202,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-t",
     "--memorytimeline",
     help="Create Timeline of memory image using timeliner plugin; WARNING: This can take a long time!",
     action="store_const",
@@ -221,7 +209,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-U",
     "--Userprofiles",
     help="Collect user profile artefacts",
     action="store_const",
@@ -229,7 +216,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-u",
     "--unmount",
     help="Do not unmount, currently mounted images (in /mnt/elrond_mountXX)",
     action="store_const",
@@ -237,7 +223,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-V",
     "--clamaV",
     help="Run ClamAV against mounted image",
     action="store_const",
@@ -245,15 +230,13 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "-X",
     "--eXhaustive",
-    help="Exhaustive mode. Invoke all flags: -BDElMnSTtZ. You MUST provide either -C (--collect), -G (--gandalf) or -O (--reorganise) depending on whether you've acquired disk images, leveraged gandalf or seperately acquired artefacts, respectively.",
+    help="Exhaustive mode. Invoke all flags: Brisk, Delete, Elastic, lotr, Memory, nsrl, Splunk, Timeline, memorytimeline, and Ziparchive. You MUST provide either --Collect, --Gandalf or --Reorganise depending on whether you've acquired disk images, leveraged gandalf or seperately acquired artefacts, respectively.",
     action="store_const",
     const=True,
     default=False,
 )
 parser.add_argument(
-    "-Z",
     "--Ziparchive",
     help="Archive raw data as zip after processing",
     action="store_const",
@@ -265,7 +248,7 @@ args = parser.parse_args()
 directory = args.directory
 case = args.case
 analysis = args.Analysis
-auto = args.auto
+auto = True  # Always run in auto mode (non-interactive)
 brisk = args.Brisk
 collect = args.Collect
 vss = args.vss
@@ -281,6 +264,7 @@ volatility = args.Memory
 metacollected = args.metacollected
 navigator = args.Navigator
 nsrl = args.nsrl
+magicbytes = args.magicBytes
 process = args.Process
 superquick = args.superQuick
 quick = args.quick
@@ -299,7 +283,11 @@ archive = args.Ziparchive
 d = directory[0]
 case = case[0]
 cwd = os.getcwd()
-sha256 = hashlib.sha256()
+hashcollected = args.hashCollected
+hashall = args.hashAll
+hashing_enabled = hashcollected or hashall
+
+sha256 = hashlib.sha256() if hashing_enabled else None
 allimgs = {}
 flags = []
 elrond_mount = [
@@ -479,15 +467,14 @@ if __name__ == "__main__":
     if brisk:
         analysis = True
         auto = True
-        vss = True
-        extractiocs = True
+        # vss = True  # Don't override VSS - respect command line flag
+        # extractiocs = True  # Don't override extractIocs - respect command line flag
         metacollected = True
         navigator = True
         process = True
         superquick = True
         quick = True
         userprofiles = True
-        clamav = True
     veryverbose = True
     verbose = True
     main(
@@ -509,6 +496,9 @@ if __name__ == "__main__":
         metacollected,
         navigator,
         nsrl,
+        magicbytes,
+        hashall,
+        hashcollected,
         process,
         superquick,
         quick,

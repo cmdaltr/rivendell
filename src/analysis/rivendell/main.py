@@ -45,6 +45,9 @@ def main(
     metacollected,
     navigator,
     nsrl,
+    magicbytes,
+    hashall,
+    hashcollected,
     process,
     superquick,
     quick,
@@ -72,6 +75,7 @@ def main(
     asciitext,
 ):
     partitions = []
+    hashing_enabled = hashall or hashcollected
 
     # Print startup message immediately
     print("Initializing Elrond DFIR Analysis...")
@@ -154,6 +158,11 @@ def main(
     if not metacollected and nsrl and (superquick or quick):
         print(
             "\n\n  In order to use the NSRL switch (-H), you must either provide the metacollected switch (-o) - with or without the Superquick (-Q) and Quick Flags (-q).\n  Or, if not using the metacollected switch (-o), remove the Superquick (-Q) and Quick Flags (-q) altogether. Please try again.\n\n\n\n"
+        )
+        sys.exit()
+    if nsrl and not hashing_enabled:
+        print(
+            "\n\n  The NSRL switch (-H) requires hashing. Enable either --hashAll or --hashCollected to proceed.\n\n\n\n"
         )
         sys.exit()
     if yara:
@@ -266,7 +275,7 @@ def main(
                     "\n    You have three choices:\n     -> Specify a directory that exists\n     -> Confirm creation of a specified directory\n     -> Provide no output directory (cwd is default)\n\n  Please try again.\n  ----------------------------------------\n\n"
                 )
                 sys.exit()
-        output_directory = os.path.dirname(od) + "/"
+        output_directory = od
     else:
         output_directory = "./"
 
@@ -426,7 +435,7 @@ def main(
                 else:
                     wish_to_mount = "y"
                 if wish_to_mount != "n":
-                    if not superquick and not quick:
+                    if hashing_enabled and not superquick and not quick:
                         if not os.path.exists(output_directory + f + "/meta.audit"):
                             with open(
                                 output_directory + f + "/meta.audit", "w"
@@ -511,7 +520,7 @@ def main(
                 allimgs = {**allimgs, **ot}
                 print()
             elif volatility and ("data" in imgformat or "crash dump" in imgformat):
-                if not superquick and not quick:
+                if hashing_enabled and not superquick and not quick:
                     if not os.path.exists(output_directory + f + "/meta.audit"):
                         with open(
                             output_directory + f + "/meta.audit", "w"
@@ -632,6 +641,7 @@ def main(
             collect,
             process,
             analysis,
+            magicbytes,
             extractiocs,
             timeline,
             vss,
@@ -692,7 +702,7 @@ def main(
     if (
         len(allimgs) > 0
     ):  # Post-processing metadata, YARA, Splunk, Elastic, Archive, Deletion
-        if not superquick or metacollected:
+        if hashing_enabled and (not superquick or metacollected):
             safe_print(
                 "\n\n  -> \033[1;36mCommencing Metadata phase for proccessed artefacts...\033[1;m\n  ----------------------------------------"
             )
@@ -826,6 +836,10 @@ def main(
                 "  ----------------------------------------\n  -> Completed Yara Phase.\n"
             )
             time.sleep(1)
+
+        # Initialize credentials to None (will be set if Splunk/Elastic configured)
+        usercred, pswdcred = None, None
+
         if splunk:
             # Ensure Splunk is installed before configuring
             try:
@@ -838,17 +852,21 @@ def main(
             if not splunk_installed:
                 print("\n  \033[1;31mWARNING: Splunk is not installed. Skipping Splunk phase.\033[0m\n")
             else:
-                usercred, pswdcred = configure_splunk_stack(
-                    verbosity,
-                    output_directory,
-                    case,
-                    "splunk",
-                    allimgs,
-                )
-                flags.append("08splunk")
-                print(
-                    "  ----------------------------------------\n  -> Completed Splunk Phase.\n"
-                )
+                try:
+                    usercred, pswdcred = configure_splunk_stack(
+                        verbosity,
+                        output_directory,
+                        case,
+                        "splunk",
+                        allimgs,
+                    )
+                    flags.append("08splunk")
+                    print(
+                        "  ----------------------------------------\n  -> Completed Splunk Phase.\n"
+                    )
+                except Exception as e:
+                    # Silently skip - Splunk configuration handled by web backend
+                    pass
             time.sleep(1)
         if elastic:
             # Ensure Elasticsearch and Kibana are installed before configuring
@@ -864,23 +882,27 @@ def main(
             if not (es_installed and kb_installed):
                 print("\n  \033[1;31mWARNING: Elastic Stack is not fully installed. Skipping Elastic phase.\033[0m\n")
             else:
-                # Verify version match
-                match, match_msg = siem_installer.version_checker.check_elasticsearch_kibana_match()
-                if not match:
-                    print(f"\n  \033[1;33mWARNING: {match_msg}\033[0m")
-                    print("  \033[1;33mProceeding with caution...\033[0m\n")
+                try:
+                    # Verify version match
+                    match, match_msg = siem_installer.version_checker.check_elasticsearch_kibana_match()
+                    if not match:
+                        print(f"\n  \033[1;33mWARNING: {match_msg}\033[0m")
+                        print("  \033[1;33mProceeding with caution...\033[0m\n")
 
-                configure_elastic_stack(
-                    verbosity,
-                    output_directory,
-                    case,
-                    "elastic",
-                    allimgs,
-                )
-                flags.append("09elastic")
-                print(
-                    "  ----------------------------------------\n  -> Completed Elastic Phase.\n"
-                )
+                    configure_elastic_stack(
+                        verbosity,
+                        output_directory,
+                        case,
+                        "elastic",
+                        allimgs,
+                    )
+                    flags.append("09elastic")
+                    print(
+                        "  ----------------------------------------\n  -> Completed Elastic Phase.\n"
+                    )
+                except Exception as e:
+                    print(f"\n  \033[1;31mWARNING: Elastic configuration failed: {e}\033[0m")
+                    print("  -> Skipping Elastic phase.\n")
             time.sleep(1)
         if (splunk or elastic) and navigator:  # mapping to attack-navigator
             safe_print(
@@ -1066,7 +1088,7 @@ def main(
         print("       '{}'".format(doneimg))
         entry, prnt = "{},{},finished,'{}'-'{}': ({} seconds)".format(
             datetime.now().isoformat(), doneimg, st, et, totalsecs
-        ), " -> {} -> elrond completed for '{}'".format(
+        ), "[{}] -> elrond completed for '{}'".format(
             datetime.now().isoformat().replace("T", " "), doneimg
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)

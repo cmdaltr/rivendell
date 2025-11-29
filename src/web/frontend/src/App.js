@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import Home from './components/Home';
 import GandalfLanding from './components/GandalfLanding';
 import ElrondLanding from './components/ElrondLanding';
 import MordorLanding from './components/MordorLanding';
 import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
+import ForgotPasswordPage from './components/ForgotPasswordPage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 import HelpPage from './components/HelpPage';
 import AIAssistant from './components/AIAssistant';
 import JobList from './components/JobList';
@@ -12,40 +16,74 @@ import JobDetails from './components/JobDetails';
 import Archive from './components/Archive';
 import './App.css';
 
-function App() {
+function Navigation() {
+  const navigate = useNavigate();
+  const { user, logout, isAuthenticated } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  return (
+    <nav>
+      <div className="nav-left">
+        <Link to="/">Home</Link>
+        <Link to="/gandalf">Gandalf</Link>
+        <Link to="/elrond">Elrond</Link>
+        <Link to="/mordor">Mordor</Link>
+      </div>
+      <div className="nav-right">
+        {isAuthenticated ? (
+          <>
+            <span style={{ color: '#f0dba5', marginRight: '1rem' }}>
+              {user?.username || 'User'}
+            </span>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#f0dba5',
+                cursor: 'pointer',
+                fontSize: 'inherit',
+                padding: 0,
+              }}
+            >
+              Logout
+            </button>
+          </>
+        ) : (
+          <Link to="/login">Account</Link>
+        )}
+        <Link to="/jobs">Jobs</Link>
+        <Link to="/ai">Ask Eru (AI)</Link>
+        <Link to="/help">About</Link>
+      </div>
+    </nav>
+  );
+}
+
+function AppContent() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const mapBackground = `${process.env.PUBLIC_URL}/images/middle_earth.png`;
 
   return (
-    <Router>
-      <div
-        className="App"
-        style={{
-          backgroundImage: `url(${mapBackground})`,
-          backgroundSize: 'cover',
-          backgroundAttachment: 'fixed',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-          backgroundColor: 'rgba(15, 15, 35, 0.72)',
-          backgroundBlendMode: 'multiply',
-        }}
-      >
-        <header className="App-header">
-          <nav>
-            <div className="nav-left">
-              <Link to="/">Home</Link>
-              <Link to="/gandalf">Gandalf</Link>
-              <Link to="/elrond">Elrond</Link>
-              <Link to="/mordor">Mordor</Link>
-            </div>
-            <div className="nav-right">
-              <Link to="/login">Account</Link>
-              <Link to="/jobs">Jobs</Link>
-              <Link to="/ai">Ask Eru (AI)</Link>
-              <Link to="/help">About</Link>
-            </div>
-          </nav>
-        </header>
+    <div
+      className="App"
+      style={{
+        backgroundImage: `url(${mapBackground})`,
+        backgroundSize: 'cover',
+        backgroundAttachment: 'fixed',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: 'rgba(15, 15, 35, 0.72)',
+        backgroundBlendMode: 'multiply',
+      }}
+    >
+      <header className="App-header">
+        <Navigation />
+      </header>
 
         <main className="App-main">
           <Routes>
@@ -54,6 +92,9 @@ function App() {
             <Route path="/elrond" element={<ElrondLanding />} />
             <Route path="/mordor" element={<MordorLanding />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/ai" element={<AIAssistant />} />
             <Route path="/jobs" element={<JobList />} />
@@ -100,7 +141,16 @@ function App() {
             </a>
           </p>
         </footer>
-      </div>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }

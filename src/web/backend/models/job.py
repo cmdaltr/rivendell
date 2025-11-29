@@ -17,15 +17,16 @@ class JobStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    ARCHIVED = "archived"
 
 
 class AnalysisOptions(BaseModel):
     """Analysis options configuration."""
-    # Main operation modes
-    collect: bool = True  # Auto-enabled by default
-    gandalf: bool = False
-    local: bool = False
-    process: bool = True  # Auto-enabled by default
+    # Main operation modes (mutually exclusive)
+    # local: Collect artifacts from disk image and process (default)
+    # gandalf: Process pre-collected Gandalf artifacts (no collection)
+    local: bool = True  # Default mode - collect from disk image
+    gandalf: bool = False  # Alternative mode - process pre-collected artifacts
 
     # Analysis options
     analysis: bool = False
@@ -34,8 +35,14 @@ class AnalysisOptions(BaseModel):
     clamav: bool = False
     memory: bool = False
     memory_timeline: bool = False
+
+    # Advanced processing options
+    keywords: bool = False
     keywords_file: Optional[str] = None
+    yara: bool = False
     yara_dir: Optional[str] = None
+    collectFiles: bool = False
+    collectFiles_filter: Optional[str] = None
 
     # Speed/Quality modes (merged into analysis)
     brisk: bool = False
@@ -43,15 +50,14 @@ class AnalysisOptions(BaseModel):
     super_quick: bool = False
 
     # Collection options
-    collect_files: bool = False
-    collect_files_filter: Optional[str] = None
     vss: bool = False
     symlinks: bool = False
     userprofiles: bool = False
 
     # Verification options
     nsrl: bool = False
-    metacollected: bool = False
+    hash_collected: bool = False
+    hash_all: bool = False
     imageinfo: bool = False
 
     # Output options
@@ -87,6 +93,7 @@ class Job(BaseModel):
     log: list[str] = Field(default_factory=list, description="Job log messages")
     result: Optional[Dict[str, Any]] = Field(None, description="Job results")
     error: Optional[str] = Field(None, description="Error message if failed")
+    celery_task_id: Optional[str] = Field(None, description="Celery task ID for job control")
     created_at: datetime = Field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

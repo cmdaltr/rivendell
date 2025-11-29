@@ -88,6 +88,49 @@ configs = [
 
 
 def configure_elastic_stack(verbosity, output_directory, case, stage, allimgs):
+    # Check if we're using remote Elasticsearch (containerized environment)
+    elastic_host = os.environ.get('ELASTICSEARCH_HOST', '')
+    elastic_port = os.environ.get('ELASTICSEARCH_PORT', '9200')
+    use_remote_elastic = bool(elastic_host)
+
+    if use_remote_elastic:
+        # Remote Elasticsearch mode - containerized/external Elasticsearch instance
+        # This mode is for when Elasticsearch is running in a separate container/server
+        # and we can't directly write to its configuration files
+        elastic_user = os.environ.get('ELASTIC_USERNAME', 'elastic')
+        elastic_pswd = os.environ.get('ELASTIC_PASSWORD', '')
+
+        if not elastic_pswd:
+            entry, prnt = "{},{},remote elasticsearch configured but ELASTIC_PASSWORD not set".format(
+                datetime.now().isoformat(),
+                "elasticsearch",
+            ), " -> {} -> remote elasticsearch configured but ELASTIC_PASSWORD environment variable not set".format(
+                datetime.now().isoformat().replace("T", " ")
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+            print("\n     ERROR: ELASTIC_PASSWORD environment variable not set for remote Elasticsearch")
+            return
+
+        print(
+            "\n\n  -> \033[1;36mSkipping Elastic Phase (Remote Elasticsearch Mode)...\033[1;m\n  ----------------------------------------"
+        )
+        entry, prnt = "{},{},remote elasticsearch detected at {}:{} - skipping local configuration".format(
+            datetime.now().isoformat(),
+            "elasticsearch",
+            elastic_host,
+            elastic_port,
+        ), " -> {} -> remote elasticsearch detected at {}:{} - skipping local elasticsearch configuration phase".format(
+            datetime.now().isoformat().replace("T", " "),
+            elastic_host,
+            elastic_port
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        print("     Remote Elasticsearch configured at {}:{}".format(elastic_host, elastic_port))
+        print("     Note: Data indexing to remote Elasticsearch must be configured separately")
+        print("     Analysis artifacts available in: {}".format(output_directory))
+        return
+
+    # Local Elasticsearch mode (original code path)
     def replace_original_configs(configs):
         for config in configs:
             if os.path.exists(config):
@@ -104,6 +147,19 @@ def configure_elastic_stack(verbosity, output_directory, case, stage, allimgs):
     )
     time.sleep(1)
     if not os.path.exists("/usr/share/elasticsearch"):
+        # Check if running in non-interactive mode without Elasticsearch
+        from rivendell.utils import is_noninteractive
+        if is_noninteractive():
+            print("     elasticsearch is not installed and running in non-interactive mode - skipping Elasticsearch configuration")
+            entry, prnt = "{},{},elasticsearch not installed - skipping in non-interactive mode".format(
+                datetime.now().isoformat(),
+                "elasticsearch",
+            ), " -> {} -> elasticsearch not installed - skipping elasticsearch phase in non-interactive mode".format(
+                datetime.now().isoformat().replace("T", " ")
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+            return
+
         print("     elasticsearch is not configured, please stand by...")
         subprocess.Popen(
             ["sudo", "/bin/systemctl", "daemon-reload"],

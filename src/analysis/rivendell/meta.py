@@ -10,6 +10,9 @@ from rivendell.audit import write_audit_log_entry
 def extract_metadata(
     verbosity, output_directory, img, imgloc, stage, sha256, nsrl
 ):  # comment - do not meta file multiple times
+    # If hashing is disabled (sha256 is None), skip metadata extraction that requires hashing
+    if sha256 is None:
+        return
     for hr, _, hf in os.walk(imgloc):
         for intgfile in hf:
             metaimg, metapath, unknowngoods = (

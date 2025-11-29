@@ -1467,6 +1467,26 @@ def extract_registry_system(
     jsonlist,
     regjsonlist,
 ):
+    # Check if RegRipper (rip.pl) is available
+    import os
+    regripper_available = False
+    rip_pl_path = None
+    for rip_path in ["rip.pl", "/opt/elrond/elrond/tools/regripper/rip.pl", "/opt/elrond-src/tools/config/rip.pl"]:
+        try:
+            result = subprocess.run(["which", rip_path], capture_output=True, timeout=5)
+            if result.returncode == 0 or os.path.exists(rip_path):
+                regripper_available = True
+                rip_pl_path = rip_path
+                break
+        except:
+            pass
+
+    if not regripper_available:
+        # RegRipper not available - skip registry extraction
+        if verbosity != "":
+            print(f"     Warning: RegRipper not found, skipping registry extraction for {artefact.split('/')[-1]}")
+        return
+
     with open(
         output_directory
         + img.split("::")[0]
@@ -1477,23 +1497,28 @@ def extract_registry_system(
         + ".json",
         "a",
     ) as regjson:
-        rgrplistj, userinfo, sids = (
-            str(
-                subprocess.Popen(
-                    [
-                        "rip.pl",
-                        "-r",
-                        artefact,
-                        "-f",
-                        artefact.split("/")[-1].lower(),
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                ).communicate()[0]
-            )[2:-1],
-            [],
-            [],
-        )
+        try:
+            rgrplistj, userinfo, sids = (
+                str(
+                    subprocess.Popen(
+                        [
+                            rip_pl_path,
+                            "-r",
+                            artefact,
+                            "-f",
+                            artefact.split("/")[-1].lower(),
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).communicate()[0]
+                )[2:-1],
+                [],
+                [],
+            )
+        except Exception:
+            # RegRipper execution failed - skip
+            return
+
         jsonlist, regjsonlist = use_system_plugins(
             artefact, jsondict, jsonlist, regjsonlist, rgrplistj, userinfo, sids
         )

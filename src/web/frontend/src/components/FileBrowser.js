@@ -29,8 +29,8 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
       if (isWindows) {
         paths = ['C:\\Temp\\rivendell', 'D:\\Temp\\rivendell', 'E:\\Temp\\rivendell', 'F:\\Temp\\rivendell'];
       } else if (isMac) {
-        // Mac: native uses /tmp/rivendell, Docker uses /host/tmp/rivendell
-        paths = ['/Volumes', '/host/tmp/rivendell'];
+        // Mac: /host/tmp/rivendell for host /tmp access, /Volumes for external drives
+        paths = ['/host/tmp/rivendell', '/Volumes'];
       } else {
         // Linux: native uses /tmp/rivendell, Docker uses /host/tmp (for Docker on Mac)
         paths = ['/Volumes', '/mnt', '/media', '/tmp/rivendell'];

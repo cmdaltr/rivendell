@@ -58,6 +58,7 @@ RUN apt-get update && apt-get install -y \
     zip \
     bzip2 \
     xz-utils \
+    plocate \
     # Network tools
     curl \
     wget \
@@ -149,6 +150,13 @@ RUN pip3 install --no-cache-dir \
     oletools \
     pyopenssl
 
+# Install analyzeMFT for $MFT parsing - using standalone script version
+RUN cd /tmp && \
+    git clone https://github.com/rowingdude/analyzeMFT.git && \
+    cp analyzeMFT/analyzeMFT.py /usr/local/bin/analyzeMFT_standalone.py && \
+    chmod +x /usr/local/bin/analyzeMFT_standalone.py && \
+    rm -rf analyzeMFT
+
 # Install additional analysis tools (rekall-core removed due to Python 2 incompatibility)
 RUN pip3 install --no-cache-dir \
     libscca-python \
@@ -184,6 +192,27 @@ RUN pip3 install --no-cache-dir \
     matplotlib \
     openpyxl \
     xlrd
+
+# Install Splunk (pinned) and Elastic (8.x) during build
+# Splunk direct download requires a concrete version/build; using 9.1.1 here.
+ARG SPLUNK_VERSION=9.1.1
+ARG SPLUNK_BUILD=64e843ea36b1
+ARG SPLUNK_TGZ_URL=https://download.splunk.com/products/splunk/releases/${SPLUNK_VERSION}/linux/splunk-${SPLUNK_VERSION}-${SPLUNK_BUILD}-Linux-x86_64.tgz
+RUN set -eux; \
+    cd /tmp; \
+    curl -L -o splunk.tgz "$SPLUNK_TGZ_URL"; \
+    tar -xzf splunk.tgz -C /opt; \
+    rm splunk.tgz; \
+    ln -s /opt/splunk/bin/splunk /usr/local/bin/splunk
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y gnupg apt-transport-https; \
+    wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elastic-archive-keyring.gpg; \
+    echo "deb [signed-by=/usr/share/keyrings/elastic-archive-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee /etc/apt/sources.list.d/elastic-8.x.list; \
+    apt-get update; \
+    apt-get install -y elasticsearch kibana; \
+    rm -rf /var/lib/apt/lists/*
 
 # Stage 3: Application stage
 FROM forensic-tools AS app

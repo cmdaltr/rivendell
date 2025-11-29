@@ -27,34 +27,28 @@ def extract_wbem(
         vssimage,
     )
     write_audit_log_entry(verbosity, output_directory, entry, prnt)
-    subprocess.Popen(  # CCM_RUA_Finder
-        [
-            "python2.7",
-            "/opt/elrond/elrond/tools/WMI_Forensics/CCM_RUA_Finder.py",
-            "-i",
-            artefact,
-            "-o",
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "wbem/."
-            + artefact.split("/")[-1]
-            + ".tsv",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    ).communicate()
-    if os.path.exists(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "wbem/."
-        + artefact.split("/")[-1]
-        + ".tsv"
-    ):
-        with open(
+
+    # Try CCM_RUA_Finder - skip if not available or fails
+    try:
+        subprocess.Popen(  # CCM_RUA_Finder
+            [
+                "python3",
+                "/opt/elrond/elrond/tools/WMI_Forensics/CCM_RUA_Finder.py",
+                "-i",
+                artefact,
+                "-o",
+                output_directory
+                + img.split("::")[0]
+                + "/artefacts/cooked"
+                + vss_path_insert
+                + "wbem/."
+                + artefact.split("/")[-1]
+                + ".tsv",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).communicate()
+        if os.path.exists(
             output_directory
             + img.split("::")[0]
             + "/artefacts/cooked"
@@ -62,33 +56,45 @@ def extract_wbem(
             + "wbem/."
             + artefact.split("/")[-1]
             + ".tsv"
-        ) as wbem_tsv:
+        ):
             with open(
                 output_directory
                 + img.split("::")[0]
                 + "/artefacts/cooked"
                 + vss_path_insert
-                + "wbem/"
+                + "wbem/."
                 + artefact.split("/")[-1]
-                + "-CCM_RUA.csv",
-                "a",
-            ) as wbem_csv:
-                for tab_line in wbem_tsv:
-                    wbem_csv.write(tab_line.replace(",", "‚").replace("\t", ","))
-                    # wbem_csv.write("{}\n".format(tab_line.replace(",", "‚").replace("\t", ","))) # during testing, there were no lines so unsure if a newline is provided automatically or not
-        os.remove(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "wbem/."
-            + artefact.split("/")[-1]
-            + ".tsv"
-        )
+                + ".tsv"
+            ) as wbem_tsv:
+                with open(
+                    output_directory
+                    + img.split("::")[0]
+                    + "/artefacts/cooked"
+                    + vss_path_insert
+                    + "wbem/"
+                    + artefact.split("/")[-1]
+                    + "-CCM_RUA.csv",
+                    "a",
+                ) as wbem_csv:
+                    for tab_line in wbem_tsv:
+                        wbem_csv.write(tab_line.replace(",", "‚").replace("\t", ","))
+                        # wbem_csv.write("{}\n".format(tab_line.replace(",", "‚").replace("\t", ","))) # during testing, there were no lines so unsure if a newline is provided automatically or not
+            os.remove(
+                output_directory
+                + img.split("::")[0]
+                + "/artefacts/cooked"
+                + vss_path_insert
+                + "wbem/."
+                + artefact.split("/")[-1]
+                + ".tsv"
+            )
+    except Exception:
+        # CCM_RUA_Finder not available or failed - skip this analysis
+        pass
     try:
         pywmipf = subprocess.Popen(  # PyWMIPersistenceFinder
             [
-                "python2.7",
+                "python3",
                 "/opt/elrond/elrond/tools/WMI_Forensics/PyWMIPersistenceFinder.py",
                 artefact,
             ],

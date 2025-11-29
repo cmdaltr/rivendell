@@ -8,8 +8,13 @@ import json
 from pathlib import Path
 from typing import Optional, List
 
-from .models.job import Job, JobStatus
-from .config import settings
+try:
+    from .models.job import Job, JobStatus
+    from .config import settings
+except ImportError:
+    # Fallback for standalone module execution (Celery worker)
+    from models.job import Job, JobStatus
+    from config import settings
 
 
 class JobStorage:
@@ -40,6 +45,9 @@ class JobStorage:
 
         with open(job_path, "w") as f:
             json.dump(job.dict(), f, indent=2, default=str)
+            f.flush()  # Ensure data is written to disk
+            import os
+            os.fsync(f.fileno())  # Force OS to write to disk
 
     def get_job(self, job_id: str) -> Optional[Job]:
         """
@@ -51,14 +59,30 @@ class JobStorage:
         Returns:
             Job if found, None otherwise
         """
+        import time
+
         job_path = self._get_job_path(job_id)
 
         if not job_path.exists():
             return None
 
-        with open(job_path, "r") as f:
-            data = json.load(f)
-            return Job(**data)
+        # Retry logic to handle race conditions when file is being written
+        max_retries = 3
+        retry_delay = 0.1  # 100ms
+
+        for attempt in range(max_retries):
+            try:
+                with open(job_path, "r") as f:
+                    data = json.load(f)
+                    return Job(**data)
+            except json.JSONDecodeError as e:
+                if attempt < max_retries - 1:
+                    # File might be partially written, wait and retry
+                    time.sleep(retry_delay)
+                    continue
+                else:
+                    # Final attempt failed, raise the error
+                    raise
 
     def list_jobs(
         self,

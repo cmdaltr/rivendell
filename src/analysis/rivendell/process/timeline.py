@@ -87,7 +87,8 @@ def create_plaso_timeline(verbosity, output_directory, stage, img, d, timelineim
     os.chdir("./.plaso")
     subprocess.Popen(
         [
-            "psteal.py",
+            "python3",
+            "/usr/local/lib/python3.10/dist-packages/plaso/scripts/psteal.py",
             "--source",
             timelineimagepath,
             "-o",

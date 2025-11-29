@@ -28,7 +28,10 @@ That's it! The script will:
 
 ### 3. Open in your browser
 - **Web Interface**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
+- **API Documentation**: http://localhost:5688/docs
+- **Splunk**: http://localhost:7755 (username: admin, password: rivendell)
+- **Kibana**: http://localhost:5601
+- **Elasticsearch**: http://localhost:9200
 
 ## Using the Web Interface
 
@@ -43,7 +46,7 @@ That's it! The script will:
 4. **Configure Options**:
    - Browse option categories (Operation, Analysis, Collection, etc.)
    - Check boxes for desired features
-   - **Required**: Select at least one operation mode (Collect/Gandalf/Reorganise)
+   - **Required**: Select at least one operation mode (Collect or Gandalf)
 5. **Click "Start Analysis"**
 
 ### Monitor Progress

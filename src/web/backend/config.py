@@ -46,14 +46,38 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/0"
 
+    # Database
+    database_url: str = "postgresql://rivendell:rivendell@postgres:5432/rivendell"
+
     # Storage
     upload_dir: Path = Path("/tmp/elrond/uploads")
     output_dir: Path = Path("/tmp/elrond/output")
     max_upload_size: int = 100 * 1024 * 1024 * 1024  # 100GB
 
-    # Session
+    # JWT Authentication
+    # CRITICAL: Change this in production! Use a cryptographically secure random string
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
     secret_key: str = "your-secret-key-change-in-production"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24  # 24 hours
+    refresh_token_expire_days: int = 30
+
+    # Security settings
+    # Enable these in production
+    enable_https_only: bool = False  # Set to True in production
+    enable_rate_limiting: bool = False  # TODO: Implement rate limiting
+    max_login_attempts: int = 5  # Account lockout threshold
+    lockout_duration_minutes: int = 15  # How long accounts are locked after max attempts
+
+    # Session
     session_timeout: int = 3600  # 1 hour
+
+    # Default Admin
+    default_admin_email: str = "admin@rivendell.app"
+    default_admin_password: str = "RivendellAdmin123!"
+
+    # Guest Mode
+    guest_session_timeout: int = 3600  # 1 hour
 
     # Analysis
     max_concurrent_analyses: int = 3
@@ -79,13 +103,13 @@ class Settings(BaseSettings):
                 "/tmp/rivendell",
             ]
         else:
-            # Linux/Unix paths (includes Docker on Mac)
+            # Linux/Unix paths (includes Docker containers)
             return [
-                "/Volumes",  # Docker on macOS
+                "/Volumes",  # Docker on macOS - external drives
                 "/mnt",
                 "/media",
                 "/tmp/rivendell",
-                "/host/tmp",  # Host /tmp mounted in Docker
+                "/host/tmp/rivendell",  # Docker on macOS - host /tmp access
             ]
 
     class Config:

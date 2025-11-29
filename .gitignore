@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 build/
+!build/docker/
 develop-eggs/
 dist/
 downloads/
@@ -70,6 +71,8 @@ htmlcov/
 *.log
 log.audit
 log.meta
+build/docker/*.log
+build/**/*.log
 
 # Encryption keys
 *.key

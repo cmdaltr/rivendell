@@ -1,9 +1,13 @@
 import json
+import os
 import re
 import subprocess
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+
+# evtx_dump.py is created during Docker build at this location
+EVTX_DUMP_PATH = "/usr/local/bin/evtx_dump.py"
 
 
 def extract_evtx(
@@ -18,6 +22,22 @@ def extract_evtx(
     jsonlist,
     evtjsonlist,
 ):
+    # evtx_dump.py should always exist in Docker environment
+    if not os.path.exists(EVTX_DUMP_PATH):
+        entry, prnt = "{},{},{},'{}' event log (skipped - evtx_dump.py not found)\n".format(
+            datetime.now().isoformat(),
+            vssimage.replace("'", ""),
+            stage,
+            artefact.split("/")[-1],
+        ), " -> {} -> skipped '{}' event log for {} (evtx_dump.py not found at {})".format(
+            datetime.now().isoformat().replace("T", " "),
+            artefact.split("/")[-1],
+            vssimage,
+            EVTX_DUMP_PATH,
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        return
+
     with open(
         output_directory
         + img.split("::")[0]
@@ -33,24 +53,23 @@ def extract_evtx(
             vssimage.replace("'", ""),
             stage,
             artefact.split("/")[-1],
-        ), " -> {} -> {} {} for {}".format(
-            datetime.now().isoformat().replace("T", " "),
+        ), " -> {} {} event log for {}".format(
             stage,
             artefact.split("/")[-1],
             vssimage,
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        evtx_file_path = (
+            output_directory
+            + img.split("::")[0]
+            + "/artefacts/raw"
+            + vss_path_insert
+            + "evt/"
+            + artefact.split("/")[-1]
+        )
         evtout = str(
             subprocess.Popen(
-                [
-                    "/usr/local/bin/evtx_dump.py",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/raw"
-                    + vss_path_insert
-                    + "evt/"
-                    + artefact.split("/")[-1],
-                ],
+                [EVTX_DUMP_PATH, evtx_file_path],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             ).communicate()

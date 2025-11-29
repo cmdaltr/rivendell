@@ -21,7 +21,7 @@ COPY . .
 RUN mkdir -p /tmp/elrond/output /tmp/elrond/uploads
 
 # Expose port
-EXPOSE 8000
+EXPOSE 5688
 
 # Default command (can be overridden in docker-compose)
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5688"]

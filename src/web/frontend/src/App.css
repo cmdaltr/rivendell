@@ -176,6 +176,8 @@ button.secondary:hover {
 }
 
 input[type="text"],
+input[type="email"],
+input[type="password"],
 input[type="number"],
 select,
 textarea {
@@ -192,6 +194,8 @@ textarea {
 }
 
 input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
 input[type="number"]:focus,
 select:focus,
 textarea:focus {
@@ -210,6 +214,91 @@ label {
 
 .form-group {
   margin-bottom: 1.5rem;
+}
+
+/* Alert messages */
+.alert-error {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(139, 0, 0, 0.15);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 6px;
+  color: #fca5a5;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  letter-spacing: 0.03em;
+}
+
+.alert-success {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 6px;
+  color: #86efac;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  letter-spacing: 0.03em;
+}
+
+.alert-info {
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 6px;
+  color: #93c5fd;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  letter-spacing: 0.03em;
+}
+
+small {
+  color: #a09580;
+  font-size: 0.85rem;
+  display: block;
+  margin-top: 0.25rem;
+}
+
+/* Utility classes */
+.text-link {
+  color: #f0dba5;
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.3s ease;
+}
+
+.text-link:hover {
+  color: #c3e88d;
+  text-decoration: underline;
+}
+
+.text-center {
+  text-align: center;
+  color: #a09580;
+}
+
+.divider {
+  margin: 1.5rem 0;
+  text-align: center;
+  color: #a09580;
+  position: relative;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #3f4b2a;
+}
+
+.divider::after {
+  content: attr(data-text);
+  position: relative;
+  background: #1a1a2e;
+  padding: 0 1rem;
+  z-index: 1;
 }
 
 .form-row {
@@ -1380,6 +1469,15 @@ table input[type="checkbox"] {
 .wizard-options.checkbox-group[data-option-count="6"] .wizard-option-item:nth-child(5),
 .wizard-options.checkbox-group[data-option-count="6"] .wizard-option-item:nth-child(6) {
   grid-column: span 2;
+}
+
+.wizard-options.verification-grid,
+.wizard-options.verification-grid[data-option-count] {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.wizard-options.analysis-grid {
+  grid-template-columns: repeat(12, 1fr);
 }
 
 .wizard-options.radio-group {

@@ -493,6 +493,7 @@ def collect_artefacts(
                     vssimage
                 )
             )
+        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> cleaning up empty directories...")
         for tyr, tyd, _ in os.walk(img + "/artefacts/"):
             for td in tyd:
                 if len(os.listdir(tyr + "/" + td)) == 0:
@@ -500,13 +501,13 @@ def collect_artefacts(
                         shutil.rmtree(tyr + "/" + td)
                     except:
                         pass
-        print("  -> Completed Collection Phase for {}".format(vssimage))
         entry, prnt = "{},{},{},completed\n".format(
             datetime.now().isoformat(), vssimage.replace("'", ""), stage
         ), " -> {} -> collection completed for {}".format(
             datetime.now().isoformat().replace("T", " "), vssimage
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        print("  -> Completed Collection Phase for {}".format(vssimage))
         print()
     flags.append("01collection")
     print(

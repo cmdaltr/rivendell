@@ -12,8 +12,14 @@ from rivendell.process.process import process_artefacts
 
 def select_artefacts_to_process(img, process_list, artefacts_list, processed_artefacts):
     for each in process_list:
+        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> scanning for artefacts in '{each.split('/')[-2]}'...")
+        file_count = 0
         for root, _, files in os.walk(each):
             for f in files:  # identifying artefacts for processing
+                file_count += 1
+                # Log progress every 20000 files to show it's not hanging
+                if file_count % 20000 == 0:
+                    print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> ...scanned {file_count:,} files...")
                 if (img.split("::")[0] in root) and (
                     root + "/" + f not in str(processed_artefacts)
                 ): # ensure to check both the file (f) and the path (root) for specific matching strings
@@ -72,6 +78,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                     ):
                         artefacts_list.append(each + ": " + root + "/" + f)
                         processed_artefacts.append(root + "/" + f)
+        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> scan complete: {file_count:,} files scanned, {len(artefacts_list):,} artefacts found")
     return artefacts_list
 
 
@@ -429,13 +436,13 @@ def select_pre_process_artefacts(
                         vssimage
                     )
                 )
-        print("  -> Completed Processing Phase for {}".format(vssimage))
         entry, prnt = "{},{},{},completed\n".format(
             datetime.now().isoformat(), vssimage.replace("'", ""), stage
         ), " -> {} -> processing completed for {}".format(
             datetime.now().isoformat().replace("T", " "), vssimage
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        print("  -> Completed Processing Phase for {}".format(vssimage))
         print()
         processed_imgs.append(img.split("::")[0])
     if "02processing" not in str(flags):

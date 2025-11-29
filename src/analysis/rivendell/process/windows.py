@@ -7,7 +7,6 @@ from rivendell.audit import write_audit_log_entry
 from rivendell.memory.memory import process_memory
 from rivendell.process.extractions.clipboard import extract_clipboard
 from rivendell.process.extractions.evtx import extract_evtx
-from rivendell.process.extractions.mft import extract_mft
 from rivendell.process.extractions.registry.profile import extract_registry_profile
 from rivendell.process.extractions.registry.system import extract_registry_system
 from rivendell.process.extractions.shimcache import extract_shimcache
@@ -20,119 +19,86 @@ from rivendell.process.extractions.wmi import extract_wmi
 def process_mft(
     verbosity, vssimage, output_directory, img, artefact, vss_path_insert, stage
 ):
+    """Process $MFT using analyzeMFT tool from https://github.com/rowingdude/analyzeMFT"""
     if verbosity != "":
         print(
             "     Processing '{}' for {}...".format(artefact.split("/")[-1], vssimage)
         )
-    with open(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "..journal_mft.csv",
-        "a",
-    ) as mftcsv:
-        try:
-            entry, prnt = "{},{},{},'{}'\n".format(
+
+    entry, prnt = "{},{},{},'{}'\n".format(
+        datetime.now().isoformat(),
+        vssimage.replace("'", ""),
+        stage,
+        artefact.split("/")[-1],
+    ), " -> {} -> {} '{}' from {}".format(
+        datetime.now().isoformat().replace("T", " "),
+        stage,
+        artefact.split("/")[-1],
+        vssimage,
+    )
+    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+    try:
+        # Check if $MFT file exists before processing
+        mft_file_path = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "$MFT"
+        if not os.path.exists(mft_file_path):
+            if verbosity != "":
+                print(f"     Warning: $MFT file not found at {mft_file_path}")
+            return
+
+        # Output directly to journal_mft.csv (analyzeMFT provides its own headers)
+        output_csv = output_directory + img.split("::")[0] + "/artefacts/cooked" + vss_path_insert + "journal_mft.csv"
+
+        # Run analyzeMFT.py with a CLEAN environment to avoid module conflicts
+        # Only preserve PATH, completely clear PYTHONPATH and other env vars
+        clean_env = {'PATH': '/usr/local/bin:/usr/bin:/bin'}
+
+        analyze_cmd = [
+            "/usr/bin/python3",
+            "/opt/analyzeMFT/analyzeMFT.py",
+            "-f", mft_file_path,
+            "-o", output_csv,
+            "--csv"
+        ]
+
+        process = subprocess.Popen(
+            analyze_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=clean_env
+        )
+        stdout_data, stderr_data = process.communicate()
+
+        # Check output file size
+        if os.path.exists(output_csv):
+            file_size = os.path.getsize(output_csv)
+            if verbosity != "":
+                print(f"     analyzeMFT output: {file_size:,} bytes")
+
+        if process.returncode != 0:
+            # Log the error for debugging
+            stderr_text = stderr_data.decode('utf-8', errors='replace') if stderr_data else ''
+            error_msg = stderr_text.replace('\n', ' ').replace(',', ';').replace("'", "")[:200]
+            entry, prnt = "{},{},analyzeMFT error,'{}'\n".format(
                 datetime.now().isoformat(),
                 vssimage.replace("'", ""),
-                stage,
-                vss_path_insert,
-            ), " -> {} -> {} '{}' from {}".format(
-                datetime.now().isoformat().replace("T", " "),
-                stage,
-                artefact.split("/")[-1],
-                vssimage,
+                error_msg
+            ), " -> {} -> analyzeMFT failed for '{}': {}".format(
+                datetime.now().isoformat().replace('T', ' '),
+                vssimage.replace("'", ""),
+                error_msg[:100]
             )
             write_audit_log_entry(verbosity, output_directory, entry, prnt)
-            mftout = subprocess.Popen(
-                [
-                    "analyzeMFT.py",
-                    "-a",
-                    "-f",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/raw"
-                    + vss_path_insert
-                    + "$MFT",
-                    "-o",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "..journal_mft.csv",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
-            mftcsv.write(str(mftout[0]))
-        except:
-            pass
-        with open(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + ".journal_mft.csv",
-            "a",
-        ) as mftwrite:
-            if not os.path.exists(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "journal_mft.csv"
-            ):
-                mftwrite.write(
-                    "record,state,active,record_type,seq_number,parent_file_record,parent_file_record_seq,std_info_creation_date,std_info_modification_date,std_info_access_date,std_info_entry_date,object_id,birth_volume_id,birth_object_id,birth_domain_id,std_info,attribute_list,has_filename,has_object_id,volume_name,volume_info,data,index_root,index_allocation,bitmap,reparse_point,ea_information,ea,property_set,logged_utility_stream,log/notes,stf_fn_shift,usec_zero,ads,possible_copy,possible_volume_move,Filename,fn_info_creation_date,fn_info_modification_date,fn_info_access_date,fn_info_entry_date,LastWriteTime\n"
-                )
-            extract_mft(
-                output_directory,
-                img,
-                vss_path_insert,
-                mftwrite,
-            )
-    with open(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "journal_mft.csv",
-        "a",
-    ) as mftwrite:
-        with open(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + ".journal_mft.csv"
-        ) as mftread:
-            for eachentry in mftread:
-                if len(eachentry.strip()) > 0:
-                    mftwrite.write(
-                        eachentry.strip().strip(",").replace(",,", ",-,") + "\n"
-                    )
-    if os.path.exists(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "..journal_mft.csv"
-    ):
-        os.remove(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "..journal_mft.csv"
-        )
-        os.remove(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + ".journal_mft.csv"
-        )
+            if verbosity != "":
+                print(prnt)
+            return
+
+        if verbosity != "":
+            print(f"     Successfully parsed $MFT for '{vssimage}'")
+
+    except Exception as e:
+        if verbosity != "":
+            print(f"     Warning: $MFT processing failed: {e}")
 
 
 def process_usn(
@@ -351,7 +317,7 @@ def process_evtx(
             pass
         if verbosity != "":
             print(
-                "     Processing '{}' event log for {}...".format(
+                "  -> processing '{}' event log for '{}'".format(
                     artefact.split("/")[-1], vssimage
                 )
             )
@@ -457,82 +423,124 @@ def process_prefetch(
             vssimage,
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        try:
-            subprocess.Popen(
-                [
-                    "log2timeline.py",
-                    "--parsers",
-                    "prefetch",
-                    "{}/Windows/Prefetch/".format(mount_location),
-                    "--storage_file",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "prefetch/prefetch.plaso",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
-            subprocess.Popen(
-                [
-                    "psteal.py",
-                    "--source",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "prefetch/prefetch.plaso",
-                    "-o",
-                    "dynamic",
-                    "-w",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "prefetch/prefetch.csv",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
-        except:
-            subprocess.Popen(
-                [
-                    "/opt/plaso/plaso/scripts/log2timeline.py",
-                    "--parsers",
-                    "prefetch",
-                    "{}/Windows/Prefetch/".format(mount_location),
-                    "--storage_file",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "prefetch/prefetch.plaso",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
-            subprocess.Popen(
-                [
-                    "/opt/plaso/plaso/scripts/psteal.py",
-                    "--source",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "prefetch/prefetch.plaso",
-                    "-o",
-                    "dynamic",
-                    "-w",
-                    output_directory
-                    + img.split("::")[0]
-                    + "/artefacts/cooked"
-                    + vss_path_insert
-                    + "prefetch/prefetch.csv",
-                ],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            ).communicate()
+
+        # Check if Plaso (log2timeline) is available before attempting to use it
+        plaso_available = False
+        for plaso_path in ["log2timeline.py", "/opt/plaso/plaso/scripts/log2timeline.py"]:
+            try:
+                result = subprocess.run(["which", plaso_path], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    plaso_available = True
+                    break
+            except:
+                pass
+
+        if not plaso_available:
+            entry, prnt = "{},{},{},prefetch files (skipped - Plaso not installed)\n".format(
+                datetime.now().isoformat(),
+                vssimage.replace("'", ""),
+                stage,
+            ), " -> {} -> {} prefetch files for {} (skipped - Plaso not installed)".format(
+                datetime.now().isoformat().replace("T", " "),
+                stage,
+                vssimage,
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        else:
+            try:
+                subprocess.Popen(
+                    [
+                        "log2timeline.py",
+                        "--parsers",
+                        "prefetch",
+                        "{}/Windows/Prefetch/".format(mount_location),
+                        "--storage_file",
+                        output_directory
+                        + img.split("::")[0]
+                        + "/artefacts/cooked"
+                        + vss_path_insert
+                        + "prefetch/prefetch.plaso",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ).communicate()
+                subprocess.Popen(
+                    [
+                        "python3",
+                        "/usr/local/lib/python3.10/dist-packages/plaso/scripts/psteal.py",
+                        "--source",
+                        output_directory
+                        + img.split("::")[0]
+                        + "/artefacts/cooked"
+                        + vss_path_insert
+                        + "prefetch/prefetch.plaso",
+                        "-o",
+                        "dynamic",
+                        "-w",
+                        output_directory
+                        + img.split("::")[0]
+                        + "/artefacts/cooked"
+                        + vss_path_insert
+                        + "prefetch/prefetch.csv",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                ).communicate()
+            except:
+                try:
+                    subprocess.Popen(
+                        [
+                            "/opt/plaso/plaso/scripts/log2timeline.py",
+                            "--parsers",
+                            "prefetch",
+                            "{}/Windows/Prefetch/".format(mount_location),
+                            "--storage_file",
+                            output_directory
+                            + img.split("::")[0]
+                            + "/artefacts/cooked"
+                            + vss_path_insert
+                            + "prefetch/prefetch.plaso",
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).communicate()
+                    subprocess.Popen(
+                        [
+                            "python3",
+                            "/usr/local/lib/python3.10/dist-packages/plaso/scripts/psteal.py",
+                            "--source",
+                            output_directory
+                            + img.split("::")[0]
+                            + "/artefacts/cooked"
+                            + vss_path_insert
+                            + "prefetch/prefetch.plaso",
+                            "-o",
+                            "dynamic",
+                            "-w",
+                            output_directory
+                            + img.split("::")[0]
+                            + "/artefacts/cooked"
+                            + vss_path_insert
+                            + "prefetch/prefetch.csv",
+                        ],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).communicate()
+                except Exception as e:
+                    # If both paths fail, log and skip prefetch timeline processing
+                    entry, prnt = "{},{},{},prefetch files (failed - {})\n".format(
+                        datetime.now().isoformat(),
+                        vssimage.replace("'", ""),
+                        stage,
+                        str(e),
+                    ), " -> {} -> {} prefetch files for {} (failed - {})".format(
+                        datetime.now().isoformat().replace("T", " "),
+                        stage,
+                        vssimage,
+                        str(e),
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+                    pass
         if os.path.exists(
             output_directory
             + img.split("::")[0]

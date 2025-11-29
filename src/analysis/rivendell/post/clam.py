@@ -60,16 +60,12 @@ def run_clamscan(verbosity, output_directory, loc, img, collectfiles):
         else:
             message = "No evidence of malware identified on "
     print("       {}'{}'".format(message, img.split("::")[0]))
-    (
-        entry,
-        prnt,
-    ) = (
-        "{},{},clamAV,{}malware found\n".format(
-            datetime.now().isoformat(),
-            img.split("::")[0],
-            message.split("malware ")[0].lower(),
-        ),
-    ), " -> {} -> ClamAV identified {}malware on '{}'".format(
+    entry = "{},{},clamAV,{}malware found\n".format(
+        datetime.now().isoformat(),
+        img.split("::")[0],
+        message.split("malware ")[0].lower(),
+    )
+    prnt = " -> {} -> ClamAV identified {}malware on '{}'".format(
         datetime.now().isoformat().replace("T", " "),
         message.split("malware ")[0].lower(),
         img.split("::")[0],

@@ -193,8 +193,61 @@ def install_splunk_stack(
 
 
 def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
+    # Check if we're using remote Splunk (containerized environment)
+    splunk_host = os.environ.get('SPLUNK_HOST', '')
+    splunk_port = os.environ.get('SPLUNK_PORT', '8089')
+    use_remote_splunk = bool(splunk_host)
+
+    if use_remote_splunk:
+        # Remote Splunk mode - containerized/external Splunk instance
+        # This mode is for when Splunk is running in a separate container/server
+        # and we can't directly write to its configuration files
+        splunkuser = os.environ.get('SPLUNK_USERNAME', 'admin')
+        splunkpswd = os.environ.get('SPLUNK_PASSWORD', '')
+
+        if not splunkpswd:
+            from rivendell.audit import write_audit_log_entry
+            entry, prnt = "{},{},remote splunk configured but SPLUNK_PASSWORD not set".format(
+                datetime.now().isoformat(),
+                "splunk",
+            ), " -> {} -> remote splunk configured but SPLUNK_PASSWORD environment variable not set".format(
+                datetime.now().isoformat().replace("T", " ")
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+            print("\n     ERROR: SPLUNK_PASSWORD environment variable not set for remote Splunk")
+            return None, None
+
+        print(
+            "\n\n  -> \033[1;36mSkipping Splunk Phase (Remote Splunk Mode)...\033[1;m\n  ----------------------------------------"
+        )
+        from rivendell.audit import write_audit_log_entry
+        entry, prnt = "{},{},remote splunk detected at {}:{} - skipping local configuration".format(
+            datetime.now().isoformat(),
+            "splunk",
+            splunk_host,
+            splunk_port,
+        ), " -> {} -> remote splunk detected at {}:{} - skipping local splunk configuration phase".format(
+            datetime.now().isoformat().replace("T", " "),
+            splunk_host,
+            splunk_port
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        print("     Remote Splunk configured at {}:{}".format(splunk_host, splunk_port))
+        print("     Note: Data indexing to remote Splunk must be configured separately")
+        print("     Analysis artifacts available in: {}".format(output_directory))
+        return splunkuser, splunkpswd
+
+    # Local Splunk mode (original code path)
     def request_splunk_creds():
-        splunkuser, splunkpswd = safe_input("      Splunk admin username: ", default=""), getpass.getpass("      Splunk admin password: ")
+        # Check for environment variables first (for non-interactive mode)
+        splunkuser = os.environ.get('SPLUNK_USERNAME', '')
+        splunkpswd = os.environ.get('SPLUNK_PASSWORD', '')
+
+        # If not in environment, prompt interactively
+        if not splunkuser or not splunkpswd:
+            splunkuser = safe_input("      Splunk admin username: ", default="admin")
+            splunkpswd = getpass.getpass("      Splunk admin password: ")
+
         splunk_service(splunk_install_path, "start")
         testcreds = subprocess.Popen(
             [
@@ -243,20 +296,40 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
         "\n\n  -> \033[1;36mCommencing Splunk Phase...\033[1;m\n  ----------------------------------------"
     )
     time.sleep(1)
+
+    # Initialize credentials variables
+    splunkuser = None
+    splunkpswd = None
+
     if len(splunk_install_locations) > 0:
         if len(splunk_install_locations[0]) != 0:
-            pathfound = str(
-                re.findall(
-                    r"\/(.*)splunk\/etc\/splunk.version",
-                    str(splunk_install_locations[0]),
-                )[0]
+            matches = re.findall(
+                r"\/(.*)splunk\/etc\/splunk.version",
+                str(splunk_install_locations[0]),
             )
-            if pathfound != "":
-                splunk_install_path = pathfound
-                print("     Splunk installation found, please provide")
-                splunkuser, splunkpswd = request_splunk_creds()
-    else:
-        print("    Splunk is not installed, please stand by...")
+            if matches and len(matches) > 0:
+                pathfound = str(matches[0])
+                if pathfound != "":
+                    splunk_install_path = pathfound
+                    print("     Splunk installation found, please provide")
+                    splunkuser, splunkpswd = request_splunk_creds()
+
+    if splunkuser is None or splunkpswd is None:
+        # Check if running in non-interactive mode without Splunk
+        from rivendell.utils import is_noninteractive
+        if is_noninteractive():
+            print("    Splunk is not installed and running in non-interactive mode - skipping Splunk configuration")
+            from rivendell.audit import write_audit_log_entry
+            entry, prnt = "{},{},splunk not installed - skipping in non-interactive mode".format(
+                datetime.now().isoformat(),
+                "splunk",
+            ), " -> {} -> splunk not installed - skipping splunk phase in non-interactive mode".format(
+                datetime.now().isoformat().replace("T", " ")
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+            return None, None
+
+        print("    Splunk is not installed or not properly configured, please stand by...")
         splunkuser, splunkpswd = install_splunk_stack(
             verbosity,
             output_directory,

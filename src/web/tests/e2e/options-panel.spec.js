@@ -149,7 +149,6 @@ test.describe('Options Panel - Specific Options', () => {
   test('should have operation mode options', async ({ page }) => {
     await expect(page.locator('label', { hasText: 'Collect' })).toBeVisible();
     await expect(page.locator('label', { hasText: 'Gandalf' })).toBeVisible();
-    await expect(page.locator('label', { hasText: 'Reorganise' })).toBeVisible();
     await expect(page.locator('label', { hasText: 'Process' })).toBeVisible();
   });
 
@@ -217,7 +216,6 @@ test.describe('Options Panel - Specific Options', () => {
     await page.click('button:has-text("Miscellaneous")');
 
     await expect(page.locator('label', { hasText: 'Keep Mounted' })).toBeVisible();
-    await expect(page.locator('label', { hasText: 'LOTR Theme' })).toBeVisible();
   });
 });
 

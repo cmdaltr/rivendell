@@ -209,7 +209,7 @@ export const timeouts = {
 export const errorMessages = {
   noCaseNumber: 'Please enter a case number',
   noImages: 'Please select at least one disk or memory image',
-  noOperationMode: 'Please select an operation mode (Collect, Gandalf, or Reorganise)',
+  noOperationMode: 'Please select an operation mode (Collect or Gandalf)',
   pathNotFound: 'Path not found',
   accessDenied: /Access denied/i,
   jobNotFound: 'Job not found',

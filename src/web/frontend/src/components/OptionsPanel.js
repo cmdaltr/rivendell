@@ -37,9 +37,10 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'File metadata and verification options',
       type: 'multi',
       options: [
-        { key: 'last_access_times', label: 'Last Access Times', description: 'Obtain last access times of all files', time: 8 },
-        { key: 'metacollected', label: 'Hash Only', description: 'Only hash collected artifacts', time: 5 },
+        { key: 'hash_collected', label: 'Hash Collected Artefacts', description: 'Hash only collected artifacts', time: 5 },
+        { key: 'hash_all', label: 'Hash All Artefacts', description: 'Hash all files on mounted image', time: 25 },
         { key: 'nsrl', label: 'NSRL', description: 'Compare hashes against NSRL database', time: 20 },
+        { key: 'last_access_times', label: 'Last Access Times', description: 'Obtain last access times of all files', time: 8 },
         { key: 'imageinfo', label: 'Image Info', description: 'Extract E01 metadata information', time: 3, disabledForGandalf: true },
       ],
     },
@@ -49,12 +50,23 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'Analysis and processing features',
       type: 'multi',
       options: [
-        { key: 'analysis', label: 'Automated Analysis', description: 'Conduct automated forensic analysis', time: 60 },
+        { key: 'analysis', label: 'Automated Analysis', description: 'Conduct automated forensic analysis (includes magic-byte checks)', time: 60 },
         { key: 'extract_iocs', label: 'Extract IOCs', description: 'Extract Indicators of Compromise', time: 25 },
-        { key: 'timeline', label: 'Timeline', description: 'Create timeline using plaso', time: 120, slow: true, disabledForGandalf: true },
         { key: 'clamav', label: 'ClamAV', description: 'Run ClamAV against mounted image', time: 40 },
-        { key: 'memory', label: 'Memory Analysis', description: 'Analyze memory using Volatility', time: 35 },
+        { key: 'memory', label: 'Memory Collection & Analysis', description: 'Analyze memory using Volatility', time: 35 },
         { key: 'memory_timeline', label: 'Memory Timeline', description: 'Create memory timeline\nusing timeliner', time: 50 },
+        { key: 'timeline', label: 'Disk Image Timeline', description: 'Create timeline using plaso', time: 120, slow: true, disabledForGandalf: true },
+      ],
+    },
+    {
+      key: 'advanced',
+      title: 'Advanced Processing',
+      description: 'Advanced artefact processing options',
+      type: 'multi',
+      options: [
+        { key: 'keywords', label: 'Keywords Search', description: 'Search for specific keywords across artefacts', time: 15 },
+        { key: 'yara', label: 'YARA Rules', description: 'Apply custom YARA rules for pattern matching', time: 20 },
+        { key: 'collectFiles', label: 'Collect Specific Files', description: 'Collect specific files based on criteria', time: 10 },
       ],
     },
     {
@@ -185,8 +197,8 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
 
         // Auto-enable specific options for Brisk mode
         newOptions.analysis = true;        // Automated Analysis
-        newOptions.vss = true;              // Volume Shadow Copies
-        newOptions.extract_iocs = true;     // Extract IOCs
+        newOptions.vss = false;             // Volume Shadow Copies (disabled for speed)
+        newOptions.extract_iocs = false;    // Extract IOCs (disabled for speed)
         newOptions.navigator = true;        // ATT&CK Navigator
         newOptions.userprofiles = true;     // User Profiles
 
@@ -402,7 +414,6 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
     return (
       <div className="confirm-step">
         {error && <div className="error" style={{ marginBottom: '1.5rem' }}>{error}</div>}
-        <h3>Review Your Selections</h3>
         <div className="confirm-summary">
           {Object.entries(groupedOptions).map(([stepTitle, optionLabels], index) => (
             <div key={index} className="confirm-item">
@@ -482,32 +493,93 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
           renderConfirmStep()
         ) : (
           <>
-            <div
-              className={`wizard-options ${currentStepData.type === 'single' ? 'radio-group' : 'checkbox-group'}`}
-              data-option-count={getFilteredOptions().length}
-            >
-              {getFilteredOptions().map(option => (
-                <div key={option.key} className={`wizard-option-item ${option.disabled ? 'option-disabled' : ''} ${option.slow ? 'option-slow' : ''}`}>
-                  <input
-                    type="checkbox"
-                    id={option.key}
-                    name={currentStepData.type === 'single' ? currentStepData.key : option.key}
-                    checked={options[option.key] || false}
-                    onChange={() => !option.disabled && handleToggle(option.key)}
-                    disabled={option.disabled}
-                    className={currentStepData.type === 'single' ? 'radio-style' : ''}
-                  />
-                  <label htmlFor={option.key} title={option.tooltip}>
-                    <div className="option-label">
-                      {option.label}
-                      {option.slow && <span className="slow-indicator" title="This operation is slow">!</span>}
-                      {option.tooltip && <span className="tooltip-icon" title={option.tooltip}>ⓘ</span>}
-                    </div>
-                    <div className="option-description">{option.description}</div>
-                  </label>
+            {(() => {
+              const isVerificationStep = currentStepData.key === 'verification';
+              const isAnalysisStep = currentStepData.key === 'analysis';
+              const filteredOptions = getFilteredOptions();
+
+              const verificationOrder = ['hash_collected', 'hash_all', 'nsrl', 'last_access_times', 'imageinfo'];
+              const analysisOrder = ['analysis', 'extract_iocs', 'clamav', 'memory', 'memory_timeline', 'timeline'];
+
+              const orderedOptions = (isVerificationStep ? verificationOrder : isAnalysisStep ? analysisOrder : [])
+                .map(key => filteredOptions.find(opt => opt.key === key))
+                .filter(Boolean);
+
+              const finalOptions = orderedOptions.length ? orderedOptions : filteredOptions;
+
+              const gridClassNames = [
+                'wizard-options',
+                currentStepData.type === 'single' ? 'radio-group' : 'checkbox-group',
+                isVerificationStep ? 'verification-grid' : '',
+                isAnalysisStep ? 'analysis-grid' : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+
+              return (
+                <div
+                  className={gridClassNames}
+                  data-option-count={finalOptions.length}
+                >
+                  {finalOptions.map(option => {
+                    const layoutStyle = {};
+                    if (isVerificationStep) {
+                      const spans = {
+                        hash_collected: 2,
+                        hash_all: 2,
+                        nsrl: 2,
+                        last_access_times: 3,
+                        imageinfo: 3,
+                      };
+                      if (spans[option.key]) {
+                        layoutStyle.gridColumn = `span ${spans[option.key]}`;
+                      }
+                    }
+
+                    if (isAnalysisStep) {
+                      const spans = {
+                        analysis: 4,
+                        extract_iocs: 4,
+                        clamav: 4,
+                        memory: 4,
+                        memory_timeline: 4,
+                        timeline: 4,
+                      };
+                      if (spans[option.key]) {
+                        layoutStyle.gridColumn = `span ${spans[option.key]}`;
+                      }
+                    }
+
+                    return (
+                      <div
+                        key={option.key}
+                        className={`wizard-option-item ${option.disabled ? 'option-disabled' : ''} ${option.slow ? 'option-slow' : ''}`}
+                        style={layoutStyle}
+                      >
+                        <input
+                          type="checkbox"
+                          id={option.key}
+                          name={currentStepData.type === 'single' ? currentStepData.key : option.key}
+                          checked={options[option.key] || false}
+                          onChange={() => !option.disabled && handleToggle(option.key)}
+                          disabled={option.disabled}
+                          className={currentStepData.type === 'single' ? 'radio-style' : ''}
+                        />
+                        <label htmlFor={option.key} title={option.tooltip}>
+                          <div className="option-label">
+                            {option.label}
+                            {option.slow && <span className="slow-indicator" title="This operation is slow">!</span>}
+                            {option.tooltip && <span className="tooltip-icon" title={option.tooltip}>ⓘ</span>}
+                          </div>
+                          <div className="option-description">{option.description}</div>
+                        </label>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
+            {/* Original options grid is replaced above for layout control */}
           </>
         )}
 

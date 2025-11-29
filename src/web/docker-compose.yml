@@ -4,13 +4,13 @@ services:
   # Redis for Celery task queue
   redis:
     image: redis:7-alpine
-    container_name: elrond-redis
+    container_name: rivendell-redis
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - elrond-network
+      - rivendell-network
     restart: unless-stopped
 
   # Backend API
@@ -18,9 +18,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: elrond-backend
+    container_name: rivendell-backend
     ports:
-      - "8000:8000"
+      - "5688:5688"
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -28,66 +28,175 @@ services:
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     volumes:
       - ./backend:/app
-      - /mnt:/mnt:ro  # Mount host /mnt for read-only access to images
-      - /media:/media:ro  # Mount host /media for read-only access
-      - elrond_output:/tmp/elrond/output  # Output directory
-      - elrond_uploads:/tmp/elrond/uploads  # Upload directory
+      # - /mnt:/mnt:ro  # Mount host /mnt for read-only access to images (Linux only)
+      # - /media:/media:ro  # Mount host /media for read-only access (Linux only)
+      - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
+      - /tmp/rivendell:/host/tmp/rivendell  # Also mount at /host/tmp/rivendell for frontend compatibility
+      - /Volumes:/Volumes:ro  # Mount macOS /Volumes for external drives (macOS only)
+      - rivendell_uploads:/tmp/elrond/uploads  # Upload directory
     depends_on:
       - redis
     networks:
-      - elrond-network
+      - rivendell-network
     restart: unless-stopped
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn main:app --host 0.0.0.0 --port 5688 --reload
 
-  # Celery worker for background tasks
+  # Celery worker for background tasks (forensics-enabled)
   celery-worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile
-    container_name: elrond-celery-worker
+      dockerfile: Dockerfile.forensics
+    container_name: rivendell-celery-worker
+    privileged: true  # Required for mounting forensic images
+    devices:
+      - /dev/fuse:/dev/fuse  # Required for FUSE mounts
+    cap_add:
+      - SYS_ADMIN  # Required for loop device mounts
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - SPLUNK_HOST=splunk
+      - SPLUNK_PORT=8089
+      - SPLUNK_USERNAME=admin
+      - SPLUNK_PASSWORD=rivendell
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTIC_USERNAME=elastic
+      - ELASTIC_PASSWORD=rivendell
     volumes:
       - ./backend:/app
-      - /mnt:/mnt:ro
-      - /media:/media:ro
-      - elrond_output:/tmp/elrond/output
-      - elrond_uploads:/tmp/elrond/uploads
+      - ../analysis:/opt/elrond-src  # Mount elrond source code (renamed to avoid PATH conflicts)
+      # - /mnt:/mnt:ro  # Linux only
+      # - /media:/media:ro  # Linux only
+      - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
+      - rivendell_uploads:/tmp/elrond/uploads  # For uploaded forensic images
+      - splunk_etc:/opt/splunk/etc
+      - splunk_var:/opt/splunk/var
     depends_on:
       - redis
       - backend
+      - splunk
+      - elasticsearch
     networks:
-      - elrond-network
+      - rivendell-network
     restart: unless-stopped
-    command: celery -A tasks.celery_app worker --loglevel=info
+    # Override PYTHONPATH to prioritize /app over /opt/elrond-src to avoid module conflicts
+    command: sh -c 'cd /app && PYTHONPATH=/app exec /usr/bin/python3 -m celery -A tasks_docker.celery_app worker --loglevel=info'
 
   # Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: elrond-frontend
+    container_name: rivendell-frontend
     ports:
-      - "3000:3000"
+      - "5687:3000"
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_API_URL=http://localhost:5688
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/public:/app/public
     depends_on:
       - backend
     networks:
-      - elrond-network
+      - rivendell-network
     restart: unless-stopped
+
+  # Splunk Enterprise
+  splunk:
+    image: splunk/splunk:latest
+    container_name: rivendell-splunk
+    hostname: splunk
+    ports:
+      - "8089:8089"  # Splunk API
+      - "7755:8000"  # Splunk Web
+      - "9997:9997"  # Splunk Forwarder
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
+      - SPLUNK_PASSWORD=rivendell
+    volumes:
+      - splunk_etc:/opt/splunk/etc
+      - splunk_var:/opt/splunk/var
+      - /tmp/rivendell:/tmp/elrond/output:ro  # Mount output directory for monitoring
+    networks:
+      - rivendell-network
+    restart: unless-stopped
+
+  # Elasticsearch
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: rivendell-elasticsearch
+    hostname: elasticsearch
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=rivendell
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - rivendell-network
+    restart: unless-stopped
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: rivendell-kibana
+    hostname: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=rivendell
+      - ELASTICSEARCH_SERVICEACCOUNTTOKEN=${KIBANA_SERVICE_TOKEN:-}
+    depends_on:
+      - elasticsearch
+    networks:
+      - rivendell-network
+    restart: unless-stopped
+
+  # ATT&CK Navigator
+  navigator:
+    image: node:18-alpine
+    container_name: rivendell-navigator
+    hostname: navigator
+    ports:
+      - "5602:4200"
+    working_dir: /navigator
+    volumes:
+      - navigator_data:/navigator
+    networks:
+      - rivendell-network
+    restart: unless-stopped
+    command: >
+      sh -c "
+      if [ ! -d 'attack-navigator' ]; then
+        apk add --no-cache git &&
+        git clone --depth 1 https://github.com/mitre-attack/attack-navigator.git &&
+        cd attack-navigator/nav-app &&
+        npm install &&
+        npm run build -- --output-path=/navigator/dist;
+      fi &&
+      cd attack-navigator/nav-app &&
+      npm start -- --host 0.0.0.0 --port 4200
+      "
 
 volumes:
   redis_data:
-  elrond_output:
-  elrond_uploads:
+  rivendell_output:
+  rivendell_uploads:
+  splunk_etc:
+  splunk_var:
+  elasticsearch_data:
+  navigator_data:
 
 networks:
-  elrond-network:
+  rivendell-network:
     driver: bridge

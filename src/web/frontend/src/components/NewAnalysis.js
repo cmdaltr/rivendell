@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FileBrowser from './FileBrowser';
 import GandalfJobBrowser from './GandalfJobBrowser';
 import OptionsPanel from './OptionsPanel';
 import { createJob } from '../api';
+import axios from 'axios';
 
 function NewAnalysis() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ function NewAnalysis() {
   const [showAvWarning, setShowAvWarning] = useState(false);
   const [showOverwriteModal, setShowOverwriteModal] = useState(false);
   const [overwriteModalData, setOverwriteModalData] = useState({ type: '', message: '', path: '' });
+  const [caseIdExists, setCaseIdExists] = useState(false);
+  const [checkingCaseId, setCheckingCaseId] = useState(false);
 
   // Clear error when options change
   const handleOptionsChange = (newOptions) => {
@@ -25,6 +28,28 @@ function NewAnalysis() {
       setError(null);
     }
   };
+
+  // Check if case ID exists in Rivendell (debounced)
+  useEffect(() => {
+    const timeoutId = setTimeout(async () => {
+      if (caseNumber.length >= 6) {  // Only check if case number is valid length
+        setCheckingCaseId(true);
+        try {
+          const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5688'}/api/validate/case-id/${encodeURIComponent(caseNumber)}`);
+          setCaseIdExists(response.data.exists);
+        } catch (err) {
+          console.error('Error checking case ID:', err);
+          setCaseIdExists(false);
+        } finally {
+          setCheckingCaseId(false);
+        }
+      } else {
+        setCaseIdExists(false);
+      }
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [caseNumber]);
 
   // Validate case number and get validation message
   const getCaseNumberValidation = (value) => {
@@ -56,6 +81,11 @@ function NewAnalysis() {
       return { valid: false, message: `Invalid character '${invalidChar ? invalidChar[0] : ''}' - only letters, numbers, hyphens, periods, and underscores allowed` };
     }
 
+    // Check if case ID already exists in Rivendell
+    if (caseIdExists) {
+      return { valid: false, message: `Case ID "${value}" already exists in Rivendell. Please use a different case ID or delete the existing job.` };
+    }
+
     return { valid: true, message: '' };
   };
 
@@ -81,8 +111,8 @@ function NewAnalysis() {
     }
 
     // Check operation mode is selected
-    if (!options.collect && !options.gandalf && !options.reorganise) {
-      setError('Please select an operation mode (Collect, Gandalf, or Reorganise)');
+    if (!options.collect && !options.gandalf) {
+      setError('Please select an operation mode (Collect or Gandalf)');
       return;
     }
 
@@ -92,9 +122,30 @@ function NewAnalysis() {
 
   const handleAvWarningConfirm = async () => {
     setShowAvWarning(false);
-    setLoading(true);
     setError(null);
 
+    await startJobCreation(false);
+  };
+
+  const handleAvWarningCancel = () => {
+    setShowAvWarning(false);
+  };
+
+  const handleOverwriteConfirm = async () => {
+    setShowOverwriteModal(false);
+    setError(null);
+
+    await startJobCreation(true);
+  };
+
+  const handleOverwriteCancel = () => {
+    setShowOverwriteModal(false);
+    setLoading(false);
+  };
+
+  const startJobCreation = async (forceOverwrite = false) => {
+    setLoading(true);
+    setError(null);
     try {
       const jobData = {
         case_number: caseNumber,
@@ -104,36 +155,17 @@ function NewAnalysis() {
           ...options,
           local: analysisMode === 'local',
           gandalf: analysisMode === 'gandalf',
+          force_overwrite: forceOverwrite,
         },
       };
 
-      console.log('Creating job with data:', jobData);
-
       const job = await createJob(jobData);
-
-      console.log('Job created successfully:', job);
-
-      // Redirect to job details page
       navigate(`/jobs/${job.id}`);
     } catch (err) {
-      console.error('Error creating job:', err);
-      console.error('Error response:', err.response);
-
       const errorDetail = err.response?.data?.detail || err.message || 'Failed to create analysis job';
 
-      // Check if error is duplicate case ID
-      if (errorDetail.includes('already exists')) {
-        setOverwriteModalData({
-          type: 'case_id',
-          message: `A job with case ID "${caseNumber}" already exists.`,
-          path: caseNumber
-        });
-        setShowOverwriteModal(true);
-        return;
-      }
-      // Check if error is "File exists" (errno 17)
-      else if (errorDetail.includes('[Errno 17]') || errorDetail.includes('File exists')) {
-        // Extract the actual path from the error message
+      // Only check for output directory conflicts now (case ID validation happens in real-time)
+      if (errorDetail.includes('[Errno 17]') || errorDetail.includes('File exists')) {
         const pathMatch = errorDetail.match(/'([^']+)'/);
         const existingPath = pathMatch ? pathMatch[1] : (destinationPath || selectedFiles[0]);
 
@@ -150,42 +182,6 @@ function NewAnalysis() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleAvWarningCancel = () => {
-    setShowAvWarning(false);
-  };
-
-  const handleOverwriteConfirm = async () => {
-    setShowOverwriteModal(false);
-    setLoading(true);
-    setError(null);
-
-    try {
-      const job = await createJob({
-        case_number: caseNumber,
-        source_paths: selectedFiles,
-        destination_path: destinationPath || null,
-        options: {
-          ...options,
-          local: analysisMode === 'local',
-          gandalf: analysisMode === 'gandalf',
-          force_overwrite: true
-        },
-      });
-
-      console.log('Job created successfully with overwrite:', job);
-      navigate(`/jobs/${job.id}`);
-    } catch (retryErr) {
-      console.error('Error creating job with overwrite:', retryErr);
-      setError(retryErr.response?.data?.detail || retryErr.message || 'Failed to create analysis job');
-      setLoading(false);
-    }
-  };
-
-  const handleOverwriteCancel = () => {
-    setShowOverwriteModal(false);
-    setLoading(false);
   };
 
   return (
@@ -210,6 +206,7 @@ function NewAnalysis() {
             borderRadius: '8px',
             padding: '2rem',
             maxWidth: '680px',
+            width: '100%',
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
           }}>
             <h3 style={{
@@ -248,6 +245,8 @@ function NewAnalysis() {
                 onClick={handleAvWarningCancel}
                 style={{
                   padding: '0.75rem 1.5rem',
+                  minWidth: '140px',
+                  height: '48px',
                   background: 'rgba(244, 67, 54, 0.2)',
                   border: '1px solid rgba(244, 67, 54, 0.5)',
                   borderRadius: '4px',
@@ -271,6 +270,8 @@ function NewAnalysis() {
                 onClick={handleAvWarningConfirm}
                 style={{
                   padding: '0.75rem 1.5rem',
+                  minWidth: '140px',
+                  height: '48px',
                   background: 'rgba(102, 217, 239, 0.3)',
                   border: '1px solid rgba(102, 217, 239, 0.5)',
                   borderRadius: '4px',
@@ -315,6 +316,7 @@ function NewAnalysis() {
             borderRadius: '8px',
             padding: '2rem',
             maxWidth: '680px',
+            width: '100%',
             boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
           }}>
             <h3 style={{
@@ -366,6 +368,8 @@ function NewAnalysis() {
                 onClick={handleOverwriteCancel}
                 style={{
                   padding: '0.75rem 1.5rem',
+                  minWidth: '140px',
+                  height: '48px',
                   background: 'rgba(244, 67, 54, 0.2)',
                   border: '1px solid rgba(244, 67, 54, 0.5)',
                   borderRadius: '4px',
@@ -389,6 +393,8 @@ function NewAnalysis() {
                 onClick={handleOverwriteConfirm}
                 style={{
                   padding: '0.75rem 1.5rem',
+                  minWidth: '140px',
+                  height: '48px',
                   background: 'rgba(255, 152, 0, 0.3)',
                   border: '1px solid rgba(255, 152, 0, 0.5)',
                   borderRadius: '4px',

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3 -tt
 import subprocess
+import os
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
@@ -26,36 +27,52 @@ def extract_usn(
         vssimage,
     )
     write_audit_log_entry(verbosity, output_directory, entry, prnt)
-    # python usn.py --csv -f usnjournal -o usn.csv
-    """print(
-        "python3",
-        "/opt/elrond/elrond/tools/USN-Journal-Parser/usn.py",
-        "--csv",
-        "-f",
-        artefact,
-        "-o",
+
+    # Check if USN journal file exists and is not empty
+    # Skip processing if file is empty to avoid usn.py hanging
+    if not os.path.exists(artefact):
+        if verbosity != "":
+            print(f"     Warning: USN journal file does not exist: {artefact}")
+        return
+
+    file_size = os.path.getsize(artefact)
+    if file_size == 0:
+        if verbosity != "":
+            print(f"     Skipping empty USN journal file: {artefact}")
+        return
+
+    # Use USN-Journal-Parser for $UsnJrnl parsing
+    # usn.py command: usn.py --csv -f <file> -o <output>
+    output_csv = (
         output_directory
         + img.split("::")[0]
         + "/artefacts/cooked"
         + vss_path_insert
-        + artefact.split("/")[-1]
-        + ".csv",
-    )"""
-    subprocess.Popen(
-        [
-            "python3",
-            "/opt/elrond/elrond/tools/USN-Journal-Parser/usn.py",
-            "--csv",
-            "-f",
-            artefact,
-            "-o",
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + artefact.split("/")[-1]
-            + ".csv",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    ).communicate()
+        + "journal_usn.csv"
+    )
+
+    try:
+        # Add timeout to prevent infinite hangs (max 10 minutes for USN parsing)
+        process = subprocess.Popen(
+            [
+                "usn.py",
+                "--csv",
+                "-f",
+                artefact,
+                "-o",
+                output_csv,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+        try:
+            process.communicate(timeout=600)  # 10 minute timeout
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            if verbosity != "":
+                print(f"     Warning: USN-Journal-Parser timed out after 10 minutes")
+    except Exception as e:
+        if verbosity != "":
+            print(f"     Warning: USN-Journal-Parser failed: {e}")

@@ -19,6 +19,7 @@ def collect_process_keyword_analysis_timeline(
     collect,
     process,
     analysis,
+    magicbytes,
     extractiocs,
     timeline,
     vss,
@@ -160,6 +161,7 @@ def collect_process_keyword_analysis_timeline(
                     img,
                     mnt,
                     analysis,
+                    magicbytes,
                     extractiocs,
                     vssimage,
                 )

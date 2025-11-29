@@ -6,10 +6,18 @@ from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
 
+# Track which browser directories have been processed to avoid duplicates
+_processed_browser_dirs = set()
+
 
 def process_browser_index(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
+    # Create a unique key for this browser directory to avoid reprocessing
+    browser_dir_key = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "browsers"
+    if browser_dir_key in _processed_browser_dirs:
+        return
+    _processed_browser_dirs.add(browser_dir_key)
     if not os.path.exists(
         output_directory
         + img.split("::")[0]

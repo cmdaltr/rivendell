@@ -13,7 +13,7 @@ def extract_mft(
         + img.split("::")[0]
         + "/artefacts/cooked"
         + vss_path_insert
-        + "..journal_mft.csv"
+        + "_tmp_journal_mft.csv"
     ) as mftread:
         for eachinfo in mftread:
             try:

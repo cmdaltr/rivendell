@@ -27,6 +27,12 @@ def unmount_images(elrond_mount, ewf_mount):
                 "\n   Error: Unable to unmount locations. Are you running elrond as root?\n\n"
             )
             sys.exit()
+        except OSError as e:
+            # Handle read-only file system errors gracefully
+            if e.errno == 30:  # EROFS - Read-only file system
+                print(f"   Warning: Unable to remove directory {each} (read-only file system)")
+            else:
+                print(f"   Warning: Unable to remove directory {each}: {e}")
         time.sleep(0.1)
 
     # Check if shadow_mount directory exists before accessing

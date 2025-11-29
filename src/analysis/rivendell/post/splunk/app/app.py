@@ -12,6 +12,14 @@ from rivendell.post.splunk.app.views.views import create_xmls
 
 
 def build_app_elrond(case, postpath):
+    try:
+        _build_app_elrond_internal(case, postpath)
+    except PermissionError as e:
+        print(f"    WARNING: Cannot create Splunk app directories: {e}")
+        print("    Skipping Splunk app creation. Splunk functionality may be limited.")
+        return
+
+def _build_app_elrond_internal(case, postpath):
     for sd in [
         "/" + postpath + "splunk/etc/apps/elrond/",
         "/" + postpath + "splunk/etc/apps/elrond/appserver/",
@@ -24,7 +32,7 @@ def build_app_elrond(case, postpath):
         "/" + postpath + "splunk/etc/apps/elrond/lookups/",
         "/" + postpath + "splunk/etc/apps/elrond/static/",
     ]:
-        os.mkdir(sd)
+        os.makedirs(sd, exist_ok=True)
         if sd.endswith("appserver/static/"):
             with open(sd + "mitre.css", "w") as mitrecss:
                 mitrecss.write(
