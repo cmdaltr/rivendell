@@ -109,21 +109,25 @@ const LoginPage = () => {
             </Link>
           </div>
 
-          <button type="submit" disabled={loading} style={{ width: '100%' }}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <button type="submit" disabled={loading} style={{ width: '100%' }}>
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </div>
         </form>
 
-        <div className="divider">or</div>
+        <div className="divider" data-text="or"></div>
 
-        <button
-          onClick={handleGuestLogin}
-          disabled={loading}
-          className="secondary"
-          style={{ width: '100%' }}
-        >
-          {loading ? 'Continuing...' : 'Continue as Guest'}
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button
+            onClick={handleGuestLogin}
+            disabled={loading}
+            className="secondary"
+            style={{ width: '100%' }}
+          >
+            {loading ? 'Continuing...' : 'Continue as Guest'}
+          </button>
+        </div>
 
         <div className="text-center" style={{ marginTop: '1.5rem' }}>
           Don't have an account?{' '}
@@ -137,7 +141,7 @@ const LoginPage = () => {
         <h4 style={{ marginTop: 0 }}>Default Admin Account</h4>
         <p style={{ fontSize: '0.9rem', color: '#ccc' }}>
           <strong>Email:</strong> admin@rivendell.app<br />
-          <strong>Password:</strong> RivendellAdmin123!
+          <strong>Password:</strong> IWasThere3000YearsAgo!
         </p>
         <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 0 }}>
           Please change this password after your first login in production environments.

@@ -14,7 +14,7 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'Choose your processing mode',
       type: 'single',
       options: [
-        { key: 'brisk', label: 'Brisk', description: 'Optimized processing that balances speed and thoroughness', time: -30 },
+        { key: 'brisk', label: 'Brisk', description: 'Optimized processing that balances speed and thoroughness', time: -15 },
         { key: 'exhaustive', label: 'Exhaustive', description: 'Enable all available options for maximum thoroughness' },
         { key: 'custom', label: 'Custom', description: 'Full control over all processing options' },
       ],
@@ -25,10 +25,10 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'What to collect from the images',
       type: 'multi',
       options: [
-        { key: 'collect_files', label: 'Collect Files', description: 'Collect files (binaries, documents, scripts)', time: 15 },
-        { key: 'userprofiles', label: 'User Profiles', description: 'Collect user profiles\n(if available)', time: 10 },
-        { key: 'vss', label: 'Volume Shadow Copies', description: 'Process VSS images\n(if available)', time: 30 },
-        { key: 'symlinks', label: 'Follow Symlinks', description: 'Follow shortcuts/aliases/\nsymbolic links', time: 45, slow: true },
+        { key: 'collect_files', label: 'Collect Files', description: 'Collect files (binaries, documents, scripts)', time: 5 },
+        { key: 'userprofiles', label: 'User Profiles', description: 'Collect user profiles\n(if available)', time: 5 },
+        { key: 'vss', label: 'Volume Shadow Copies', description: 'Process VSS images\n(if available)', time: 20, slow: true },
+        { key: 'symlinks', label: 'Follow Symlinks', description: 'Follow shortcuts/aliases/\nsymbolic links', time: 10 },
       ],
     },
     {
@@ -37,11 +37,11 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'File metadata and verification options',
       type: 'multi',
       options: [
-        { key: 'hash_collected', label: 'Hash Collected Artefacts', description: 'Hash only collected artifacts', time: 5 },
-        { key: 'hash_all', label: 'Hash All Artefacts', description: 'Hash all files on mounted image', time: 25 },
+        { key: 'hash_collected', label: 'Hash Collected Artefacts', description: 'Hash only collected artifacts', time: 10 },
+        { key: 'hash_all', label: 'Hash All Artefacts', description: 'Hash all files on mounted image', time: 60, slow: true },
         { key: 'nsrl', label: 'NSRL', description: 'Compare hashes against NSRL database', time: 20 },
-        { key: 'last_access_times', label: 'Last Access Times', description: 'Obtain last access times of all files', time: 8 },
-        { key: 'imageinfo', label: 'Image Info', description: 'Extract E01 metadata information', time: 3, disabledForGandalf: true },
+        { key: 'last_access_times', label: 'Last Access Times', description: 'Obtain last access times of all files', time: 5 },
+        { key: 'imageinfo', label: 'Image Info', description: 'Extract E01 metadata information', time: 2, disabledForGandalf: true },
       ],
     },
     {
@@ -50,12 +50,12 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'Analysis and processing features',
       type: 'multi',
       options: [
-        { key: 'analysis', label: 'Automated Analysis', description: 'Conduct automated forensic analysis (includes magic-byte checks)', time: 60 },
-        { key: 'extract_iocs', label: 'Extract IOCs', description: 'Extract Indicators of Compromise', time: 25 },
-        { key: 'clamav', label: 'ClamAV', description: 'Run ClamAV against mounted image', time: 40 },
-        { key: 'memory', label: 'Memory Collection & Analysis', description: 'Analyze memory using Volatility', time: 35 },
-        { key: 'memory_timeline', label: 'Memory Timeline', description: 'Create memory timeline\nusing timeliner', time: 50 },
-        { key: 'timeline', label: 'Disk Image Timeline', description: 'Create timeline using plaso', time: 120, slow: true, disabledForGandalf: true },
+        { key: 'analysis', label: 'Automated Analysis', description: 'Conduct automated forensic analysis (includes magic-byte checks)', time: 30 },
+        { key: 'extract_iocs', label: 'Extract IOCs', description: 'Extract Indicators of Compromise', time: 20 },
+        { key: 'clamav', label: 'ClamAV', description: 'Run ClamAV against mounted image', time: 90, slow: true },
+        { key: 'memory', label: 'Memory Collection & Analysis', description: 'Analyze memory using Volatility', time: 45, slow: true },
+        { key: 'memory_timeline', label: 'Memory Timeline', description: 'Create memory timeline\nusing timeliner', time: 60, slow: true },
+        { key: 'timeline', label: 'Disk Image Timeline', description: 'Create timeline using plaso', time: 180, slow: true, disabledForGandalf: true },
       ],
     },
     {
@@ -64,9 +64,9 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'Advanced artefact processing options',
       type: 'multi',
       options: [
-        { key: 'keywords', label: 'Keywords Search', description: 'Search for specific keywords across artefacts', time: 15 },
-        { key: 'yara', label: 'YARA Rules', description: 'Apply custom YARA rules for pattern matching', time: 20 },
-        { key: 'collectFiles', label: 'Collect Specific Files', description: 'Collect specific files based on criteria', time: 10 },
+        { key: 'keywords', label: 'Keywords Search', description: 'Search for specific keywords across artefacts', time: 30 },
+        { key: 'yara', label: 'YARA Rules', description: 'Apply custom YARA rules for pattern matching', time: 30 },
+        { key: 'collectFiles', label: 'Collect Specific Files', description: 'Collect specific files based on criteria', time: 5 },
       ],
     },
     {
@@ -75,9 +75,9 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'Where to send analysis results',
       type: 'multi',
       options: [
-        { key: 'splunk', label: 'Splunk', description: 'Index into local Splunk instance', time: 5 },
-        { key: 'elastic', label: 'Elastic', description: 'Index into local Elastic instance', time: 5 },
-        { key: 'navigator', label: 'MITRE Navigator', description: 'Map to ATT&CK framework', time: 8 },
+        { key: 'splunk', label: 'Splunk', description: 'Index into local Splunk instance', time: 10 },
+        { key: 'elastic', label: 'Elastic', description: 'Index into local Elastic instance', time: 10 },
+        { key: 'navigator', label: 'MITRE Navigator', description: 'Map to ATT&CK framework', time: 3 },
       ],
     },
     {
@@ -86,8 +86,8 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'Cleanup and archiving options',
       type: 'multi',
       options: [
-        { key: 'archive', label: 'Archive', description: 'Create ZIP archive after processing', time: 15 },
-        { key: 'delete', label: 'Delete Raw Data', description: 'Delete raw data after processing', time: 2 },
+        { key: 'archive', label: 'Archive', description: 'Create ZIP archive after processing', time: 20 },
+        { key: 'delete', label: 'Delete Raw Data', description: 'Delete raw data after processing', time: 1 },
       ],
     },
     {
@@ -137,7 +137,7 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
 
   // Calculate ETA whenever options change
   useEffect(() => {
-    let totalTime = 30; // Base time in minutes
+    let totalTime = 15; // Base time in minutes (mounting, initial setup)
     steps.forEach(step => {
       if (step.options) {
         step.options.forEach(opt => {
@@ -537,13 +537,16 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
                     }
 
                     if (isAnalysisStep) {
+                      // 2 rows x 3 columns layout using 6-column grid
+                      // Row 1: Automated Analysis | Extract IOCs | ClamAV
+                      // Row 2: Memory Collection | Memory Timeline | Disk Image Timeline
                       const spans = {
-                        analysis: 4,
-                        extract_iocs: 4,
-                        clamav: 4,
-                        memory: 4,
-                        memory_timeline: 4,
-                        timeline: 4,
+                        analysis: 2,
+                        extract_iocs: 2,
+                        clamav: 2,
+                        memory: 2,
+                        memory_timeline: 2,
+                        timeline: 2,
                       };
                       if (spans[option.key]) {
                         layoutStyle.gridColumn = `span ${spans[option.key]}`;

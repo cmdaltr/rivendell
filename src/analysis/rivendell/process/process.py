@@ -48,9 +48,11 @@ def process_artefacts(
     vss,
     memtimeline,
 ):
+    from datetime import datetime
     jsondict = {}
     jsonlist = []
-    if img.split("::")[0] in artefact:
+    img_name = img.split("::")[0]
+    if img_name in artefact:
         if artefact.endswith("setupapi.dev.log"):
             process_usb(
                 verbosity,
@@ -135,7 +137,7 @@ def process_artefacts(
                 jsondict,
                 jsonlist,
             )
-        elif "/prefetch" in artefact:
+        elif "/prefetch" in artefact.lower():
             process_prefetch(
                 verbosity,
                 vssimage,
@@ -461,6 +463,7 @@ def determine_vss_image(
     vss,
     memtimeline,
 ):
+    from datetime import datetime
     if (
         "_vss" in img
         and "volume shadow c" in vssimage

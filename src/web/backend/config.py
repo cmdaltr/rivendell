@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
     # Default Admin
     default_admin_email: str = "admin@rivendell.app"
-    default_admin_password: str = "RivendellAdmin123!"
+    default_admin_password: str = "IWasThere3000YearsAgo!"
 
     # Guest Mode
     guest_session_timeout: int = 3600  # 1 hour

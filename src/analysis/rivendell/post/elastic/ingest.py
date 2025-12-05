@@ -1,5 +1,6 @@
 #!/usr/bin/env python3 -tt
 import csv
+import glob
 import json
 import os
 import re
@@ -7,10 +8,53 @@ import shlex
 import shutil
 import subprocess
 import time
+import urllib.request
+import urllib.error
+import ssl
+import base64
 from datetime import datetime
 from io import StringIO
 
 from rivendell.audit import write_audit_log_entry
+
+
+def normalize_timestamp(record):
+    """
+    Normalize timestamp fields to @timestamp for Kibana compatibility.
+    Looks for common timestamp field names and copies to @timestamp.
+    """
+    if isinstance(record, dict):
+        # Already has @timestamp, skip
+        if '@timestamp' in record and record['@timestamp']:
+            return record
+
+        # List of possible timestamp field names (in priority order)
+        timestamp_fields = [
+            'timestamp',
+            'LastWriteTime',
+            'SystemTime',
+            'LastWrite',
+            'Time',
+            'DateTime',
+            'EventTime',
+            'Created',
+            'Modified',
+            'modified',      # MFT/filesystem artifacts (lowercase)
+            'created',
+            'accessed',
+            'changed',
+            'start_time',    # Process/execution artifacts
+            'end_time',
+            'last_run',
+            'run_time',
+        ]
+
+        for field in timestamp_fields:
+            if field in record and record[field]:
+                record['@timestamp'] = record[field]
+                break
+
+    return record
 
 
 def split_large_csv_files(root_dir):
@@ -355,10 +399,10 @@ def ingest_elastic_data(
             )
     # creating index based on case name in elasticsearch
     make_index = shlex.split(
-        'curl -X PUT "localhost:9200/{}?pretty" -H "Content-Type: application/json" -d\'{{"mappings": {{"properties": {{"@timestamp": {{"type": "date", "format": "YYYY-MM-DD HH:mm:ss.SSSSSS"}}}}}}}}\''.format(
+        'curl -X PUT "localhost:9200/{}?pretty" -H "Content-Type: application/json" -d\'{{"mappings": {{"properties": {{"@timestamp": {{"type": "date", "format": "strict_date_optional_time||yyyy-MM-dd HH:mm:ss.SSSSSS||yyyy-MM-dd HH:mm:ss||yyyy-MM-dd\'T\'HH:mm:ss.SSS\'Z\'||yyyy-MM-dd\'T\'HH:mm:ss||epoch_millis"}}}}}}}}\''.format(
             case.lower()
         )
-    )  # yyyy/MM/dd HH:mm:ss.SSS||MM/dd/yy HH:mm:ss||yyyy-MM-dd HH:mm:ss.SSSSSS||yyyy-MM-dd HH:mm:ssZ||yyyy-MM-dd HH:mm:ss||epoch_millis
+    )
     subprocess.Popen(
         make_index,
         stdout=subprocess.PIPE,
@@ -384,28 +428,21 @@ def ingest_elastic_data(
     ).communicate()[0]
     time.sleep(0.2)
     for img in imgs_to_ingest:
-        if "vss" in img.split("::")[1]:
-            vssimage, vsstext = "'" + img.split("::")[0] + "' (" + img.split("::")[
-                1
-            ].split("_")[1].replace(
-                "vss", "volume shadow copy #"
-            ) + ")", " from " + img.split(
-                "::"
-            )[
-                1
-            ].split(
-                "_"
-            )[
-                1
-            ].replace(
-                "vss", "volume shadow copy #"
-            )
+        # Handle image name format: "imagename::mountpoint" or just "imagename"
+        img_parts = img.split("::")
+        img_name = img_parts[0]
+        img_mount = img_parts[1] if len(img_parts) > 1 else ""
+
+        if "vss" in img_mount:
+            vss_part = img_mount.split("_")[1] if "_" in img_mount else img_mount
+            vssimage = "'" + img_name + "' (" + vss_part.replace("vss", "volume shadow copy #") + ")"
+            vsstext = " from " + vss_part.replace("vss", "volume shadow copy #")
         else:
-            vssimage, vsstext = "'" + img.split("::")[0] + "'", ""
+            vssimage, vsstext = "'" + img_name + "'", ""
         print()
         print("     Ingesting artefacts into elasticsearch for {}...".format(vssimage))
         entry, prnt = "{},{}{},{},ingesting\n".format(
-            datetime.now().isoformat(), img.split("::")[0], vsstext, stage
+            datetime.now().isoformat(), img_name, vsstext, stage
         ), " -> {} -> ingesting artfacts into {} for {}{}".format(
             datetime.now().isoformat().replace("T", " "),
             stage,
@@ -414,17 +451,17 @@ def ingest_elastic_data(
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
         directories_with_data = [
-            os.path.realpath(os.path.join(output_directory, img.split("::")[0])),
+            os.path.realpath(os.path.join(output_directory, img_name)),
             os.path.realpath(
-                os.path.join(output_directory, img.split("::")[0], "/artefacts/cooked/")
+                os.path.join(output_directory, img_name, "/artefacts/cooked/")
             ),
         ]
         if os.path.exists(
-            os.path.join(output_directory, img.split("::")[0], "/artefacts/cooked/")
+            os.path.join(output_directory, img_name, "/artefacts/cooked/")
         ):
             for sub_dir in os.listdir(
                 os.path.realpath(
-                    output_directory + img.split("::")[0] + "/artefacts/cooked/"
+                    output_directory + img_name + "/artefacts/cooked/"
                 )
             ):
                 if "vss" in sub_dir:
@@ -432,7 +469,7 @@ def ingest_elastic_data(
                         os.path.realpath(
                             os.path.join(
                                 output_directory
-                                + img.split("::")[0]
+                                + img_name
                                 + "/artefacts/cooked",
                                 sub_dir,
                             )
@@ -454,3 +491,364 @@ def ingest_elastic_data(
             vssimage,
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+    # Generate and deploy Kibana dashboards
+    try:
+        from rivendell.post.elastic.dashboards import generate_all_dashboards, export_dashboards_to_ndjson
+        print("\n     Generating Kibana dashboards...")
+        dashboards = generate_all_dashboards(case, index_pattern=case.lower(), parent_only=True)
+        dashboard_path = os.path.join(output_directory, "kibana_dashboards.ndjson")
+        export_dashboards_to_ndjson(dashboards, dashboard_path)
+        print(f"     Generated {len(dashboards)} dashboards -> {dashboard_path}")
+        print("     Import dashboards via: Kibana > Stack Management > Saved Objects > Import")
+    except ImportError:
+        print("     Note: Dashboard generation module not available")
+    except Exception as e:
+        print(f"     Warning: Could not generate dashboards: {e}")
+
+
+def send_bulk_to_elastic(bulk_data, elastic_url, auth_header, ssl_context, case):
+    """Send bulk data to Elasticsearch"""
+    if not bulk_data:
+        return True
+
+    bulk_url = "{}/_bulk".format(elastic_url)
+    bulk_body = '\n'.join(bulk_data) + '\n'
+
+    req = urllib.request.Request(bulk_url, data=bulk_body.encode('utf-8'), method='POST')
+    req.add_header('Content-Type', 'application/x-ndjson')
+    if auth_header:
+        req.add_header('Authorization', auth_header)
+
+    try:
+        urllib.request.urlopen(req, context=ssl_context, timeout=120)
+        return True
+    except urllib.error.HTTPError as e:
+        return False
+    except Exception as e:
+        return False
+
+
+def ingest_elastic_data_remote(
+    verbosity,
+    output_directory,
+    case,
+    stage,
+    allimgs,
+    elastic_host,
+    elastic_port,
+    elastic_user,
+    elastic_pswd,
+    kibana_host,
+    kibana_port,
+):
+    """Ingest data to a remote Elasticsearch instance (containerized environment)"""
+
+    # Create SSL context that doesn't verify certificates (for self-signed)
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
+    # Build auth header
+    auth_header = None
+    if elastic_user and elastic_pswd:
+        credentials = '{}:{}'.format(elastic_user, elastic_pswd)
+        encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+        auth_header = 'Basic {}'.format(encoded_credentials)
+
+    elastic_url = "http://{}:{}".format(elastic_host, elastic_port)
+    kibana_url = "http://{}:{}".format(kibana_host, kibana_port)
+
+    # Batch size for bulk ingestion (number of records per batch)
+    BATCH_SIZE = 1000
+    # Large file threshold (50MB) - files larger than this use streaming
+    LARGE_FILE_THRESHOLD = 50 * 1024 * 1024
+
+    imgs_to_ingest = []
+    for _, img in allimgs.items():
+        if img not in str(imgs_to_ingest):
+            imgs_to_ingest.append(img)
+
+    # Create index in Elasticsearch
+    print("     Creating Elasticsearch index '{}'...".format(case.lower()))
+    try:
+        index_url = "{}/{}".format(elastic_url, case.lower())
+        index_mapping = json.dumps({
+            "mappings": {
+                "properties": {
+                    "@timestamp": {
+                        "type": "date",
+                        "format": "strict_date_optional_time||yyyy-MM-dd HH:mm:ss.SSSSSS||yyyy-MM-dd HH:mm:ss||yyyy-MM-dd'T'HH:mm:ss.SSS'Z'||yyyy-MM-dd'T'HH:mm:ss||epoch_millis"
+                    }
+                }
+            }
+        }).encode('utf-8')
+
+        req = urllib.request.Request(index_url, data=index_mapping, method='PUT')
+        req.add_header('Content-Type', 'application/json')
+        if auth_header:
+            req.add_header('Authorization', auth_header)
+
+        try:
+            response = urllib.request.urlopen(req, context=ssl_context, timeout=30)
+            print("     Index '{}' created successfully".format(case.lower()))
+        except urllib.error.HTTPError as e:
+            if e.code == 400:
+                print("     Index '{}' already exists".format(case.lower()))
+            else:
+                print("     Warning: Could not create index: {} {}".format(e.code, e.reason))
+    except Exception as e:
+        print("     Warning: Could not create index: {}".format(e))
+
+    # Increase field limit
+    try:
+        settings_url = "{}/_settings".format(index_url)
+        settings_data = json.dumps({"index.mapping.total_fields.limit": 1000000}).encode('utf-8')
+        req = urllib.request.Request(settings_url, data=settings_data, method='PUT')
+        req.add_header('Content-Type', 'application/json')
+        if auth_header:
+            req.add_header('Authorization', auth_header)
+        urllib.request.urlopen(req, context=ssl_context, timeout=30)
+    except Exception as e:
+        pass  # Non-critical
+
+    # Create index pattern in Kibana
+    print("     Creating Kibana index pattern...")
+    try:
+        pattern_url = "{}/api/saved_objects/index-pattern/{}".format(kibana_url, case.lower())
+        pattern_data = json.dumps({
+            "attributes": {
+                "title": "{}*".format(case.lower()),
+                "timeFieldName": "@timestamp"
+            }
+        }).encode('utf-8')
+
+        req = urllib.request.Request(pattern_url, data=pattern_data, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('kbn-xsrf', 'true')
+        if auth_header:
+            req.add_header('Authorization', auth_header)
+
+        try:
+            urllib.request.urlopen(req, context=ssl_context, timeout=30)
+            print("     Index pattern created")
+        except urllib.error.HTTPError as e:
+            if e.code == 409:
+                print("     Index pattern already exists")
+            else:
+                print("     Warning: Could not create index pattern: {} {}".format(e.code, e.reason))
+    except Exception as e:
+        print("     Warning: Could not create index pattern: {}".format(e))
+
+    # Ingest data for each image
+    for img in imgs_to_ingest:
+        # Handle image name format: "imagename::mountpoint" or just "imagename"
+        img_parts = img.split("::")
+        img_name = img_parts[0]
+        img_mount = img_parts[1] if len(img_parts) > 1 else ""
+
+        if "vss" in img_mount:
+            vssimage = "'" + img_name + "' (volume shadow copy)"
+        else:
+            vssimage = "'" + img_name + "'"
+
+        entry, prnt = "{},{},indexing artefacts for {}\n".format(
+            datetime.now().isoformat(), stage, vssimage
+        ), " -> {} -> indexing artefacts for {}".format(
+            datetime.now().isoformat().replace("T", " "), vssimage
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+        # Find all JSON and CSV files in cooked directory
+        cooked_path = os.path.join(output_directory, img_name, "artefacts", "cooked")
+
+        if not os.path.exists(cooked_path):
+            print("     No cooked artefacts found for {}".format(vssimage))
+            continue
+
+        # Collect all files to ingest
+        files_to_ingest = []
+        files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "*.json")))
+        files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "*.csv")))
+        files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "**", "*.json"), recursive=True))
+        files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "**", "*.csv"), recursive=True))
+
+        # Remove duplicates
+        files_to_ingest = list(set(files_to_ingest))
+
+        for filepath in files_to_ingest:
+            filename = os.path.basename(filepath)
+            file_size = os.path.getsize(filepath)
+
+            try:
+                bulk_data = []
+                records_processed = 0
+
+                if filepath.endswith('.json'):
+                    # Check if file is large - use streaming for large files
+                    if file_size > LARGE_FILE_THRESHOLD:
+                        # Stream large JSON files line by line
+                        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                            # Try to detect if it's a JSON array by peeking
+                            first_char = f.read(1)
+                            f.seek(0)
+
+                            if first_char == '[':
+                                # JSON array - use ijson-style streaming (manual parsing)
+                                # Read in chunks and extract objects
+                                buffer = ""
+                                depth = 0
+                                in_string = False
+                                escape_next = False
+                                obj_start = -1
+
+                                for chunk in iter(lambda: f.read(8192), ''):
+                                    for i, char in enumerate(chunk):
+                                        if escape_next:
+                                            escape_next = False
+                                            continue
+                                        if char == '\\' and in_string:
+                                            escape_next = True
+                                            continue
+                                        if char == '"' and not escape_next:
+                                            in_string = not in_string
+                                            continue
+                                        if in_string:
+                                            continue
+
+                                        if char == '{':
+                                            if depth == 0:
+                                                obj_start = len(buffer) + i
+                                            depth += 1
+                                        elif char == '}':
+                                            depth -= 1
+                                            if depth == 0 and obj_start >= 0:
+                                                # Extract object
+                                                obj_str = buffer[obj_start:] + chunk[:i+1]
+                                                try:
+                                                    record = json.loads(obj_str)
+                                                    record['hostname'] = img_name
+                                                    record['artefact'] = filename
+                                                    normalize_timestamp(record)
+                                                    bulk_data.append(json.dumps({"index": {"_index": case.lower()}}))
+                                                    bulk_data.append(json.dumps(record))
+                                                    records_processed += 1
+
+                                                    # Send batch when full
+                                                    if len(bulk_data) >= BATCH_SIZE * 2:
+                                                        send_bulk_to_elastic(bulk_data, elastic_url, auth_header, ssl_context, case)
+                                                        bulk_data = []
+                                                except:
+                                                    pass
+                                                obj_start = -1
+                                                buffer = ""
+                                                continue
+
+                                    buffer += chunk
+                                    # Trim buffer if no object in progress
+                                    if obj_start == -1:
+                                        buffer = ""
+                            else:
+                                # JSON lines format - read line by line
+                                for line in f:
+                                    if line.strip():
+                                        try:
+                                            record = json.loads(line)
+                                            record['hostname'] = img_name
+                                            record['artefact'] = filename
+                                            normalize_timestamp(record)
+                                            bulk_data.append(json.dumps({"index": {"_index": case.lower()}}))
+                                            bulk_data.append(json.dumps(record))
+                                            records_processed += 1
+
+                                            # Send batch when full
+                                            if len(bulk_data) >= BATCH_SIZE * 2:
+                                                send_bulk_to_elastic(bulk_data, elastic_url, auth_header, ssl_context, case)
+                                                bulk_data = []
+                                        except:
+                                            pass
+                    else:
+                        # Small files - load entirely
+                        with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                            try:
+                                content = f.read()
+                                # Handle JSON lines format
+                                if '\n' in content and not content.strip().startswith('['):
+                                    for line in content.strip().split('\n'):
+                                        if line.strip():
+                                            try:
+                                                record = json.loads(line)
+                                                record['hostname'] = img_name
+                                                record['artefact'] = filename
+                                                normalize_timestamp(record)
+                                                bulk_data.append(json.dumps({"index": {"_index": case.lower()}}))
+                                                bulk_data.append(json.dumps(record))
+                                                records_processed += 1
+                                            except:
+                                                pass
+                                else:
+                                    # Regular JSON array
+                                    records = json.loads(content)
+                                    if isinstance(records, list):
+                                        for record in records:
+                                            if isinstance(record, dict):
+                                                record['hostname'] = img_name
+                                                record['artefact'] = filename
+                                                normalize_timestamp(record)
+                                                bulk_data.append(json.dumps({"index": {"_index": case.lower()}}))
+                                                bulk_data.append(json.dumps(record))
+                                                records_processed += 1
+                                    elif isinstance(records, dict):
+                                        records['hostname'] = img_name
+                                        records['artefact'] = filename
+                                        normalize_timestamp(records)
+                                        bulk_data.append(json.dumps({"index": {"_index": case.lower()}}))
+                                        bulk_data.append(json.dumps(records))
+                                        records_processed += 1
+                            except json.JSONDecodeError:
+                                pass
+
+                elif filepath.endswith('.csv'):
+                    with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                        try:
+                            reader = csv.DictReader(f)
+                            for row in reader:
+                                row['hostname'] = img_name
+                                row['artefact'] = filename
+                                # Add timestamp if not present
+                                if '@timestamp' not in row and 'LastWriteTime' not in row:
+                                    row['@timestamp'] = datetime.now().isoformat()
+                                bulk_data.append(json.dumps({"index": {"_index": case.lower()}}))
+                                bulk_data.append(json.dumps(row))
+                                records_processed += 1
+
+                                # Send batch when full
+                                if len(bulk_data) >= BATCH_SIZE * 2:
+                                    send_bulk_to_elastic(bulk_data, elastic_url, auth_header, ssl_context, case)
+                                    bulk_data = []
+                        except:
+                            pass
+
+                # Send remaining bulk data
+                if bulk_data:
+                    send_bulk_to_elastic(bulk_data, elastic_url, auth_header, ssl_context, case)
+
+                # Log successful indexing
+                entry, prnt = "{},{},indexed '{}' for {}\n".format(
+                    datetime.now().isoformat(), stage, filename, img_name
+                ), " -> {} -> indexed '{}' for '{}'".format(
+                    datetime.now().isoformat().replace("T", " "), filename, img_name
+                )
+                write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+            except Exception as e:
+                print("       Warning: Could not process {}: {}".format(filename, str(e)[:50]))
+
+        entry, prnt = "{},{},completed indexing for {}\n".format(
+            datetime.now().isoformat(), stage, vssimage
+        ), " -> {} -> completed indexing for {}".format(
+            datetime.now().isoformat().replace("T", " "), vssimage
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+    print("     Elasticsearch ingestion complete")

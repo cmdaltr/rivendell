@@ -163,44 +163,41 @@ tools:
   # WINDOWS ARTIFACTS
   # ====================
 
-  analyzeMFT:
-    name: "analyzeMFT"
-    description: "Parse Windows $MFT"
+  artemis:
+    name: "Artemis"
+    description: "Comprehensive Rust-based forensic parser for Windows artifacts"
     category: "windows"
-    platforms: [all]
+    platforms: [linux, macos]
     executables:
-      - analyzeMFT.py
+      - artemis
     common_paths:
       linux:
         - /usr/local/bin
       macos:
         - /usr/local/bin
-      windows:
-        - C:\Python39\Scripts
     install_methods:
-      linux: "pip3 install analyzeMFT"
-      macos: "pip3 install analyzeMFT"
-      windows: "pip install analyzeMFT"
-    required: false
-
-  python-evtx:
-    name: "python-evtx"
-    description: "Parse Windows Event Logs (EVTX)"
-    category: "windows"
-    platforms: [all]
-    executables:
-      - evtx_dump.py
-    common_paths:
-      linux:
-        - /usr/local/bin
-      macos:
-        - /usr/local/bin
-      windows:
-        - C:\Python39\Scripts
-    install_methods:
-      linux: "pip3 install python-evtx"
-      macos: "pip3 install python-evtx"
-      windows: "pip install python-evtx"
+      linux: "Download from https://github.com/puffyCid/artemis/releases"
+      macos: "Download from https://github.com/puffyCid/artemis/releases"
+    supported_artifacts:
+      - mft
+      - eventlogs
+      - prefetch
+      - shimcache
+      - amcache
+      - registry
+      - userassist
+      - shellbags
+      - usnjrnl
+      - bits
+      - srum
+      - search
+      - tasks
+      - services
+      - shortcuts
+      - jumplists
+      - recyclebin
+      - outlook
+      - wmipersist
     required: false
 
   regripper:

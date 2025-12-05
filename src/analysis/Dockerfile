@@ -138,7 +138,6 @@ RUN pip3 install --no-cache-dir plaso || true
 # Install core forensic Python packages
 RUN pip3 install --no-cache-dir \
     python-registry \
-    python-evtx \
     regipy \
     dissect \
     dissect.cstruct \
@@ -150,12 +149,24 @@ RUN pip3 install --no-cache-dir \
     oletools \
     pyopenssl
 
-# Install analyzeMFT for $MFT parsing - using standalone script version
-RUN cd /tmp && \
-    git clone https://github.com/rowingdude/analyzeMFT.git && \
-    cp analyzeMFT/analyzeMFT.py /usr/local/bin/analyzeMFT_standalone.py && \
-    chmod +x /usr/local/bin/analyzeMFT_standalone.py && \
-    rm -rf analyzeMFT
+# Install Artemis - comprehensive Rust-based forensic parser
+# Supports: prefetch, eventlogs, mft, shimcache, amcache, registry, userassist,
+# shellbags, usnjrnl, bits, srum, search, tasks, services, shortcuts, jumplists,
+# recyclebin, outlook, wmipersist - all with --alt-file/--alt-dir for offline analysis
+RUN ARTEMIS_VERSION="v0.16.0" && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        ARTEMIS_ARCH="x86_64-unknown-linux-gnu"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        ARTEMIS_ARCH="aarch64-unknown-linux-gnu"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -L -o /tmp/artemis.tar.gz "https://github.com/puffyCid/artemis/releases/download/${ARTEMIS_VERSION}/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}.tar.gz" && \
+    tar -xzf /tmp/artemis.tar.gz -C /tmp && \
+    cp /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}/artemis /usr/local/bin/ && \
+    chmod +x /usr/local/bin/artemis && \
+    rm -rf /tmp/artemis.tar.gz /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}
 
 # Install additional analysis tools (rekall-core removed due to Python 2 incompatibility)
 RUN pip3 install --no-cache-dir \

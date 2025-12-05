@@ -366,7 +366,7 @@ python3 -m rivendell.mitre.navigator /output/CASE-001 -o navigator.json
 # Login
 TOKEN=$(curl -s -X POST http://localhost:5688/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin@rivendell.app", "password": "RivendellAdmin123!"}' \
+  -d '{"username": "admin@rivendell.app", "password": "IWasThere3000YearsAgo!"}' \
   | jq -r '.access_token')
 
 # Use token in requests

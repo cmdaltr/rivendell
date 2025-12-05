@@ -110,8 +110,7 @@ wsl --install -d Ubuntu-22.04
 - **Registry Explorer** - Registry viewer
 
 ### Event Log Analysis (Windows)
-- **EvtxCmd** - Windows event log parser
-- **python-evtx** - EVTX parser library
+- **Artemis** - Comprehensive Rust-based forensic parser (fast)
 
 ### File System Analysis
 - **The Sleuth Kit (TSK)** - File system analysis tools
@@ -190,7 +189,6 @@ dfvfs>=20230418
 dfwinreg>=20230318
 yara-python>=4.3.1
 pefile>=2023.2.7
-python-evtx>=0.7.4
 oletools>=0.60.1
 ```
 

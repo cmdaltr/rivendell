@@ -81,7 +81,6 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 # Install core forensic Python packages
 RUN pip3 install --no-cache-dir \
     python-registry \
-    python-evtx \
     regipy \
     pytsk3 \
     pefile \
@@ -100,29 +99,24 @@ RUN pip3 install --no-cache-dir \
     numpy \
     openpyxl
 
-# Clone analyzeMFT from GitHub and apply patches for Python 3.10 compatibility
-RUN cd /opt && \
-    git clone https://github.com/rowingdude/analyzeMFT.git && \
-    chmod +x /opt/analyzeMFT/analyzeMFT.py && \
-    ln -s /opt/analyzeMFT/analyzeMFT.py /usr/local/bin/analyzeMFT_standalone.py && \
-    # Patch 1: Add sanitize function to remove NULL bytes (causes CSV errors in Python 3.10)
-    head -12 /opt/analyzeMFT/src/analyzeMFT/file_writers.py > /tmp/fw_patched.py && \
-    echo '' >> /tmp/fw_patched.py && \
-    echo 'def _sanitize_csv_value(value):' >> /tmp/fw_patched.py && \
-    echo '    """Remove NULL bytes from value for CSV compatibility"""' >> /tmp/fw_patched.py && \
-    echo '    if isinstance(value, str):' >> /tmp/fw_patched.py && \
-    echo '        return value.replace("\\x00", "")' >> /tmp/fw_patched.py && \
-    echo '    return value' >> /tmp/fw_patched.py && \
-    echo '' >> /tmp/fw_patched.py && \
-    tail -n +13 /opt/analyzeMFT/src/analyzeMFT/file_writers.py >> /tmp/fw_patched.py && \
-    sed -i 's/writer.writerow(record.to_csv())/writer.writerow([_sanitize_csv_value(v) for v in record.to_csv()])/' /tmp/fw_patched.py && \
-    sed -i 's/writer = csv.writer(csvfile)/writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)/' /tmp/fw_patched.py && \
-    cp /tmp/fw_patched.py /opt/analyzeMFT/src/analyzeMFT/file_writers.py && \
-    # Patch 2: Update mft_analyzer.py to use sanitize function
-    sed -i 's/from .file_writers import FileWriters, get_writer/from .file_writers import FileWriters, get_writer, _sanitize_csv_value/' /opt/analyzeMFT/src/analyzeMFT/mft_analyzer.py && \
-    sed -i 's/self.csv_writer = csv.writer(self.csvfile)/self.csv_writer = csv.writer(self.csvfile, quoting=csv.QUOTE_ALL)/' /opt/analyzeMFT/src/analyzeMFT/mft_analyzer.py && \
-    sed -i 's/self.csv_writer.writerow(csv_row)/self.csv_writer.writerow([_sanitize_csv_value(v) for v in csv_row])/' /opt/analyzeMFT/src/analyzeMFT/mft_analyzer.py && \
-    sed -i 's/self.csv_writer.writerow(csv_data)/self.csv_writer.writerow([_sanitize_csv_value(v) for v in csv_data])/' /opt/analyzeMFT/src/analyzeMFT/mft_analyzer.py
+# Install Artemis - comprehensive Rust-based forensic parser
+# Supports: prefetch, eventlogs, mft, shimcache, amcache, registry, userassist,
+# shellbags, usnjrnl, bits, srum, search, tasks, services, shortcuts, jumplists,
+# recyclebin, outlook, wmipersist - all with --alt-file/--alt-dir for offline analysis
+RUN ARTEMIS_VERSION="v0.16.0" && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then \
+        ARTEMIS_ARCH="x86_64-unknown-linux-gnu"; \
+    elif [ "$ARCH" = "aarch64" ]; then \
+        ARTEMIS_ARCH="aarch64-unknown-linux-gnu"; \
+    else \
+        echo "Unsupported architecture: $ARCH" && exit 1; \
+    fi && \
+    curl -L -o /tmp/artemis.tar.gz "https://github.com/puffyCid/artemis/releases/download/${ARTEMIS_VERSION}/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}.tar.gz" && \
+    tar -xzf /tmp/artemis.tar.gz -C /tmp && \
+    cp /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}/artemis /usr/local/bin/ && \
+    chmod +x /usr/local/bin/artemis && \
+    rm -rf /tmp/artemis.tar.gz /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}
 
 # Install plaso (timeline analysis) - optional, may fail
 RUN pip3 install --no-cache-dir plaso || echo "Plaso installation skipped"
@@ -158,25 +152,6 @@ ENV ELROND_HOME="/opt/elrond-src"
 ENV ELROND_OUTPUT="/tmp/elrond/output"
 ENV ELROND_NONINTERACTIVE="1"
 
-# Create evtx_dump.py wrapper script for python-evtx
-RUN echo '#!/usr/bin/python3\n\
-import sys\n\
-import Evtx.Evtx as evtx\n\
-import Evtx.Views as e_views\n\
-\n\
-def main():\n\
-    if len(sys.argv) < 2:\n\
-        print("Usage: evtx_dump.py <evtx_file>")\n\
-        sys.exit(1)\n\
-    \n\
-    with evtx.Evtx(sys.argv[1]) as log:\n\
-        for record in log.records():\n\
-            print(record.xml())\n\
-\n\
-if __name__ == "__main__":\n\
-    main()\n\
-' > /usr/local/bin/evtx_dump.py && chmod +x /usr/local/bin/evtx_dump.py
-
 # Create symlink for log2timeline.py (elrond looks for .py extension)
 RUN ln -s /usr/local/bin/log2timeline /usr/local/bin/log2timeline.py
 
@@ -184,6 +159,8 @@ RUN ln -s /usr/local/bin/log2timeline /usr/local/bin/log2timeline.py
 RUN cd /opt && \
     git clone https://github.com/keydet89/RegRipper3.0.git regripper && \
     cd regripper && \
+    # Fix Windows-style shebang to Unix-style
+    sed -i '1s|^#!.*|#!/usr/bin/perl|' rip.pl && \
     chmod +x rip.pl && \
     # Make rip.pl available in PATH
     ln -s /opt/regripper/rip.pl /usr/local/bin/rip.pl && \

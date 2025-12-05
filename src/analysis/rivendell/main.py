@@ -21,6 +21,7 @@ from rivendell.post.clean import archive_artefacts
 from rivendell.post.clean import delete_artefacts
 from rivendell.post.elastic.config import configure_elastic_stack
 from rivendell.post.mitre.nav_config import configure_navigator
+from rivendell.post.mitre.enrichment import enrich_artefacts_directory
 from rivendell.post.splunk.config import configure_splunk_stack
 from rivendell.post.yara import run_yara_signatures
 from rivendell.utils import safe_input, is_noninteractive, safe_print
@@ -280,7 +281,11 @@ def main(
         output_directory = "./"
 
     # Handle case where d is a file path (e.g., /path/to/image.E01) instead of a directory
+    # Track if we should process only a specific image file
+    specific_image_file = None
     if os.path.isfile(d):
+        # Remember the specific file to process
+        specific_image_file = os.path.basename(d)
         # Extract directory from file path
         d = os.path.dirname(d)
         if not d:
@@ -326,9 +331,22 @@ def main(
     safe_print(
         "\n  -> \033[1;36mCommencing Identification Phase...\033[1;m\n  ----------------------------------------"
     )
+    print(" -> {} -> starting image mounting and identification...".format(
+        datetime.now().isoformat().replace("T", " ")
+    ))
     time.sleep(1)
     if collect:  # collect artefacts from disk/memory images
-        for root, _, files in os.walk(d):  # Mounting images
+        # If a specific image file was provided, only iterate top-level directory
+        # and only process that file (skip subdirectories which may contain
+        # artefacts from previous jobs)
+        if specific_image_file:
+            # Only process files in the top-level directory, not subdirectories
+            files_to_process = [(d, [specific_image_file])]
+        else:
+            # Walk the entire directory tree (legacy behavior for directory input)
+            files_to_process = [(root, files) for root, _, files in os.walk(d)]
+
+        for root, files in files_to_process:  # Mounting images
             for f in files:
                 if os.path.exists(os.path.join(root, f)):  # Mounting images
                     if (
@@ -414,6 +432,10 @@ def main(
         ):  # potentially add ova and vdi - https://superuser.com/questions/915615/mount-vmware-disk-images-under-linux
             stage = "mounting"
             path, root, f, imgformat = foundimg.split("||")
+            # Print mounting message so UI shows progress during long mount operations
+            print(" -> {} -> mounting '{}' ...".format(
+                datetime.now().isoformat().replace("T", " "), f
+            ))
             if (
                 "Expert Witness" in imgformat
                 or (
@@ -672,6 +694,23 @@ def main(
             memtimeline,
             stage,
         )
+        # Run MITRE enrichment immediately after processing if Navigator is enabled
+        # This tags artefacts with MITRE techniques during processing, not Navigator phase
+        if navigator and process:
+            print(" -> {} -> tagging artefacts with MITRE ATT&CK techniques...".format(
+                datetime.now().isoformat().replace("T", " ")
+            ))
+            for root, dirs, _ in os.walk(output_directory):
+                if "cooked" in dirs:
+                    cooked_path = os.path.join(root, "cooked")
+                    try:
+                        stats = enrich_artefacts_directory(cooked_path)
+                        enriched = stats.get('enriched_files', 0)
+                        techniques = stats.get('technique_count', 0)
+                        print(f"     Tagged {enriched} files, identified {techniques} MITRE techniques")
+                    except Exception as e:
+                        print(f"     Warning: MITRE tagging error: {e}")
+                    break
     allimgs, imgs, elrond_mount, img_list = (
         OrderedDict(sorted(allimgs.items(), key=lambda x: x[1])),
         OrderedDict(sorted(imgs.items(), key=lambda x: x[1])),
@@ -865,11 +904,17 @@ def main(
                         "  ----------------------------------------\n  -> Completed Splunk Phase.\n"
                     )
                 except Exception as e:
-                    # Silently skip - Splunk configuration handled by web backend
-                    pass
+                    # Log the error instead of silently skipping
+                    print("     ERROR: Splunk configuration failed: {}".format(e))
+                    import traceback
+                    traceback.print_exc()
             time.sleep(1)
         if elastic:
+            print(
+                "\n\n  -> \033[1;36mCommencing Elastic Phase...\033[1;m\n  ----------------------------------------"
+            )
             # Ensure Elasticsearch and Kibana are installed before configuring
+            siem_installer = None
             try:
                 from elrond.tools.siem_installer import SIEMInstaller
                 siem_installer = SIEMInstaller()
@@ -883,11 +928,12 @@ def main(
                 print("\n  \033[1;31mWARNING: Elastic Stack is not fully installed. Skipping Elastic phase.\033[0m\n")
             else:
                 try:
-                    # Verify version match
-                    match, match_msg = siem_installer.version_checker.check_elasticsearch_kibana_match()
-                    if not match:
-                        print(f"\n  \033[1;33mWARNING: {match_msg}\033[0m")
-                        print("  \033[1;33mProceeding with caution...\033[0m\n")
+                    # Verify version match (only if siem_installer was successfully created)
+                    if siem_installer is not None:
+                        match, match_msg = siem_installer.version_checker.check_elasticsearch_kibana_match()
+                        if not match:
+                            print(f"\n  \033[1;33mWARNING: {match_msg}\033[0m")
+                            print("  \033[1;33mProceeding with caution...\033[0m\n")
 
                     configure_elastic_stack(
                         verbosity,
@@ -897,25 +943,27 @@ def main(
                         allimgs,
                     )
                     flags.append("09elastic")
-                    print(
-                        "  ----------------------------------------\n  -> Completed Elastic Phase.\n"
-                    )
                 except Exception as e:
                     print(f"\n  \033[1;31mWARNING: Elastic configuration failed: {e}\033[0m")
                     print("  -> Skipping Elastic phase.\n")
-            time.sleep(1)
-        if (splunk or elastic) and navigator:  # mapping to attack-navigator
-            safe_print(
-                "\n\n  -> \033[1;36mBuilding ATT&CK® Navigator...\033[1;m\n  ----------------------------------------"
+            print(
+                "  ----------------------------------------\n  -> Completed Elastic Phase.\n"
             )
             time.sleep(1)
+        if navigator:  # mapping to attack-navigator
+            print(
+                "\n\n  -> \033[1;36mCommencing Navigator Phase...\033[1;m\n  ----------------------------------------"
+            )
+            time.sleep(1)
+            # MITRE techniques were already identified during processing phase
+            # Navigator just reads the techniques file and generates the layer
             navresults = configure_navigator(
-                verbosity, case, splunk, elastic, usercred, pswdcred
+                verbosity, case, splunk, elastic, usercred, pswdcred, output_directory
             )
             if navresults != "":
                 flags.append("10navigator")
             print(
-                "  ----------------------------------------\n  -> Completed ATT&CK® Navigator Phase.\n"
+                "  ----------------------------------------\n  -> Completed Navigator Phase.\n"
             )
             time.sleep(1)
         if archive or delete:
@@ -1056,34 +1104,61 @@ def main(
             flags = str(flags)[4:-2].title()
             more_than_one_phase = "phase"
         if len(allimgs) > 0:
-            print("      {} {} completed for...".format(flags, more_than_one_phase))
             for _, eachimg in allimgs.items():
                 doneimgs.append(eachimg.split("::")[0])
     doneimgs = sorted(list(set(doneimgs)))
     unmount_images(elrond_mount, ewf_mount)
     for eachimg, _ in allimgs.items():
-        for doneroot, donedirs, donefiles in os.walk(
-            output_directory + str(eachimg.split("::")[0]).split("/")[-1]
-        ):
+        img_output_dir = output_directory + str(eachimg.split("::")[0]).split("/")[-1]
+
+        # First pass: remove small/empty files (JSON with just [] or empty)
+        for doneroot, donedirs, donefiles in os.walk(img_output_dir):
             for donefile in donefiles:
-                if os.path.exists(os.path.join(doneroot, donefile)):
-                    if os.stat(os.path.join(doneroot, donefile)).st_size <= 100:
-                        try:
-                            os.remove(os.path.join(doneroot, donefile))
-                        except:
-                            pass
-            for donedir in donedirs:
-                if os.path.exists(doneroot + "/artefacts/raw/"):
-                    for eachdir in os.listdir(doneroot + "/artefacts/raw/"):
-                        if os.path.exists(
-                            doneroot + "/artefacts/raw/" + eachdir + "/IE/"
-                        ):
-                            shutil.rmtree(doneroot + "/artefacts/raw/" + eachdir)
-                if len(os.listdir(os.path.join(doneroot, donedir))) < 1:
+                filepath = os.path.join(doneroot, donefile)
+                if os.path.exists(filepath):
                     try:
-                        shutil.rmtree(os.path.join(doneroot, donedir))
+                        filesize = os.stat(filepath).st_size
+                        # Remove files <= 100 bytes (empty or just [] or {})
+                        if filesize <= 100:
+                            os.remove(filepath)
                     except:
                         pass
+
+        # Second pass: move single files from subdirectories to parent (cooked dir)
+        cooked_dir = os.path.join(img_output_dir, "artefacts", "cooked")
+        if os.path.exists(cooked_dir):
+            for subdir in os.listdir(cooked_dir):
+                subdir_path = os.path.join(cooked_dir, subdir)
+                if os.path.isdir(subdir_path):
+                    files_in_subdir = [f for f in os.listdir(subdir_path) if os.path.isfile(os.path.join(subdir_path, f))]
+                    # If only one file in subdirectory, move it up to cooked dir
+                    if len(files_in_subdir) == 1:
+                        src_file = os.path.join(subdir_path, files_in_subdir[0])
+                        # Name the file after the subdirectory (e.g., usnjrnl.json)
+                        dst_file = os.path.join(cooked_dir, subdir + ".json")
+                        try:
+                            shutil.move(src_file, dst_file)
+                        except:
+                            pass
+
+        # Third pass: remove empty directories and cleanup raw artefacts
+        for doneroot, donedirs, donefiles in os.walk(img_output_dir, topdown=False):
+            # Remove raw IE directories
+            if os.path.exists(doneroot + "/artefacts/raw/"):
+                for eachdir in os.listdir(doneroot + "/artefacts/raw/"):
+                    if os.path.exists(doneroot + "/artefacts/raw/" + eachdir + "/IE/"):
+                        try:
+                            shutil.rmtree(doneroot + "/artefacts/raw/" + eachdir)
+                        except:
+                            pass
+            # Remove empty directories
+            for donedir in donedirs:
+                dirpath = os.path.join(doneroot, donedir)
+                try:
+                    if os.path.exists(dirpath) and len(os.listdir(dirpath)) == 0:
+                        shutil.rmtree(dirpath)
+                except:
+                    pass
     for doneimg in doneimgs:
         print("       '{}'".format(doneimg))
         entry, prnt = "{},{},finished,'{}'-'{}': ({} seconds)".format(

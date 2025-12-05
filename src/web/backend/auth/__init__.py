@@ -12,12 +12,13 @@ from .security import (
     generate_password_reset_token,
 )
 
-from .dependencies import (
-    get_current_user,
-    require_auth,
-    require_admin,
-    get_user_or_guest,
-)
+# Disabled - requires database
+# from .dependencies import (
+#     get_current_user,
+#     require_auth,
+#     require_admin,
+#     get_user_or_guest,
+# )
 
 __all__ = [
     "hash_password",
@@ -25,8 +26,4 @@ __all__ = [
     "create_access_token",
     "verify_token",
     "generate_password_reset_token",
-    "get_current_user",
-    "require_auth",
-    "require_admin",
-    "get_user_or_guest",
 ]

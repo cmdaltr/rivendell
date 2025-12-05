@@ -102,8 +102,8 @@ Or use the startup script:
 - **Plaso** - Timeline analysis
 - **pytsk3** - Sleuthkit Python bindings
 - **python-registry** - Windows registry parsing
-- **python-evtx** - Windows event log parsing
 - **regipy** - Modern registry parser
+- **Artemis** - Comprehensive Rust-based forensic parser (fast)
 - **dissect** - Cross-platform forensics framework
 - **pefile** - PE file analysis
 - **yara-python** - YARA rule engine

@@ -787,13 +787,12 @@ def build_elrond_command(job):
     if opts.imageinfo:
         cmd.append("--imageinfo")
 
-    # Output options (MUST come before Brisk since Brisk invokes Navigator which requires Splunk/Elastic)
+    # Output options
     if opts.splunk:
         cmd.append("--Splunk")
     if opts.elastic:
         cmd.append("--Elastic")
-    # Navigator requires Splunk or Elastic
-    if opts.navigator and (opts.splunk or opts.elastic):
+    if opts.navigator:
         cmd.append("--Navigator")
 
     # Speed/Quality modes

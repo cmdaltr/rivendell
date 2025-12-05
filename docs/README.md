@@ -90,7 +90,7 @@ http://localhost:5687
 
 # Default login
 Email: admin@rivendell.app
-Password: RivendellAdmin123!
+Password: IWasThere3000YearsAgo!
 ```
 
 ### Creating an Analysis Job

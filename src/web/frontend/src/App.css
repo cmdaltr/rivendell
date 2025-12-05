@@ -1,4 +1,25 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&display=swap');
+/* Local Cinzel font - no external dependencies */
+@font-face {
+  font-family: 'Cinzel';
+  src: url('./fonts/Cinzel-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cinzel';
+  src: url('./fonts/Cinzel-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cinzel';
+  src: url('./fonts/Cinzel-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 * {
   margin: 0;
@@ -1476,8 +1497,16 @@ table input[type="checkbox"] {
   grid-template-columns: repeat(6, 1fr);
 }
 
-.wizard-options.analysis-grid {
-  grid-template-columns: repeat(12, 1fr);
+.wizard-options.analysis-grid,
+.wizard-options.analysis-grid[data-option-count],
+.wizard-options.analysis-grid.checkbox-group[data-option-count="6"] {
+  grid-template-columns: repeat(6, 1fr) !important;
+}
+
+/* Ensure analysis grid items don't get overridden spans */
+.wizard-options.analysis-grid .wizard-option-item:nth-child(5),
+.wizard-options.analysis-grid .wizard-option-item:nth-child(6) {
+  grid-column: span 2 !important;
 }
 
 .wizard-options.radio-group {
@@ -2080,4 +2109,48 @@ select.large-select:disabled {
 
 .gandalf-job-browser .selected-jobs .remove-button:hover {
   background: #a0522d;
+}
+
+/* Logout icon button - matches nav link styling */
+.App-header nav .logout-icon-btn {
+  background: transparent;
+  border: none;
+  color: #f0dba5;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
+  outline: none;
+  box-shadow: none;
+  font-weight: 500;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  letter-spacing: 0.05em;
+}
+
+.App-header nav .logout-icon-btn:hover:not(:disabled) {
+  background: rgba(167, 219, 108, 0.2);
+  color: #a7db6c;
+  transform: none;
+  box-shadow: none;
+}
+
+.App-header nav .logout-icon-btn:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.App-header nav .logout-icon-btn.disabled,
+.App-header nav .logout-icon-btn:disabled {
+  color: #666;
+  cursor: not-allowed;
+  opacity: 0.4;
+  background: transparent;
+}
+
+.App-header nav .logout-icon-btn:disabled:hover {
+  background: transparent;
+  transform: none;
+  box-shadow: none;
 }

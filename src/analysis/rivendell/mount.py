@@ -450,7 +450,7 @@ def mount_vmdk_image(
                             os.path.join(
                                 output_directory, intermediate_mount.split("/")[-1]
                             )
-                            + "/log.audit"
+                            + "/rivendell_audit.log"
                         )
                         os.rmdir(
                             os.path.join(
@@ -916,7 +916,7 @@ def mount_images(
                 )
         entry, prnt = "{},{},{},commenced\n".format(
             datetime.now().isoformat(), disk_file, stage
-        ), " -> {} -> mounting '{}'".format(
+        ), " -> {} -> mounting '{}' commenced".format(
             datetime.now().isoformat().replace("T", " "), disk_file
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)

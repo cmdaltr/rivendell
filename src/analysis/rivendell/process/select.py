@@ -12,7 +12,6 @@ from rivendell.process.process import process_artefacts
 
 def select_artefacts_to_process(img, process_list, artefacts_list, processed_artefacts):
     for each in process_list:
-        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> scanning for artefacts in '{each.split('/')[-2]}'...")
         file_count = 0
         for root, _, files in os.walk(each):
             for f in files:  # identifying artefacts for processing
@@ -78,7 +77,13 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                     ):
                         artefacts_list.append(each + ": " + root + "/" + f)
                         processed_artefacts.append(root + "/" + f)
-        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> scan complete: {file_count:,} files scanned, {len(artefacts_list):,} artefacts found")
+        # Print summary with artefact type breakdown
+        evtx_count = sum(1 for a in artefacts_list if ".evtx" in a.lower())
+        pf_count = sum(1 for a in artefacts_list if a.endswith(".pf"))
+        reg_count = sum(1 for a in artefacts_list if any(x in a for x in ["SAM", "SECURITY", "SOFTWARE", "SYSTEM", "NTUSER.DAT", "UsrClass.dat"]))
+        mft_count = sum(1 for a in artefacts_list if "$MFT" in a)
+        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> {file_count:,} files scanned, {len(artefacts_list):,} artefacts found")
+        print(f"    artefact breakdown: {evtx_count} event logs, {pf_count} prefetch, {reg_count} registry, {mft_count} MFT")
     return artefacts_list
 
 

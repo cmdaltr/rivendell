@@ -10,6 +10,10 @@ services:
     networks:
       - rivendell-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
 
   # Backend API
   backend:
@@ -38,6 +42,10 @@ services:
       - rivendell-network
     restart: unless-stopped
     command: uvicorn main:app --host 0.0.0.0 --port 5688 --reload
+    deploy:
+      resources:
+        limits:
+          memory: 256M
 
   # Celery worker for background tasks (forensics-enabled)
   celery-worker:
@@ -59,7 +67,7 @@ services:
       - SPLUNK_PORT=8089
       - SPLUNK_USERNAME=admin
       - SPLUNK_PASSWORD=rivendell
-      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_HOST=elastic
       - ELASTICSEARCH_PORT=9200
       - ELASTIC_USERNAME=elastic
       - ELASTIC_PASSWORD=rivendell
@@ -72,16 +80,23 @@ services:
       - rivendell_uploads:/tmp/elrond/uploads  # For uploaded forensic images
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var
+      - navigator_data:/navigator  # Shared with navigator for ATT&CK Navigator JSON output
     depends_on:
       - redis
       - backend
       - splunk
-      - elasticsearch
+      - elastic
     networks:
       - rivendell-network
     restart: unless-stopped
     # Override PYTHONPATH to prioritize /app over /opt/elrond-src to avoid module conflicts
     command: sh -c 'cd /app && PYTHONPATH=/app exec /usr/bin/python3 -m celery -A tasks_docker.celery_app worker --loglevel=info'
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 2G
 
   # Frontend
   frontend:
@@ -101,6 +116,10 @@ services:
     networks:
       - rivendell-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
   # Splunk Enterprise
   splunk:
@@ -122,25 +141,74 @@ services:
     networks:
       - rivendell-network
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
 
   # Elasticsearch
-  elasticsearch:
+  elastic:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: rivendell-elasticsearch
-    hostname: elasticsearch
+    container_name: rivendell-elastic
+    hostname: elastic
     ports:
       - "9200:9200"
       - "9300:9300"
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=true
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
       - ELASTIC_PASSWORD=rivendell
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
     volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
+      - elastic_data:/usr/share/elasticsearch/data
     networks:
       - rivendell-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -u elastic:rivendell http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # Elasticsearch setup - initializes passwords for built-in users
+  elastic-setup:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: rivendell-elastic-setup
+    depends_on:
+      elastic:
+        condition: service_healthy
+    networks:
+      - rivendell-network
+    environment:
+      - ELASTIC_PASSWORD=rivendell
+    command: >
+      bash -c '
+        echo "Waiting for Elasticsearch to be ready...";
+        until curl -s -u elastic:rivendell http://elastic:9200/_cluster/health | grep -q "status"; do
+          sleep 5;
+        done;
+        echo "Setting kibana_system password...";
+        curl -s -X POST -u elastic:rivendell -H "Content-Type: application/json" \
+          http://elastic:9200/_security/user/kibana_system/_password \
+          -d "{\"password\": \"rivendell\"}" || true;
+        echo "Creating admin user with superuser role...";
+        curl -s -X POST -u elastic:rivendell -H "Content-Type: application/json" \
+          http://elastic:9200/_security/user/admin \
+          -d "{\"password\": \"rivendell\", \"roles\": [\"superuser\"], \"full_name\": \"Admin User\"}" || true;
+        echo "Elasticsearch setup complete!";
+      '
+    restart: "no"
 
   # Kibana
   kibana:
@@ -150,15 +218,80 @@ services:
     ports:
       - "5601:5601"
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_HOSTS=http://elastic:9200
       - ELASTICSEARCH_USERNAME=kibana_system
       - ELASTICSEARCH_PASSWORD=rivendell
-      - ELASTICSEARCH_SERVICEACCOUNTTOKEN=${KIBANA_SERVICE_TOKEN:-}
+      - SERVER_NAME=rivendell-kibana
+      - XPACK_SECURITY_ENABLED=true
     depends_on:
-      - elasticsearch
+      elastic:
+        condition: service_healthy
     networks:
       - rivendell-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q 'available'"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # Kibana dashboard setup - imports Rivendell dashboards
+  kibana-setup:
+    image: curlimages/curl:latest
+    container_name: rivendell-kibana-setup
+    depends_on:
+      kibana:
+        condition: service_healthy
+    networks:
+      - rivendell-network
+    environment:
+      - KIBANA_URL=http://kibana:5601
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=rivendell
+    volumes:
+      - ./src/web/kibana:/dashboards:ro
+    command: >
+      sh -c '
+        echo "Rivendell Kibana Dashboard Setup";
+        echo "=================================";
+
+        echo "Importing Rivendell dashboards...";
+        response=$$(curl -s -X POST \
+          -u "elastic:rivendell" \
+          "http://kibana:5601/api/saved_objects/_import?overwrite=true" \
+          -H "kbn-xsrf: true" \
+          --form file=@/dashboards/dashboards.ndjson);
+
+        if echo "$$response" | grep -q "success.*true"; then
+          echo "Dashboards imported successfully!";
+        else
+          echo "Dashboard import response: $$response";
+        fi;
+
+        echo "Setting default index pattern...";
+        curl -s -X POST \
+          -u "elastic:rivendell" \
+          "http://kibana:5601/api/kibana/settings" \
+          -H "kbn-xsrf: true" \
+          -H "Content-Type: application/json" \
+          -d "{\"changes\":{\"defaultIndex\":\"rivendell-index-pattern\"}}" > /dev/null;
+
+        echo "";
+        echo "Kibana setup complete!";
+        echo "  - Overview: http://localhost:5601/app/dashboards#/view/rivendell-overview";
+        echo "  - MITRE ATT&CK: http://localhost:5601/app/dashboards#/view/rivendell-mitre";
+        echo "  - Analysis: http://localhost:5601/app/dashboards#/view/rivendell-analysis";
+        echo "  - IoCs: http://localhost:5601/app/dashboards#/view/rivendell-iocs";
+        echo "  - Keywords: http://localhost:5601/app/dashboards#/view/rivendell-keywords";
+        echo "  - YARA: http://localhost:5601/app/dashboards#/view/rivendell-yara";
+        echo "  - Actors: http://localhost:5601/app/dashboards#/view/rivendell-actors";
+      '
+    restart: "no"
 
   # ATT&CK Navigator
   navigator:
@@ -176,15 +309,27 @@ services:
     command: >
       sh -c "
       if [ ! -d 'attack-navigator' ]; then
-        apk add --no-cache git &&
+        echo 'Cloning ATT&CK Navigator...' &&
+        apk add --no-cache git curl &&
         git clone --depth 1 https://github.com/mitre-attack/attack-navigator.git &&
         cd attack-navigator/nav-app &&
+        echo 'Installing dependencies...' &&
         npm install &&
-        npm run build -- --output-path=/navigator/dist;
+        echo 'Building Navigator (this may take a few minutes)...' &&
+        NODE_OPTIONS='--max-old-space-size=3072' npm run build -- --output-path=/navigator/dist;
       fi &&
-      cd attack-navigator/nav-app &&
-      npm start -- --host 0.0.0.0 --port 4200
+      if [ ! -f '/navigator/dist/assets/enterprise-attack.json' ]; then
+        echo 'Downloading MITRE ATT&CK Enterprise v13.1 data...' &&
+        mkdir -p /navigator/dist/assets &&
+        curl -sL 'https://raw.githubusercontent.com/mitre/cti/ATT%26CK-v13.1/enterprise-attack/enterprise-attack.json' -o /navigator/dist/assets/enterprise-attack.json;
+      fi &&
+      echo 'Serving Navigator on port 4200...' &&
+      npx serve -s /navigator/dist -l 4200
       "
+    deploy:
+      resources:
+        limits:
+          memory: 4G
 
 volumes:
   redis_data:
@@ -192,7 +337,7 @@ volumes:
   rivendell_uploads:
   splunk_etc:
   splunk_var:
-  elasticsearch_data:
+  elastic_data:
   navigator_data:
 
 networks:

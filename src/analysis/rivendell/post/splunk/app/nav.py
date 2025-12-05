@@ -1,250 +1,106 @@
 #!/usr/bin/env python3 -tt
+"""
+Navigation Menu Generator for Elrond Splunk App
+
+Generates the navigation menu structure including all MITRE ATT&CK techniques
+organized by tactic. Updated for MITRE ATT&CK v18.1.
+"""
+
+
+# All MITRE ATT&CK techniques organized by tactic (v18.1)
+TECHNIQUES_BY_TACTIC = {
+    "Reconnaissance": [
+        "t1595", "t1592", "t1589", "t1590", "t1591", "t1598", "t1597", "t1596", "t1593", "t1594"
+    ],
+    "Resource Development": [
+        "t1583", "t1586", "t1584", "t1587", "t1585", "t1588", "t1608", "t1650"
+    ],
+    "Initial Access": [
+        "t1659", "t1189", "t1190", "t1133", "t1200", "t1566", "t1091", "t1195", "t1199", "t1078"
+    ],
+    "Execution": [
+        "t1651", "t1059", "t1609", "t1610", "t1203", "t1559", "t1106", "t1053", "t1129", "t1072", "t1569", "t1204", "t1047"
+    ],
+    "Persistence": [
+        "t1098", "t1197", "t1547", "t1037", "t1176", "t1554", "t1136", "t1543", "t1546", "t1133",
+        "t1574", "t1525", "t1556", "t1137", "t1653", "t1542", "t1053", "t1505", "t1205", "t1078"
+    ],
+    "Privilege Escalation": [
+        "t1548", "t1134", "t1547", "t1037", "t1543", "t1484", "t1611", "t1546", "t1068", "t1574", "t1055", "t1053", "t1078"
+    ],
+    "Defense Evasion": [
+        "t1548", "t1134", "t1197", "t1612", "t1622", "t1140", "t1610", "t1006", "t1480", "t1211",
+        "t1222", "t1484", "t1564", "t1574", "t1562", "t1656", "t1070", "t1202", "t1036", "t1556",
+        "t1578", "t1112", "t1601", "t1599", "t1027", "t1647", "t1542", "t1055", "t1620", "t1207",
+        "t1014", "t1218", "t1216", "t1553", "t1221", "t1205", "t1127", "t1535", "t1550", "t1078",
+        "t1497", "t1600", "t1220"
+    ],
+    "Credential Access": [
+        "t1557", "t1110", "t1555", "t1212", "t1187", "t1606", "t1056", "t1556", "t1040", "t1003",
+        "t1528", "t1649", "t1539", "t1111", "t1621", "t1552"
+    ],
+    "Discovery": [
+        "t1087", "t1010", "t1217", "t1580", "t1538", "t1526", "t1613", "t1622", "t1652", "t1482",
+        "t1083", "t1615", "t1654", "t1046", "t1135", "t1040", "t1201", "t1120", "t1069", "t1057",
+        "t1012", "t1018", "t1518", "t1082", "t1614", "t1016", "t1049", "t1033", "t1007", "t1124", "t1497"
+    ],
+    "Lateral Movement": [
+        "t1210", "t1534", "t1570", "t1563", "t1021", "t1091", "t1072", "t1080", "t1550"
+    ],
+    "Collection": [
+        "t1560", "t1123", "t1119", "t1115", "t1530", "t1602", "t1213", "t1005", "t1039", "t1025",
+        "t1074", "t1114", "t1056", "t1185", "t1557", "t1113", "t1125"
+    ],
+    "Command and Control": [
+        "t1071", "t1092", "t1659", "t1132", "t1001", "t1568", "t1573", "t1008", "t1105", "t1104",
+        "t1095", "t1571", "t1572", "t1090", "t1219", "t1205", "t1102"
+    ],
+    "Exfiltration": [
+        "t1020", "t1030", "t1048", "t1041", "t1011", "t1052", "t1567", "t1029", "t1537"
+    ],
+    "Impact": [
+        "t1531", "t1485", "t1486", "t1565", "t1491", "t1561", "t1499", "t1657", "t1495", "t1490",
+        "t1498", "t1496", "t1489", "t1529"
+    ]
+}
 
 
 def create_nav_menu(defaultnav):
-    # Add new parent techniques to nav.py
-    defaultnav.write('<collection label="MITRE">\n		')
-    defaultnav.write('<view name="mitre" default="true" />\n		')
-    defaultnav.write(
-        '<a href="http://127.0.0.1:4200" target="_blank">ATT&amp;CK® Navigator Mapping</a>\n		'
-    )
-    defaultnav.write('<view name="info" />\n	')
-    defaultnav.write("</collection>\n	")
-    defaultnav.write('<collection label="ATT&amp;CK® Techniques">\n		')
-    defaultnav.write('<collection label="Initial Access">\n			')
-    defaultnav.write('<view name="t1659" />\n			')
-    defaultnav.write('<view name="t1189" />\n			')
-    defaultnav.write('<view name="t1190" />\n			')
-    defaultnav.write('<view name="t1133" />\n			')
-    defaultnav.write('<view name="t1200" />\n			')
-    defaultnav.write('<view name="t1566" />\n			')
-    defaultnav.write('<view name="t1091" />\n			')
-    defaultnav.write('<view name="t1195" />\n			')
-    defaultnav.write('<view name="t1199" />\n			')
-    defaultnav.write('<view name="t1078" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Execution">\n			')
-    defaultnav.write('<view name="t1651" />\n			')
-    defaultnav.write('<view name="t1059" />\n			')
-    defaultnav.write('<view name="t1609" />\n			')
-    defaultnav.write('<view name="t1610" />\n			')
-    defaultnav.write('<view name="t1203" />\n			')
-    defaultnav.write('<view name="t1559" />\n			')
-    defaultnav.write('<view name="t1106" />\n			')
-    defaultnav.write('<view name="t1053" />\n			')
-    defaultnav.write('<view name="t1129" />\n			')
-    defaultnav.write('<view name="t1072" />\n			')
-    defaultnav.write('<view name="t1569" />\n			')
-    defaultnav.write('<view name="t1204" />\n			')
-    defaultnav.write('<view name="t1047" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Persistence">\n			')
-    defaultnav.write('<view name="t1098" />\n			')
-    defaultnav.write('<view name="t1197" />\n			')
-    defaultnav.write('<view name="t1547" />\n			')
-    defaultnav.write('<view name="t1037" />\n			')
-    defaultnav.write('<view name="t1176" />\n			')
-    defaultnav.write('<view name="t1554" />\n			')
-    defaultnav.write('<view name="t1136" />\n			')
-    defaultnav.write('<view name="t1543" />\n			')
-    defaultnav.write('<view name="t1546" />\n			')
-    defaultnav.write('<view name="t1133" />\n			')
-    defaultnav.write('<view name="t1574" />\n			')
-    defaultnav.write('<view name="t1525" />\n			')
-    defaultnav.write('<view name="t1556" />\n			')
-    defaultnav.write('<view name="t1137" />\n			')
-    defaultnav.write('<view name="t1653" />\n			')
-    defaultnav.write('<view name="t1542" />\n			')
-    defaultnav.write('<view name="t1053" />\n			')
-    defaultnav.write('<view name="t1505" />\n			')
-    defaultnav.write('<view name="t1205" />\n			')
-    defaultnav.write('<view name="t1078" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Privilege Escalation">\n			')
-    defaultnav.write('<view name="t1548" />\n			')
-    defaultnav.write('<view name="t1134" />\n			')
-    defaultnav.write('<view name="t1547" />\n			')
-    defaultnav.write('<view name="t1037" />\n			')
-    defaultnav.write('<view name="t1543" />\n			')
-    defaultnav.write('<view name="t1484" />\n			')
-    defaultnav.write('<view name="t1611" />\n			')
-    defaultnav.write('<view name="t1546" />\n			')
-    defaultnav.write('<view name="t1068" />\n			')
-    defaultnav.write('<view name="t1574" />\n			')
-    defaultnav.write('<view name="t1055" />\n			')
-    defaultnav.write('<view name="t1053" />\n			')
-    defaultnav.write('<view name="t1078" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Defense Evasion">\n			')
-    defaultnav.write('<view name="t1548" />\n			')
-    defaultnav.write('<view name="t1134" />\n			')
-    defaultnav.write('<view name="t1197" />\n			')
-    defaultnav.write('<view name="t1612" />\n			')
-    defaultnav.write('<view name="t1622" />\n			')
-    defaultnav.write('<view name="t1140" />\n			')
-    defaultnav.write('<view name="t1642" />\n			')
-    defaultnav.write('<view name="t1610" />\n			')
-    defaultnav.write('<view name="t1006" />\n			')
-    defaultnav.write('<view name="t1480" />\n			')
-    defaultnav.write('<view name="t1211" />\n			')
-    defaultnav.write('<view name="t1222" />\n			')
-    defaultnav.write('<view name="t1484" />\n			')
-    defaultnav.write('<view name="t1564" />\n			')
-    defaultnav.write('<view name="t1574" />\n			')
-    defaultnav.write('<view name="t1562" />\n			')
-    defaultnav.write('<view name="t1656" />\n			')
-    defaultnav.write('<view name="t1070" />\n			')
-    defaultnav.write('<view name="t1202" />\n			')
-    defaultnav.write('<view name="t1036" />\n			')
-    defaultnav.write('<view name="t1556" />\n			')
-    defaultnav.write('<view name="t1578" />\n			')
-    defaultnav.write('<view name="t1112" />\n			')
-    defaultnav.write('<view name="t1601" />\n			')
-    defaultnav.write('<view name="t1599" />\n			')
-    defaultnav.write('<view name="t1027" />\n			')
-    defaultnav.write('<view name="t1647" />\n			')
-    defaultnav.write('<view name="t1542" />\n			')
-    defaultnav.write('<view name="t1055" />\n			')
-    defaultnav.write('<view name="t1620" />\n			')
-    defaultnav.write('<view name="t1207" />\n			')
-    defaultnav.write('<view name="t1014" />\n			')
-    defaultnav.write('<view name="t1218" />\n			')
-    defaultnav.write('<view name="t1216" />\n			')
-    defaultnav.write('<view name="t1553" />\n			')
-    defaultnav.write('<view name="t1221" />\n			')
-    defaultnav.write('<view name="t1205" />\n			')
-    defaultnav.write('<view name="t1127" />\n			')
-    defaultnav.write('<view name="t1535" />\n			')
-    defaultnav.write('<view name="t1550" />\n			')
-    defaultnav.write('<view name="t1078" />\n			')
-    defaultnav.write('<view name="t1497" />\n			')
-    defaultnav.write('<view name="t1600" />\n			')
-    defaultnav.write('<view name="t1220" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Credential Access">\n			')
-    defaultnav.write('<view name="t1110" />\n			')
-    defaultnav.write('<view name="t1555" />\n			')
-    defaultnav.write('<view name="t1212" />\n			')
-    defaultnav.write('<view name="t1187" />\n			')
-    defaultnav.write('<view name="t1606" />\n			')
-    defaultnav.write('<view name="t1056" />\n			')
-    defaultnav.write('<view name="t1557" />\n			')
-    defaultnav.write('<view name="t1556" />\n			')
-    defaultnav.write('<view name="t1040" />\n			')
-    defaultnav.write('<view name="t1003" />\n			')
-    defaultnav.write('<view name="t1528" />\n			')
-    defaultnav.write('<view name="t1539" />\n			')
-    defaultnav.write('<view name="t1111" />\n			')
-    defaultnav.write('<view name="t1621" />\n			')
-    defaultnav.write('<view name="t1552" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Discovery">\n			')
-    defaultnav.write('<view name="t1087" />\n			')
-    defaultnav.write('<view name="t1010" />\n			')
-    defaultnav.write('<view name="t1217" />\n			')
-    defaultnav.write('<view name="t1580" />\n			')
-    defaultnav.write('<view name="t1538" />\n			')
-    defaultnav.write('<view name="t1526" />\n			')
-    defaultnav.write('<view name="t1613" />\n			')
-    defaultnav.write('<view name="t1622" />\n			')
-    defaultnav.write('<view name="t1652" />\n			')
-    defaultnav.write('<view name="t1642" />\n			')
-    defaultnav.write('<view name="t1482" />\n			')
-    defaultnav.write('<view name="t1083" />\n			')
-    defaultnav.write('<view name="t1615" />\n			')
-    defaultnav.write('<view name="t1654" />\n			')
-    defaultnav.write('<view name="t1046" />\n			')
-    defaultnav.write('<view name="t1135" />\n			')
-    defaultnav.write('<view name="t1040" />\n			')
-    defaultnav.write('<view name="t1201" />\n			')
-    defaultnav.write('<view name="t1120" />\n			')
-    defaultnav.write('<view name="t1069" />\n			')
-    defaultnav.write('<view name="t1057" />\n			')
-    defaultnav.write('<view name="t1012" />\n			')
-    defaultnav.write('<view name="t1018" />\n			')
-    defaultnav.write('<view name="t1518" />\n			')
-    defaultnav.write('<view name="t1082" />\n			')
-    defaultnav.write('<view name="t1614" />\n			')
-    defaultnav.write('<view name="t1016" />\n			')
-    defaultnav.write('<view name="t1049" />\n			')
-    defaultnav.write('<view name="t1033" />\n			')
-    defaultnav.write('<view name="t1007" />\n			')
-    defaultnav.write('<view name="t1124" />\n			')
-    defaultnav.write('<view name="t1497" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Lateral Movement">\n			')
-    defaultnav.write('<view name="t1210" />\n			')
-    defaultnav.write('<view name="t1534" />\n			')
-    defaultnav.write('<view name="t1570" />\n			')
-    defaultnav.write('<view name="t1563" />\n			')
-    defaultnav.write('<view name="t1021" />\n			')
-    defaultnav.write('<view name="t1091" />\n			')
-    defaultnav.write('<view name="t1072" />\n			')
-    defaultnav.write('<view name="t1080" />\n			')
-    defaultnav.write('<view name="t1550" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Collection">\n			')
-    defaultnav.write('<view name="t1560" />\n			')
-    defaultnav.write('<view name="t1123" />\n			')
-    defaultnav.write('<view name="t1119" />\n			')
-    defaultnav.write('<view name="t1115" />\n			')
-    defaultnav.write('<view name="t1530" />\n			')
-    defaultnav.write('<view name="t1602" />\n			')
-    defaultnav.write('<view name="t1213" />\n			')
-    defaultnav.write('<view name="t1005" />\n			')
-    defaultnav.write('<view name="t1039" />\n			')
-    defaultnav.write('<view name="t1025" />\n			')
-    defaultnav.write('<view name="t1074" />\n			')
-    defaultnav.write('<view name="t1114" />\n			')
-    defaultnav.write('<view name="t1056" />\n			')
-    defaultnav.write('<view name="t1185" />\n			')
-    defaultnav.write('<view name="t1557" />\n			')
-    defaultnav.write('<view name="t1113" />\n			')
-    defaultnav.write('<view name="t1125" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Command &amp; Control">\n			')
-    defaultnav.write('<view name="t1071" />\n			')
-    defaultnav.write('<view name="t1092" />\n			')
-    defaultnav.write('<view name="t1659" />\n			')
-    defaultnav.write('<view name="t1132" />\n			')
-    defaultnav.write('<view name="t1001" />\n			')
-    defaultnav.write('<view name="t1568" />\n			')
-    defaultnav.write('<view name="t1573" />\n			')
-    defaultnav.write('<view name="t1008" />\n			')
-    defaultnav.write('<view name="t1105" />\n			')
-    defaultnav.write('<view name="t1104" />\n			')
-    defaultnav.write('<view name="t1095" />\n			')
-    defaultnav.write('<view name="t1571" />\n			')
-    defaultnav.write('<view name="t1572" />\n			')
-    defaultnav.write('<view name="t1090" />\n			')
-    defaultnav.write('<view name="t1219" />\n			')
-    defaultnav.write('<view name="t1205" />\n			')
-    defaultnav.write('<view name="t1102" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Exfiltration">\n			')
-    defaultnav.write('<view name="t1020" />\n			')
-    defaultnav.write('<view name="t1030" />\n			')
-    defaultnav.write('<view name="t1048" />\n			')
-    defaultnav.write('<view name="t1041" />\n			')
-    defaultnav.write('<view name="t1011" />\n			')
-    defaultnav.write('<view name="t1052" />\n			')
-    defaultnav.write('<view name="t1567" />\n			')
-    defaultnav.write('<view name="t1029" />\n			')
-    defaultnav.write('<view name="t1537" />\n			')
-    defaultnav.write("</collection>\n		")
-    defaultnav.write('<collection label="Impact">\n			')
-    defaultnav.write('<view name="t1531" />\n			')
-    defaultnav.write('<view name="t1485" />\n			')
-    defaultnav.write('<view name="t1486" />\n			')
-    defaultnav.write('<view name="t1565" />\n			')
-    defaultnav.write('<view name="t1491" />\n			')
-    defaultnav.write('<view name="t1561" />\n			')
-    defaultnav.write('<view name="t1499" />\n			')
-    defaultnav.write('<view name="t1657" />\n			')
-    defaultnav.write('<view name="t1495" />\n			')
-    defaultnav.write('<view name="t1490" />\n			')
-    defaultnav.write('<view name="t1498" />\n			')
-    defaultnav.write('<view name="t1496" />\n			')
-    defaultnav.write('<view name="t1489" />\n			')
-    defaultnav.write('<view name="t1529" />\n			')
-    defaultnav.write("</collection>\n	</collection>\n	")
+    """Create the MITRE ATT&CK navigation menu with all techniques organized by tactic."""
+
+    # MITRE Overview Section
+    defaultnav.write('<collection label="MITRE">\n\t\t')
+    defaultnav.write('<view name="mitre" default="true" />\n\t\t')
+    defaultnav.write('<a href="http://127.0.0.1:4200" target="_blank">ATT&amp;CK Navigator Mapping</a>\n\t\t')
+    defaultnav.write('<view name="info" />\n\t')
+    defaultnav.write('</collection>\n\t')
+
+    # ATT&CK Techniques by Tactic
+    defaultnav.write('<collection label="ATT&amp;CK Techniques">\n\t\t')
+
+    for tactic, techniques in TECHNIQUES_BY_TACTIC.items():
+        # HTML escape the ampersand in "Command and Control"
+        tactic_label = tactic.replace("&", "&amp;")
+        defaultnav.write(f'<collection label="{tactic_label}">\n\t\t\t')
+
+        for technique_id in techniques:
+            defaultnav.write(f'<view name="{technique_id}" />\n\t\t\t')
+
+        defaultnav.write('</collection>\n\t\t')
+
+    defaultnav.write('</collection>\n\t')
+
+
+def get_all_technique_ids():
+    """Return a flat list of all technique IDs for XML generation."""
+    all_techniques = []
+    for techniques in TECHNIQUES_BY_TACTIC.values():
+        all_techniques.extend(techniques)
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_techniques = []
+    for t in all_techniques:
+        if t not in seen:
+            seen.add(t)
+            unique_techniques.append(t)
+    return unique_techniques

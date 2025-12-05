@@ -1409,15 +1409,12 @@ def extract_registry_profile(
     import os
     regripper_available = False
     rip_pl_path = None
-    for rip_path in ["rip.pl", "/opt/elrond/elrond/tools/regripper/rip.pl", "/opt/elrond-src/tools/config/rip.pl"]:
-        try:
-            result = subprocess.run(["which", rip_path], capture_output=True, timeout=5)
-            if result.returncode == 0 or os.path.exists(rip_path):
-                regripper_available = True
-                rip_pl_path = rip_path
-                break
-        except:
-            pass
+    # Check common locations for rip.pl
+    for rip_path in ["/opt/regripper/rip.pl", "/usr/local/bin/rip.pl", "rip.pl"]:
+        if os.path.exists(rip_path):
+            regripper_available = True
+            rip_pl_path = rip_path
+            break
 
     if not regripper_available:
         # RegRipper not available - skip registry profile extraction
@@ -1436,9 +1433,11 @@ def extract_registry_profile(
         "a",
     ) as regjson:
         try:
+            # Use perl to invoke rip.pl since the shebang may be Windows-style
             rgrplistj = str(
                 subprocess.Popen(
                     [
+                        "perl",
                         rip_pl_path,
                         "-r",
                         output_directory

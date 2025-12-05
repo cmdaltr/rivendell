@@ -200,41 +200,370 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
 
     if use_remote_splunk:
         # Remote Splunk mode - containerized/external Splunk instance
-        # This mode is for when Splunk is running in a separate container/server
-        # and we can't directly write to its configuration files
         splunkuser = os.environ.get('SPLUNK_USERNAME', 'admin')
         splunkpswd = os.environ.get('SPLUNK_PASSWORD', '')
 
+        # Get the first image name for audit logging
+        first_img = list(allimgs.values())[0].split("::")[0] if allimgs else "unknown"
+
         if not splunkpswd:
             from rivendell.audit import write_audit_log_entry
-            entry, prnt = "{},{},remote splunk configured but SPLUNK_PASSWORD not set".format(
+            entry, prnt = "{},{},remote splunk configured but SPLUNK_PASSWORD not set for '{}'".format(
                 datetime.now().isoformat(),
                 "splunk",
-            ), " -> {} -> remote splunk configured but SPLUNK_PASSWORD environment variable not set".format(
-                datetime.now().isoformat().replace("T", " ")
+                first_img,
+            ), " -> {} -> remote splunk configured but SPLUNK_PASSWORD environment variable not set for '{}'".format(
+                datetime.now().isoformat().replace("T", " "),
+                first_img
             )
             write_audit_log_entry(verbosity, output_directory, entry, prnt)
             print("\n     ERROR: SPLUNK_PASSWORD environment variable not set for remote Splunk")
             return None, None
 
         print(
-            "\n\n  -> \033[1;36mSkipping Splunk Phase (Remote Splunk Mode)...\033[1;m\n  ----------------------------------------"
+            "\n\n  -> \033[1;36mCommencing Splunk Phase (Remote Mode)...\033[1;m\n  ----------------------------------------"
         )
         from rivendell.audit import write_audit_log_entry
-        entry, prnt = "{},{},remote splunk detected at {}:{} - skipping local configuration".format(
+
+        # Remote Splunk uses shared volume at /opt/splunk/etc
+        remote_splunk_path = "opt/"
+
+        # Step 1: Deploy elrond app to shared volume
+        print("     Deploying elrond Splunk app...")
+        try:
+            if not os.path.isdir("/" + remote_splunk_path + "splunk/etc/apps/elrond/"):
+                build_app_elrond(case, remote_splunk_path)
+                print("     elrond app deployed successfully")
+            else:
+                print("     elrond app already exists, updating for case '{}'...".format(case))
+                # Update nav menu with new case
+                nav_file = "/" + remote_splunk_path + "splunk/etc/apps/elrond/default/data/ui/nav/default.xml"
+                if os.path.exists(nav_file):
+                    with open(nav_file) as default_nav:
+                        default_nav_xml = default_nav.read()
+                        if case not in default_nav_xml:
+                            insert_new_case = re.sub(
+                                r"([\S\s]+<collection label=\"Cases\">)(\n\s+<view source=\"all\" match=\")([^\"]+)(\" />)([\S\s]+)",
+                                r"\1\2§±§±§±§\4\2\3\4\5",
+                                default_nav_xml,
+                            )
+                            insert_new_case = insert_new_case.replace("§±§±§±§", case)
+                            with open(nav_file, "w") as new_default_nav:
+                                new_default_nav.write(insert_new_case + "\n")
+        except Exception as e:
+            print("     WARNING: Could not deploy elrond app: {}".format(e))
+
+        # Step 2: Deploy dependency apps if available
+        print("     Deploying Splunk dependency apps...")
+        try:
+            if build_app_geolocate:
+                build_app_geolocate(remote_splunk_path)
+            if build_app_lookup:
+                build_app_lookup(remote_splunk_path)
+            if build_app_punchcard:
+                build_app_punchcard(remote_splunk_path)
+            if build_app_sankey:
+                build_app_sankey(remote_splunk_path)
+            if build_app_topology:
+                build_app_topology(remote_splunk_path)
+            if build_app_treemap:
+                build_app_treemap(remote_splunk_path)
+            print("     Dependency apps deployed")
+        except Exception as e:
+            print("     WARNING: Some dependency apps could not be deployed: {}".format(e))
+
+        # Step 3: Create index via REST API
+        print("     Creating Splunk index '{}' via REST API...".format(case))
+        try:
+            import urllib.request
+            import urllib.parse
+            import ssl
+
+            # Create SSL context that doesn't verify certificates (for self-signed)
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+
+            # Create index
+            index_url = "https://{}:{}/services/data/indexes".format(splunk_host, splunk_port)
+            index_data = urllib.parse.urlencode({'name': case}).encode('utf-8')
+
+            # Create request with basic auth
+            req = urllib.request.Request(index_url, data=index_data, method='POST')
+            credentials = '{}:{}'.format(splunkuser, splunkpswd)
+            import base64
+            encoded_credentials = base64.b64encode(credentials.encode('utf-8')).decode('utf-8')
+            req.add_header('Authorization', 'Basic {}'.format(encoded_credentials))
+
+            try:
+                response = urllib.request.urlopen(req, context=ssl_context, timeout=30)
+                print("     Index '{}' created successfully".format(case))
+            except urllib.error.HTTPError as e:
+                if e.code == 409:
+                    print("     Index '{}' already exists".format(case))
+                else:
+                    print("     WARNING: Could not create index: {} {}".format(e.code, e.reason))
+        except Exception as e:
+            print("     WARNING: Could not create index via REST API: {}".format(e))
+
+        # Step 4: Write transforms.conf and props.conf for MITRE technique mapping
+        print("     Configuring MITRE ATT&CK transforms...")
+        try:
+            app_default_path = "/" + remote_splunk_path + "splunk/etc/apps/elrond/default/"
+            os.makedirs(app_default_path, exist_ok=True)
+
+            # Import the transforms creation function
+            from rivendell.post.splunk.app.transforms import create_transforms
+
+            # Create transforms.conf with MITRE mappings
+            transforms_conf_path = app_default_path + "transforms.conf"
+            with open(transforms_conf_path, "w") as transformsconf:
+                # Basic transforms for field extractions
+                transformsconf.write(
+                    "[logtype_make]\nREGEX = (?<logtype>(?:registry|evt|shimcache|jumplists|usb|log|plist|service|journal|browser|analysis|timeline|memory|audit))\nSOURCE_KEY = source\n\n[IPAddress_get]\nREGEX = (?P<ip>(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?))\nSOURCE_KEY = _raw\nMV_ADD = true\n\n"
+                )
+                transformsconf.write(
+                    "[Filenames_get]\nREGEX = (?<Filepath>.*)\\/(?<Filename>[^\\/]+)\\.(?<Fileext>[^\\:]+)$\nSOURCE_KEY = Filename\n\n"
+                )
+                transformsconf.write(
+                    "[Commands_get]\nREGEX = (?<ProcessPath>.*)\\/(?<ProcessName>[^\\/]+)\\.(?<ProcessExt>.*)$\nSOURCE_KEY = Command\n\n[Processes_get]\nREGEX = (?<ProcessPath>.*)\\/(?<ProcessName>[^\\/]+)\\.(?<ProcessExt>.*)$\nSOURCE_KEY = Process\n\n"
+                )
+                transformsconf.write(
+                    "[usb_win_hw]\nREGEX = [^\\-]\\ \\-\\ (?<HardwareType>[^\\\\\\\\]+)\nSOURCE_KEY = Artefact\n\n[usb_win_dvc]\nREGEX = (?<disk>[A-Za-z\\d]+)\\S(?:D|d)(?:I|i)(?:S|s)(?:K|k)\\S(?:V|v)(?:E|e)(?:N|n)_(?<ven>[a-z\\d]+)\\S+(?:P|p)(?:R|r)(?:O|o)(?:D|d)_(?<prod>\\w+)(\\S(?:R|r)(?:E|e)(?:V|v)_(?<rev>[a-z\\d]+))?\\S(?<serial>[^\\#]+)\nSOURCE_KEY = Artefact\n\n"
+                )
+                transformsconf.write(
+                    '[usb_mac_ven]\nREGEX = idVendor\\": \\"(?P<ven>[^\\"]+)\nSOURCE_KEY = _raw\n\n[usb_mac_prod]\nREGEX = idProduct\\": \\"(?P<prod>[^\\"]+)\nSOURCE_KEY = _raw\n\n'
+                )
+                transformsconf.write(
+                    "[usb_lin_ven]\nREGEX = Manufacturer: (?<ven>.+)\nSOURCE_KEY = Message\n\n[usb_lin_prod]\nREGEX = Product: (?<prod>.+)\nSOURCE_KEY = Message\n\n[usb_lin_rev]\nREGEX = bcdDevice= (?<rev>.+)\nSOURCE_KEY = Message\n\n[usb_lin_sn]\nREGEX = SerialNumber: (?<sn>.+)\nSOURCE_KEY = Message\n\n"
+                )
+                transformsconf.write(
+                    "[MFTFiles1_get]\nREGEX = \\\\(?<MFTFilename>[^\\\\]+)$\nSOURCE_KEY = Filename\n\n[MFTFiles2_get]\nREGEX = \\\\(?<MFTFilepath>.+)\\\\[^\\\\]+$\nSOURCE_KEY = Filename\n\n[MFTFiles3_get]\nREGEX = (?<MFTFilename>[^\\/]+)$\nSOURCE_KEY = full_path\n\n[MFTFiles4_get]\nREGEX = (?<MFTFilepath>.+)\\/[^\\/]+$\nSOURCE_KEY = full_path\n\n"
+                )
+            # Append MITRE technique assignments
+            with open(transforms_conf_path, "a") as transformsconf:
+                create_transforms(transformsconf)
+
+            # Create props.conf with sourcetype definitions
+            props_conf_path = app_default_path + "props.conf"
+            propsreports = "TRANSFORMS = mitre_assign\nREPORT-logtype_make = logtype_make\nREPORT-IPAddress_get = IPAddress_get\nREPORT-MFTFiles1_get = MFTFiles1_get\nREPORT-MFTFiles2_get = MFTFiles2_get\nREPORT-MFTFiles3_get = MFTFiles3_get\nREPORT-MFTFiles4_get = MFTFiles4_get\nREPORT-Commands_get = Commands_get\nREPORT-Processes_get = Processes_get\nREPORT-usb_win_hw = usb_win_hw\nREPORT-usb_win_dvc = usb_win_dvc\nREPORT-usb_mac_ven = usb_mac_ven\nREPORT-usb_mac_prod = usb_mac_prod\nREPORT-usb_lin_ven = usb_lin_ven\nREPORT-usb_lin_prod = usb_lin_prod\nREPORT-usb_lin_rev = usb_lin_rev\nREPORT-usb_lin_sn = usb_lin_sn"
+
+            with open(props_conf_path, "w") as propsconf:
+                propsconf.write(
+                    '[elrondCSV]\nBREAK_ONLY_BEFORE_DATE = 0\nDATETIME_CONFIG = \nINDEXED_EXTRACTIONS = csv\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nSHOULD_LINEMERGE = false\nTIMESTAMP_FIELDS = LastWriteTime\ncategory = Custom\ndescription = Comma-separated value format. Set header and other settings in "Delimited Settings"\ndisabled = false\npulldown_type = true\n\n'.format(
+                        propsreports
+                    )
+                )
+                propsconf.write(
+                    '[elrondCSV_noTime]\nBREAK_ONLY_BEFORE_DATE = 0\nDATETIME_CONFIG = CURRENT\nINDEXED_EXTRACTIONS = csv\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nSHOULD_LINEMERGE = false\nTIMESTAMP_FIELDS = LastWriteTime\ncategory = Custom\ndescription = Comma-separated value format. Set header and other settings in "Delimited Settings"\ndisabled = false\npulldown_type = true\n\n'.format(
+                        propsreports
+                    )
+                )
+                propsconf.write(
+                    "[elrondJSON]\nDATETIME_CONFIG = \nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nTIMESTAMP_FIELDS = LastWriteTime\nTIME_FORMAT = %a %b %e %H:%M:%S %Y\ncategory = Custom\ndescription = JavaScript Object Notation format. For more information, visit http://json.org/\ndisabled = false\npulldown_type = true\n\n".format(
+                        propsreports
+                    )
+                )
+                propsconf.write(
+                    "[elrondJSON_noTime]\nDATETIME_CONFIG = CURRENT\nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nTIMESTAMP_FIELDS = LastWriteTime\nTIME_FORMAT = %a %b %e %H:%M:%S %Y\ncategory = Custom\ndescription = JavaScript Object Notation format. For more information, visit http://json.org/\ndisabled = false\npulldown_type = true\n\n".format(
+                        propsreports
+                    )
+                )
+
+            print("     MITRE ATT&CK transforms configured successfully")
+        except Exception as e:
+            print("     WARNING: Could not configure transforms: {}".format(e))
+
+        # Step 5: Write inputs.conf for remote monitoring
+        print("     Configuring data inputs...")
+        try:
+            inputs_conf_path = "/" + remote_splunk_path + "splunk/etc/apps/elrond/default/inputs.conf"
+            os.makedirs(os.path.dirname(inputs_conf_path), exist_ok=True)
+
+            # Build inputs.conf entries for all images
+            # Path structure: /tmp/elrond/output/<case>/<image_name>/artefacts/cooked/
+            inputs_entries = []
+            for _, img in allimgs.items():
+                img_name = img.split("::")[0]
+                # Use container path /tmp/elrond/output/<case>/<image> for Splunk container
+                base_path = "/tmp/elrond/output/{}/{}".format(case, img_name)
+                cooked_path = "{}/artefacts/cooked".format(base_path)
+
+                # Log indexing for this image
+                entry, prnt = "{},{},indexing artefacts for '{}'\n".format(
+                    datetime.now().isoformat(),
+                    "splunk",
+                    img_name,
+                ), " -> {} -> indexing artefacts for '{}'".format(
+                    datetime.now().isoformat().replace("T", " "),
+                    img_name
+                )
+                write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+                # Find and log actual artefact files being indexed
+                import glob
+                host_cooked_path = output_directory + img_name + "/artefacts/cooked"
+
+                # Log CSV files
+                csv_files = glob.glob(host_cooked_path + "/*.csv")
+                for csv_file in csv_files:
+                    artefact_name = os.path.basename(csv_file)
+                    entry, prnt = "{},{},indexing '{}' for '{}'\n".format(
+                        datetime.now().isoformat(), "splunk", artefact_name, img_name
+                    ), " -> {} -> indexing '{}' for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), artefact_name, img_name
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+                # Log JSON files
+                json_files = glob.glob(host_cooked_path + "/*.json")
+                for json_file in json_files:
+                    artefact_name = os.path.basename(json_file)
+                    entry, prnt = "{},{},indexing '{}' for '{}'\n".format(
+                        datetime.now().isoformat(), "splunk", artefact_name, img_name
+                    ), " -> {} -> indexing '{}' for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), artefact_name, img_name
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+                # Log JSONL files (Artemis output format)
+                jsonl_files = glob.glob(host_cooked_path + "/*.jsonl")
+                for jsonl_file in jsonl_files:
+                    artefact_name = os.path.basename(jsonl_file)
+                    entry, prnt = "{},{},indexing '{}' for '{}'\n".format(
+                        datetime.now().isoformat(), "splunk", artefact_name, img_name
+                    ), " -> {} -> indexing '{}' for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), artefact_name, img_name
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+                # Log registry files
+                registry_files = glob.glob(host_cooked_path + "/registry/*.json")
+                for reg_file in registry_files:
+                    artefact_name = os.path.basename(reg_file)
+                    entry, prnt = "{},{},indexing '{}' for '{}'\n".format(
+                        datetime.now().isoformat(), "splunk", artefact_name, img_name
+                    ), " -> {} -> indexing '{}' for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), artefact_name, img_name
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+                # Log event log files (both json and jsonl)
+                evt_files = glob.glob(host_cooked_path + "/evt/*.json") + glob.glob(host_cooked_path + "/evt/*.jsonl")
+                for evt_file in evt_files:
+                    artefact_name = os.path.basename(evt_file)
+                    entry, prnt = "{},{},indexing '{}' for '{}'\n".format(
+                        datetime.now().isoformat(), "splunk", artefact_name, img_name
+                    ), " -> {} -> indexing '{}' for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), artefact_name, img_name
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+                # Add CSV files
+                inputs_entries.append(
+                    "[monitor://{}/*.csv]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = elrondCSV\n"
+                    "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+
+                # Add JSON files
+                inputs_entries.append(
+                    "[monitor://{}/*.json]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = elrondJSON\n"
+                    "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+
+                # Add JSONL files (Artemis output format)
+                inputs_entries.append(
+                    "[monitor://{}/*.jsonl]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = elrondJSON\n"
+                    "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+
+                # Add registry subdirectory
+                inputs_entries.append(
+                    "[monitor://{}/registry/*.json]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = elrondJSON\n"
+                    "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+
+                # Add evt subdirectory (both json and jsonl)
+                inputs_entries.append(
+                    "[monitor://{}/evt/*.json]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = elrondJSON\n"
+                    "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+                inputs_entries.append(
+                    "[monitor://{}/evt/*.jsonl]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = elrondJSON\n"
+                    "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+
+                # Add audit log file
+                inputs_entries.append(
+                    "[monitor://{}/rivendell_audit.log]\n"
+                    "disabled = false\n"
+                    "host = {}\n"
+                    "sourcetype = elrondCSV\n"
+                    "index = {}\n\n".format(base_path, img_name, case)
+                )
+
+            with open(inputs_conf_path, "a") as inputs_conf:
+                inputs_conf.write("\n# Auto-generated inputs for case: {}\n".format(case))
+                for entry in inputs_entries:
+                    inputs_conf.write(entry)
+
+            print("     Data inputs configured for {} image(s)".format(len(allimgs)))
+        except Exception as e:
+            print("     WARNING: Could not configure inputs: {}".format(e))
+
+        # Step 6: Restart Splunk to pick up changes (via REST API)
+        print("     Requesting Splunk restart to apply changes...")
+        try:
+            restart_url = "https://{}:{}/services/server/control/restart".format(splunk_host, splunk_port)
+            req = urllib.request.Request(restart_url, data=b'', method='POST')
+            req.add_header('Authorization', 'Basic {}'.format(encoded_credentials))
+            try:
+                response = urllib.request.urlopen(req, context=ssl_context, timeout=30)
+                print("     Splunk restart initiated")
+            except urllib.error.HTTPError as e:
+                # 503 is expected during restart
+                if e.code == 503:
+                    print("     Splunk restarting...")
+                else:
+                    print("     WARNING: Restart request returned: {} {}".format(e.code, e.reason))
+        except Exception as e:
+            print("     Note: Splunk may need manual restart to pick up changes")
+
+        print("     Splunk configuration complete")
+        entry, prnt = "{},{},splunk configured successfully for '{}'\n".format(
             datetime.now().isoformat(),
             "splunk",
-            splunk_host,
-            splunk_port,
-        ), " -> {} -> remote splunk detected at {}:{} - skipping local splunk configuration phase".format(
+            first_img,
+        ), " -> {} -> splunk configured successfully for case '{}' for '{}'".format(
             datetime.now().isoformat().replace("T", " "),
-            splunk_host,
-            splunk_port
+            case,
+            first_img
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        print("     Remote Splunk configured at {}:{}".format(splunk_host, splunk_port))
-        print("     Note: Data indexing to remote Splunk must be configured separately")
-        print("     Analysis artifacts available in: {}".format(output_directory))
         return splunkuser, splunkpswd
 
     # Local Splunk mode (original code path)
@@ -318,13 +647,16 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
         # Check if running in non-interactive mode without Splunk
         from rivendell.utils import is_noninteractive
         if is_noninteractive():
+            first_img = list(allimgs.values())[0].split("::")[0] if allimgs else "unknown"
             print("    Splunk is not installed and running in non-interactive mode - skipping Splunk configuration")
             from rivendell.audit import write_audit_log_entry
-            entry, prnt = "{},{},splunk not installed - skipping in non-interactive mode".format(
+            entry, prnt = "{},{},splunk not installed - skipping in non-interactive mode for '{}'".format(
                 datetime.now().isoformat(),
                 "splunk",
-            ), " -> {} -> splunk not installed - skipping splunk phase in non-interactive mode".format(
-                datetime.now().isoformat().replace("T", " ")
+                first_img,
+            ), " -> {} -> splunk not installed - skipping splunk phase in non-interactive mode for '{}'".format(
+                datetime.now().isoformat().replace("T", " "),
+                first_img
             )
             write_audit_log_entry(verbosity, output_directory, entry, prnt)
             return None, None

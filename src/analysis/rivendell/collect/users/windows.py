@@ -39,6 +39,14 @@ def windows_users(
     )
     for each in item_list:
         if os.path.isdir(item + each):
+            # Log user profile collection at the start
+            print(
+                " -> {} -> collecting user profile '{}' for '{}'".format(
+                    datetime.now().isoformat().replace("T", " "),
+                    each,
+                    vssimage,
+                )
+            )
             # ntuser.dat
             try:
                 os.stat(regdest)

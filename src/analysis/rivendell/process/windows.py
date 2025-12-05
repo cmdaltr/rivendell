@@ -6,109 +6,83 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 from rivendell.memory.memory import process_memory
 from rivendell.process.extractions.clipboard import extract_clipboard
-from rivendell.process.extractions.evtx import extract_evtx
 from rivendell.process.extractions.registry.profile import extract_registry_profile
 from rivendell.process.extractions.registry.system import extract_registry_system
-from rivendell.process.extractions.shimcache import extract_shimcache
 from rivendell.process.extractions.usb import extract_usb
-from rivendell.process.extractions.usn import extract_usn
-from rivendell.process.extractions.wbem import extract_wbem
-from rivendell.process.extractions.wmi import extract_wmi
+from rivendell.process.extractions import artemis
+
+# Track which prefetch directories have been processed to avoid duplicates
+_processed_prefetch_dirs = set()
 
 
 def process_mft(
     verbosity, vssimage, output_directory, img, artefact, vss_path_insert, stage
 ):
-    """Process $MFT using analyzeMFT tool from https://github.com/rowingdude/analyzeMFT"""
-    if verbosity != "":
-        print(
-            "     Processing '{}' for {}...".format(artefact.split("/")[-1], vssimage)
-        )
+    """Process $MFT using Artemis (Rust-based forensic parser)"""
+    # artefact is already the full path to the $MFT file
+    mft_file_path = artefact
 
-    entry, prnt = "{},{},{},'{}'\n".format(
-        datetime.now().isoformat(),
-        vssimage.replace("'", ""),
-        stage,
-        artefact.split("/")[-1],
-    ), " -> {} -> {} '{}' from {}".format(
-        datetime.now().isoformat().replace("T", " "),
-        stage,
-        artefact.split("/")[-1],
-        vssimage,
+    # Always log MFT processing
+    print(
+        " -> {} -> processing '$MFT' for {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            vssimage
+        )
     )
-    write_audit_log_entry(verbosity, output_directory, entry, prnt)
 
-    try:
-        # Check if $MFT file exists before processing
-        mft_file_path = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "$MFT"
-        if not os.path.exists(mft_file_path):
-            if verbosity != "":
-                print(f"     Warning: $MFT file not found at {mft_file_path}")
-            return
-
-        # Output directly to journal_mft.csv (analyzeMFT provides its own headers)
-        output_csv = output_directory + img.split("::")[0] + "/artefacts/cooked" + vss_path_insert + "journal_mft.csv"
-
-        # Run analyzeMFT.py with a CLEAN environment to avoid module conflicts
-        # Only preserve PATH, completely clear PYTHONPATH and other env vars
-        clean_env = {'PATH': '/usr/local/bin:/usr/bin:/bin'}
-
-        analyze_cmd = [
-            "/usr/bin/python3",
-            "/opt/analyzeMFT/analyzeMFT.py",
-            "-f", mft_file_path,
-            "-o", output_csv,
-            "--csv"
-        ]
-
-        process = subprocess.Popen(
-            analyze_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=clean_env
-        )
-        stdout_data, stderr_data = process.communicate()
-
-        # Check output file size
-        if os.path.exists(output_csv):
-            file_size = os.path.getsize(output_csv)
-            if verbosity != "":
-                print(f"     analyzeMFT output: {file_size:,} bytes")
-
-        if process.returncode != 0:
-            # Log the error for debugging
-            stderr_text = stderr_data.decode('utf-8', errors='replace') if stderr_data else ''
-            error_msg = stderr_text.replace('\n', ' ').replace(',', ';').replace("'", "")[:200]
-            entry, prnt = "{},{},analyzeMFT error,'{}'\n".format(
-                datetime.now().isoformat(),
-                vssimage.replace("'", ""),
-                error_msg
-            ), " -> {} -> analyzeMFT failed for '{}': {}".format(
-                datetime.now().isoformat().replace('T', ' '),
-                vssimage.replace("'", ""),
-                error_msg[:100]
+    if not os.path.exists(mft_file_path):
+        print(
+            " -> {} -> WARNING: $MFT file not found: {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                mft_file_path
             )
-            write_audit_log_entry(verbosity, output_directory, entry, prnt)
-            if verbosity != "":
-                print(prnt)
-            return
+        )
+        return
 
-        if verbosity != "":
-            print(f"     Successfully parsed $MFT for '{vssimage}'")
-
-    except Exception as e:
-        if verbosity != "":
-            print(f"     Warning: $MFT processing failed: {e}")
+    artemis.extract_mft(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        mft_file=mft_file_path,
+    )
 
 
 def process_usn(
     verbosity, vssimage, output_directory, img, artefact, vss_path_insert, stage
 ):
-    if verbosity != "":
-        print(
-            "     Processing '{}' for {}...".format(artefact.split("/")[-1], vssimage)
+    """Process $UsnJrnl using Artemis (Rust-based forensic parser)"""
+    # artefact is already the full path to the $UsnJrnl file
+    usnjrnl_path = artefact
+
+    # Always log USN Journal processing
+    print(
+        " -> {} -> processing '$UsnJrnl' for {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            vssimage
         )
-    extract_usn(verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact)
+    )
+
+    if not os.path.exists(usnjrnl_path):
+        print(
+            " -> {} -> WARNING: $UsnJrnl file not found: {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                usnjrnl_path
+            )
+        )
+        return
+
+    artemis.extract_usnjrnl(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        usnjrnl_file=usnjrnl_path,
+    )
 
 
 def process_usb(
@@ -150,10 +124,33 @@ def process_usb(
 def process_shimcache(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage
 ):
-    if verbosity != "":
-        print("     Processing shimcache for {}...".format(vssimage))
-    extract_shimcache(
-        verbosity, vssimage, output_directory, img, vss_path_insert, stage
+    """Process Shimcache using Artemis (Rust-based forensic parser)"""
+    # Always log shimcache processing
+    print(
+        " -> {} -> processing 'ShimCache' for {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            vssimage
+        )
+    )
+
+    system_hive = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "registry/SYSTEM"
+    if not os.path.exists(system_hive):
+        print(
+            " -> {} -> WARNING: SYSTEM hive not found: {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                system_hive
+            )
+        )
+        return
+
+    artemis.extract_shimcache(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        system_hive=system_hive,
     )
 
 
@@ -295,43 +292,46 @@ def process_evtx(
     jsondict,
     jsonlist,
 ):
-    evtjsonlist = []
-    if not os.path.exists(
+    """Process Windows Event Logs using Artemis (Rust-based forensic parser)"""
+    # artefact is already the full path to the .evtx file
+    evtx_file = artefact
+
+    # Create output directory
+    evt_output_dir = (
         output_directory
         + img.split("::")[0]
         + "/artefacts/cooked"
         + vss_path_insert
-        + "evt/"
-        + artefact.split("/")[-1]
-        + ".json"
-    ):
-        try:
-            os.makedirs(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "evt"
+        + "evt"
+    )
+    os.makedirs(evt_output_dir, exist_ok=True)
+
+    # Always log event log processing
+    evtx_name = artefact.split("/")[-1]
+    print(
+        " -> {} -> processing '{}' event log for {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            evtx_name,
+            vssimage
+        )
+    )
+
+    if os.path.exists(evtx_file):
+        artemis.extract_eventlogs(
+            verbosity=verbosity,
+            vssimage=vssimage,
+            output_directory=output_directory,
+            img=img,
+            vss_path_insert=vss_path_insert,
+            stage=stage,
+            evtx_file=evtx_file,
+        )
+    else:
+        print(
+            " -> {} -> WARNING: event log file not found: {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                evtx_file
             )
-        except:
-            pass
-        if verbosity != "":
-            print(
-                "  -> processing '{}' event log for '{}'".format(
-                    artefact.split("/")[-1], vssimage
-                )
-            )
-        extract_evtx(
-            verbosity,
-            vssimage,
-            output_directory,
-            img,
-            vss_path_insert,
-            stage,
-            artefact,
-            jsondict,
-            jsonlist,
-            evtjsonlist,
         )
 
 
@@ -397,164 +397,41 @@ def process_prefetch(
     stage,
     mount_location,
 ):
-    if not os.path.exists(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "prefetch"
-    ):
-        os.makedirs(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "prefetch"
-        )
-        if verbosity != "":
-            print("     Processing prefetch files for {}...".format(vssimage))
-        entry, prnt = "{},{},{},prefetch files\n".format(
-            datetime.now().isoformat(),
-            vssimage.replace("'", ""),
-            stage,
-        ), " -> {} -> {} prefetch files for {}".format(
+    """Process Windows Prefetch files using Artemis (Rust-based forensic parser)"""
+    prefetch_dir = "{}/Windows/Prefetch/".format(mount_location)
+
+    # Create a unique key for this prefetch directory to avoid reprocessing
+    prefetch_key = output_directory + img.split("::")[0] + vss_path_insert + "prefetch"
+    if prefetch_key in _processed_prefetch_dirs:
+        return
+    _processed_prefetch_dirs.add(prefetch_key)
+
+    # Always log prefetch processing
+    print(
+        " -> {} -> processing prefetch for '{}'".format(
             datetime.now().isoformat().replace("T", " "),
-            stage,
-            vssimage,
+            vssimage
         )
-        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+    )
 
-        # Check if Plaso (log2timeline) is available before attempting to use it
-        plaso_available = False
-        for plaso_path in ["log2timeline.py", "/opt/plaso/plaso/scripts/log2timeline.py"]:
-            try:
-                result = subprocess.run(["which", plaso_path], capture_output=True, timeout=5)
-                if result.returncode == 0:
-                    plaso_available = True
-                    break
-            except:
-                pass
-
-        if not plaso_available:
-            entry, prnt = "{},{},{},prefetch files (skipped - Plaso not installed)\n".format(
-                datetime.now().isoformat(),
-                vssimage.replace("'", ""),
-                stage,
-            ), " -> {} -> {} prefetch files for {} (skipped - Plaso not installed)".format(
+    if not os.path.exists(prefetch_dir):
+        print(
+            " -> {} -> WARNING: Prefetch directory not found: {}".format(
                 datetime.now().isoformat().replace("T", " "),
-                stage,
-                vssimage,
+                prefetch_dir
             )
-            write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        else:
-            try:
-                subprocess.Popen(
-                    [
-                        "log2timeline.py",
-                        "--parsers",
-                        "prefetch",
-                        "{}/Windows/Prefetch/".format(mount_location),
-                        "--storage_file",
-                        output_directory
-                        + img.split("::")[0]
-                        + "/artefacts/cooked"
-                        + vss_path_insert
-                        + "prefetch/prefetch.plaso",
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                ).communicate()
-                subprocess.Popen(
-                    [
-                        "python3",
-                        "/usr/local/lib/python3.10/dist-packages/plaso/scripts/psteal.py",
-                        "--source",
-                        output_directory
-                        + img.split("::")[0]
-                        + "/artefacts/cooked"
-                        + vss_path_insert
-                        + "prefetch/prefetch.plaso",
-                        "-o",
-                        "dynamic",
-                        "-w",
-                        output_directory
-                        + img.split("::")[0]
-                        + "/artefacts/cooked"
-                        + vss_path_insert
-                        + "prefetch/prefetch.csv",
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                ).communicate()
-            except:
-                try:
-                    subprocess.Popen(
-                        [
-                            "/opt/plaso/plaso/scripts/log2timeline.py",
-                            "--parsers",
-                            "prefetch",
-                            "{}/Windows/Prefetch/".format(mount_location),
-                            "--storage_file",
-                            output_directory
-                            + img.split("::")[0]
-                            + "/artefacts/cooked"
-                            + vss_path_insert
-                            + "prefetch/prefetch.plaso",
-                        ],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    ).communicate()
-                    subprocess.Popen(
-                        [
-                            "python3",
-                            "/usr/local/lib/python3.10/dist-packages/plaso/scripts/psteal.py",
-                            "--source",
-                            output_directory
-                            + img.split("::")[0]
-                            + "/artefacts/cooked"
-                            + vss_path_insert
-                            + "prefetch/prefetch.plaso",
-                            "-o",
-                            "dynamic",
-                            "-w",
-                            output_directory
-                            + img.split("::")[0]
-                            + "/artefacts/cooked"
-                            + vss_path_insert
-                            + "prefetch/prefetch.csv",
-                        ],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    ).communicate()
-                except Exception as e:
-                    # If both paths fail, log and skip prefetch timeline processing
-                    entry, prnt = "{},{},{},prefetch files (failed - {})\n".format(
-                        datetime.now().isoformat(),
-                        vssimage.replace("'", ""),
-                        stage,
-                        str(e),
-                    ), " -> {} -> {} prefetch files for {} (failed - {})".format(
-                        datetime.now().isoformat().replace("T", " "),
-                        stage,
-                        vssimage,
-                        str(e),
-                    )
-                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                    pass
-        if os.path.exists(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "prefetch/prefetch.plaso"
-        ):
-            os.remove(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "prefetch/prefetch.plaso"
-            )
+        )
+        return
+
+    artemis.extract_prefetch(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        prefetch_dir=prefetch_dir,
+    )
 
 
 def process_wmi(
@@ -568,45 +445,29 @@ def process_wmi(
     jsondict,
     jsonlist,
 ):
-    wmijsonlist = []
-    if not os.path.exists(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "wmi/"
-        + artefact.split("/")[-1]
-        + ".json"
-    ):
-        try:
-            os.makedirs(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "wmi"
-            )
-        except:
-            pass
+    """Process WMI persistence using Artemis (Rust-based forensic parser)"""
+    # WMI repository is typically at Windows/System32/wbem/Repository
+    wmi_dir = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "wbem/"
+
+    if not os.path.exists(wmi_dir):
         if verbosity != "":
-            print(
-                "     Processing WMI '{}' for {}...".format(
-                    artefact.split("/")[-1].split("_")[-1],
-                    vssimage,
-                )
-            )
-        extract_wmi(
-            verbosity,
-            vssimage,
-            output_directory,
-            img,
-            vss_path_insert,
-            stage,
-            artefact,
-            jsondict,
-            jsonlist,
-            wmijsonlist,
+            print("     Warning: WMI repository not found at {}".format(wmi_dir))
+        return
+
+    if verbosity != "":
+        print(
+            "     Processing WMI persistence for {}...".format(vssimage)
         )
+
+    artemis.extract_wmipersist(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        wmi_dir=wmi_dir,
+    )
 
 
 def process_wbem(
@@ -618,97 +479,67 @@ def process_wbem(
     stage,
     artefact,
 ):
-    if not os.path.exists(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "wbem/"
-        + artefact.split("/")[-1]
-        + ".json"
-    ):
-        try:
-            os.makedirs(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "wbem"
-            )
-        except:
-            pass
+    """Process WBEM/WMI repository using Artemis (Rust-based forensic parser)"""
+    # WBEM is processed via wmipersist in Artemis - this is a wrapper for compatibility
+    wbem_dir = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "wbem/"
+
+    if not os.path.exists(wbem_dir):
         if verbosity != "":
-            print(
-                "     Processing WBEM '{}' for {}...".format(
-                    artefact.split("/")[-1].split("_")[-1],
-                    vssimage,
-                )
+            print("     Warning: WBEM repository not found at {}".format(wbem_dir))
+        return
+
+    if verbosity != "":
+        print(
+            "     Processing WBEM '{}' for {}...".format(
+                artefact.split("/")[-1].split("_")[-1],
+                vssimage,
             )
-        extract_wbem(
-            verbosity,
-            vssimage,
-            output_directory,
-            img,
-            vss_path_insert,
-            stage,
-            artefact,
         )
+
+    artemis.extract_wmipersist(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        wmi_dir=wbem_dir,
+    )
 
 
 def process_sru(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
-    cooked_xlsx = output_directory + img.split("::")[0] + "/artefacts/cooked" + vss_path_insert + "sru/" + artefact.split("/")[-1] + ".xlsx"
-    if not os.path.exists(
-        cooked_xlsx
-    ):
-        try:
-            os.makedirs(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "sru"
-            )
-        except:
-            pass
-        if verbosity != "":
-            print(
-                "     Processing System Resource Utilisation database '{}' for {}...".format(
-                    artefact.split("/")[-1].split("_")[-1],
-                    vssimage,
-                )
-            )
-        entry, prnt = "{},{},{},'{}' system resource utilisation database \n".format(
-            datetime.now().isoformat(),
-            vssimage.replace("'", ""),
-            stage,
-            artefact.split("/")[-1].split("_")[-1],
-        ), " -> {} -> {} '{}' for {}".format(
+    """Process SRUM database using Artemis (Rust-based forensic parser)"""
+    # artefact is already the full path to SRUDB.dat
+    srum_file = artefact
+
+    # Always log SRUM processing
+    print(
+        " -> {} -> processing 'SRUM' for {}".format(
             datetime.now().isoformat().replace("T", " "),
-            stage,
-            artefact.split("/")[-1].split("_")[-1],
-            vssimage,
+            vssimage
         )
-        write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        # creating srum_dump2.py with respective artefact input and output values
-        with open("/opt/elrond/elrond/tools/srum_dump/srum_dump.py") as srumdumpfile:
-            srumdump = srumdumpfile.read()
-        srumdump = srumdump.replace('<SRUDB.dat>', artefact).replace('<SRUM_DUMP_OUTPUT.xlsx>', cooked_xlsx)
-        with open("/opt/elrond/elrond/tools/srum_dump/.srum_dump.py", "w") as srumdumpfile:
-            srumdumpfile.write(srumdump)
-        subprocess.Popen(
-            [
-                "python3",
-                "/opt/elrond/elrond/tools/srum_dump/.srum_dump.py",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).communicate()
-        os.remove("/opt/elrond/elrond/tools/srum_dump/.srum_dump.py")
-        # cooked_csv = output_directory + img.split("::")[0] + "/artefacts/cooked" + vss_path_insert + "sru/" + artefact.split("/")[-1] + ".csv"
-        # cooked_json = output_directory + img.split("::")[0] + "/artefacts/cooked" + vss_path_insert + "sru/" + artefact.split("/")[-1] + ".json"
-        # read from "/opt/elrond/elrond/tools/srum-dump/SRUM_TEMPLATE2.XLSX" using pandas to then convert into csv/json
+    )
+
+    if not os.path.exists(srum_file):
+        print(
+            " -> {} -> WARNING: SRUM database not found: {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                srum_file
+            )
+        )
+        return
+
+    artemis.extract_srum(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        srum_file=srum_file,
+    )
 
 
 def process_ual(
@@ -807,78 +638,40 @@ def process_ual(
 def process_jumplists(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
-    if not os.path.exists(
-        output_directory
-        + img.split("::")[0]
-        + "/artefacts/cooked"
-        + vss_path_insert
-        + "jumplists.csv"
-    ):
-        with open(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "jumplists.csv",
-            "a",
-        ) as jumplistcsv:
-            jumplistcsv.write("Device,Account,JumplistID,JumplistType\n")
+    """Process Windows Jumplists using Artemis (Rust-based forensic parser)"""
+    # Always log jumplist processing
+    print(
+        " -> {} -> processing jumplist '{}' for {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            artefact.split("/")[-1],
+            vssimage,
+        )
+    )
+
+    # artefact contains the path to the jumplist file
+    if os.path.exists(artefact):
+        artemis.extract_jumplists(
+            verbosity=verbosity,
+            vssimage=vssimage,
+            output_directory=output_directory,
+            img=img,
+            vss_path_insert=vss_path_insert,
+            stage=stage,
+            jumplist_file=artefact,
+        )
     else:
-        with open(
-            output_directory
-            + img.split("::")[0]
-            + "/artefacts/cooked"
-            + vss_path_insert
-            + "jumplists.csv",
-            "a",
-        ) as jumplistcsv:
-            if os.path.exists(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "jumplists.csv"
-            ):
-                if verbosity != "":
-                    print(
-                        "     Processing Jumplist file '{}' ({}) for {}...".format(
-                            artefact.split("+")[1],
-                            artefact.split("/")[-1].split("+")[0],
-                            vssimage,
-                        )
-                    )
-                (
-                    entry,
-                    prnt,
-                ) = "{},{},{},'{}' ({}) jumplist file\n".format(
-                    datetime.now().isoformat(),
-                    vssimage.replace("'", ""),
-                    stage,
-                    artefact.split("+")[1],
-                    artefact.split("/")[-1].split("+")[0],
-                ), " -> {} -> {} jumplist file '{}' ({}) from {}".format(
-                    datetime.now().isoformat().replace("T", " "),
-                    stage,
-                    artefact.split("+")[1],
-                    artefact.split("/")[-1].split("+")[0],
-                    vssimage,
-                )
-                write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                jumplistcsv.write(
-                    img.split("::")[0]
-                    + ","
-                    + artefact.split("/")[-1].split("+")[0]
-                    + ","
-                    + artefact.split("+")[1].split(".")[0]
-                    + ","
-                    + artefact.split("+")[1].split(".")[1]
-                    + "\n"
-                )
+        print(
+            " -> {} -> WARNING: Jumplist file not found: {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                artefact
+            )
+        )
 
 
 def process_outlook(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
+    """Process Outlook OST/PST files using Artemis (Rust-based forensic parser)"""
     if verbosity != "":
         print(
             "     Processing Outlook file '{}' ({}) for {}...".format(
@@ -887,37 +680,51 @@ def process_outlook(
                 vssimage,
             )
         )
-    (
-        entry,
-        prnt,
-    ) = "{},{},{},'{}' ({}) outlook file\n".format(
-        datetime.now().isoformat(),
-        vssimage.replace("'", ""),
-        stage,
-        artefact.split("/")[-1],
-        artefact.split("/")[-2],
-    ), " -> {} -> {} outlook file '{}' ({}) from {}".format(
-        datetime.now().isoformat().replace("T", " "),
-        stage,
-        artefact.split("/")[-1],
-        artefact.split("/")[-2],
-        vssimage,
-    )
-    write_audit_log_entry(verbosity, output_directory, entry, prnt)
-    if not os.path.exists(os.path.join(artefact.split(".pst")[0])):
-        subprocess.Popen(
-            [
-                "sudo",
-                "readpst",
-                artefact,
-                "-D",
-                "-S",
-                "-o",
-                "/".join(os.path.join(artefact.split(".pst")[0]).split("/")[:-1]),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).communicate()
+
+    # Artemis supports OST files; for PST we may need to keep readpst as fallback
+    if artefact.lower().endswith('.ost') and os.path.exists(artefact):
+        artemis.extract_outlook(
+            verbosity=verbosity,
+            vssimage=vssimage,
+            output_directory=output_directory,
+            img=img,
+            vss_path_insert=vss_path_insert,
+            stage=stage,
+            ost_file=artefact,
+        )
+    elif artefact.lower().endswith('.pst') and os.path.exists(artefact):
+        # Fallback to readpst for PST files
+        (
+            entry,
+            prnt,
+        ) = "{},{},{},'{}' ({}) outlook file\n".format(
+            datetime.now().isoformat(),
+            vssimage.replace("'", ""),
+            stage,
+            artefact.split("/")[-1],
+            artefact.split("/")[-2],
+        ), " -> {} -> {} outlook file '{}' ({}) from {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            stage,
+            artefact.split("/")[-1],
+            artefact.split("/")[-2],
+            vssimage,
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        if not os.path.exists(os.path.join(artefact.split(".pst")[0])):
+            subprocess.Popen(
+                [
+                    "sudo",
+                    "readpst",
+                    artefact,
+                    "-D",
+                    "-S",
+                    "-o",
+                    "/".join(os.path.join(artefact.split(".pst")[0]).split("/")[:-1]),
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).communicate()
 
 
 def process_hiberfil(

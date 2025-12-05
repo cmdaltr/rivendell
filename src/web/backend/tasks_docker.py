@@ -352,6 +352,16 @@ def start_analysis(self, job_id: str):
                 elif "rivendell completed" in line_lower or "analysis finished" in line_lower:
                     new_progress = 95
                 # Fallback: keyword-based progress for intermediate steps
+                elif "identification phase" in line_lower:
+                    new_progress = max(new_progress, 5)
+                elif "scanning for forensic images" in line_lower:
+                    new_progress = max(new_progress, 7)
+                elif "found forensic image" in line_lower:
+                    new_progress = max(new_progress, 8)
+                elif "identifying operating system" in line_lower:
+                    new_progress = max(new_progress, 12)
+                elif "identified platform" in line_lower:
+                    new_progress = max(new_progress, 15)
                 elif any(keyword in line_lower for keyword in ["collecting", "mounting"]):
                     new_progress = max(new_progress, min(10 + progress_count // 5, 30))
                 elif any(keyword in line_lower for keyword in ["processing", "parsing"]):
@@ -489,13 +499,12 @@ def build_elrond_command(job):
     if opts.imageinfo:
         cmd.append("--imageinfo")
 
-    # Output options (MUST come before Brisk since Brisk invokes Navigator which requires Splunk/Elastic)
+    # Output options
     if opts.splunk:
         cmd.append("--Splunk")
     if opts.elastic:
         cmd.append("--Elastic")
-    # Navigator requires Splunk or Elastic
-    if opts.navigator and (opts.splunk or opts.elastic):
+    if opts.navigator:
         cmd.append("--Navigator")
 
     # Speed/Quality modes

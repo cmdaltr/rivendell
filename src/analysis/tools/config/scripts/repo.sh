@@ -5,8 +5,8 @@ HOSTNAME=$(hostname)
 
 sleep 1
 sudo apt install python3-pip -y --fix-missing --allow-unauthenticated
-sudo python3 -m pip install gdown python-evtx python-registry registry libesedb-python
-python3 -m pip install gdown python-evtx python-registry registry libesedb-python
+sudo python3 -m pip install gdown python-registry registry libesedb-python
+python3 -m pip install gdown python-registry registry libesedb-python
 export PATH="$HOME/.local/bin:$PATH"
 source ~/.bashrc
 clear

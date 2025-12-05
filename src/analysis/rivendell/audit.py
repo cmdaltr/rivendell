@@ -1,4 +1,5 @@
 #!/usr/bin/env python3 -tt
+import os
 from datetime import datetime
 
 
@@ -7,12 +8,11 @@ def write_audit_log_entry(verbosity, output_directory, entry, prnt):
         writemode = "w"
     else:
         writemode = "a"
-    with open(
-        output_directory
-        + str(str(prnt.split("'")[-2]).split("/")[-1]).split("::")[0]
-        + "/log.audit",
-        writemode,
-    ) as logentry:
+
+    # Write audit log at case level (output_directory), not per-image
+    audit_log_path = os.path.join(output_directory.rstrip('/'), "rivendell_audit.log")
+
+    with open(audit_log_path, writemode) as logentry:
         logentry.write(entry.replace("'", ""))
     if prnt != "":
         print(prnt)

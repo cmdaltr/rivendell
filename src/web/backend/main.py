@@ -17,9 +17,8 @@ from fastapi.responses import JSONResponse
 
 try:
     from .config import settings
-    # from .startup import startup  # Disabled - using file-based storage, not database
-    # from .auth.routes import router as auth_router  # Disabled temporarily - DB dependencies
-    # from .auth.security_utils import sanitize_case_number, sanitize_path  # Disabled temporarily
+    from .auth.routes_simple import router as auth_router  # Simple file-based auth
+    from .ai_routes import router as ai_router  # AI assistant routes
     from .models.job import (
         Job,
         JobCreate,
@@ -33,9 +32,8 @@ try:
 except ImportError:
     # Fallback for standalone execution
     from config import settings
-    # from startup import startup  # Disabled - using file-based storage, not database
-    # from auth.routes import router as auth_router  # Disabled temporarily - DB dependencies
-    # from auth.security_utils import sanitize_case_number, sanitize_path  # Disabled temporarily
+    from auth.routes_simple import router as auth_router  # Simple file-based auth
+    from ai_routes import router as ai_router  # AI assistant routes
     from models.job import (
         Job,
         JobCreate,
@@ -112,7 +110,10 @@ async def on_startup():
 
 
 # Include authentication routes
-# app.include_router(auth_router)  # Disabled temporarily - DB dependencies
+app.include_router(auth_router)
+
+# Include AI assistant routes
+app.include_router(ai_router)
 
 
 @app.get("/")
@@ -255,25 +256,17 @@ async def create_job(job_request: JobCreate):
                 )
             destination_path = sanitized_dest
 
-        # Validate option dependencies
-        if job_request.options.navigator and not (job_request.options.splunk or job_request.options.elastic):
-            raise HTTPException(
-                status_code=400,
-                detail="Navigator requires either Splunk or Elastic to be enabled. Please enable Splunk or Elastic, or disable Navigator.",
-            )
-
         # Generate job ID
         job_id = str(uuid.uuid4())
 
-        # Set destination path - if not specified, create a directory named after the source file
+        # Set destination path - if not specified, use case number as directory name
         if not destination_path and sanitized_source_paths:
             first_source = Path(sanitized_source_paths[0])
-            # Create output directory with same name as input file (e.g., /Volumes/USB/Disk.E01_output/)
+            # Create output directory using case number (e.g., /tmp/rivendell/mfttesting/)
             if first_source.is_file():
-                # Remove the file extension and add _output
-                destination_path = str(first_source.parent / (first_source.stem + '_output'))
+                destination_path = str(first_source.parent / case_number)
             else:
-                destination_path = str(first_source / 'output')
+                destination_path = str(first_source / case_number)
 
         # Check if destination directory already exists (unless force_overwrite is set)
         if not job_request.options.force_overwrite and destination_path:

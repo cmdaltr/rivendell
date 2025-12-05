@@ -27,7 +27,7 @@ Rivendell works out-of-the-box with sensible defaults:
 - **Frontend**: http://localhost:5687
 - **Database**: PostgreSQL (localhost:5432)
 - **Redis**: localhost:6379
-- **Default Admin**: admin@rivendell.app / RivendellAdmin123!
+- **Default Admin**: admin@rivendell.app / IWasThere3000YearsAgo!
 
 ### Environment Variables
 
@@ -291,6 +291,7 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
 
 | Tool | Purpose | Installation |
 |------|---------|--------------|
+| **Artemis** | Windows artifact parsing (MFT, EVTX, Prefetch, etc.) | [GitHub Releases](https://github.com/puffyCid/artemis/releases) |
 | **Plaso** | Timeline generation | `apt install plaso-tools` |
 | **QEMU** | VM disk mounting | `apt install qemu-utils` |
 | **RegRipper** | Registry analysis | Download from GitHub |
@@ -307,7 +308,10 @@ sudo apt install -y python3 python3-pip nodejs npm postgresql redis-server
 sudo apt install -y sleuthkit ewf-tools yara clamav plaso-tools qemu-utils
 
 # Python packages
-pip3 install volatility3 analyzeMFT python-evtx
+pip3 install volatility3
+
+# Install Artemis (comprehensive Rust-based forensic parser)
+# Download from https://github.com/puffyCid/artemis/releases
 ```
 
 **macOS:**
@@ -321,7 +325,10 @@ brew install python node postgresql redis
 brew install sleuthkit libewf yara clamav
 
 # Python packages
-pip3 install volatility3 analyzeMFT python-evtx
+pip3 install volatility3
+
+# Install Artemis (comprehensive Rust-based forensic parser)
+# Download from https://github.com/puffyCid/artemis/releases
 ```
 
 **Windows (WSL2 Recommended):**

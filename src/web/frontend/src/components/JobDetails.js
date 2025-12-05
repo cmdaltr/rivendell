@@ -598,7 +598,7 @@ function JobDetails() {
 
                   {/* Elastic/Kibana */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.elastic ? 'rgba(0, 191, 179, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.elastic ? 'rgba(0, 191, 179, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.elastic ? 1 : 0.4, cursor: job.options?.elastic ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={() => job.options?.elastic && window.open('http://localhost:5601', '_blank')}>
+                       onClick={() => job.options?.elastic && window.open('http://localhost:5601/app/discover#/', '_blank')}>
                     <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>
                       <defs>
                         <linearGradient id="elasticYellow" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -623,10 +623,13 @@ function JobDetails() {
 
                   {/* Navigator */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.navigator ? 'rgba(254, 209, 10, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.navigator ? 'rgba(254, 209, 10, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.navigator ? 1 : 0.4, cursor: job.options?.navigator ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={() => {
+                       onClick={async () => {
                          if (job.options?.navigator) {
-                           // Download the Navigator JSON file
-                           window.open(`/api/jobs/${job.id}/navigator`, '_blank');
+                           // Open ATT&CK Navigator with the job's layer file
+                           // Navigator uses URL fragment to load layers: /#layerURL=<encoded-url>
+                           const layerUrl = `http://localhost:5602/assets/${job.case_number}.json`;
+                           const encodedLayerUrl = encodeURIComponent(layerUrl);
+                           window.open(`http://localhost:5602/#layerURL=${encodedLayerUrl}`, '_blank');
                          }
                        }}>
                     <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>

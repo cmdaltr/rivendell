@@ -1,4 +1,4 @@
 -r base.txt
 
 # Linux-specific dependencies
-# (python-evtx moved to base.txt as it's OS-agnostic)
+# (EVTX parsing now handled by Artemis - Rust-based forensic parser)

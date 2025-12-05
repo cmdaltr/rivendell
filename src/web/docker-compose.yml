@@ -65,6 +65,8 @@ services:
       - ELASTICSEARCH_PORT=9200
       - ELASTIC_USERNAME=elastic
       - ELASTIC_PASSWORD=rivendell
+      - KIBANA_HOST=kibana
+      - KIBANA_PORT=5601
     volumes:
       - ./backend:/app
       - ../analysis:/opt/elrond-src  # Mount elrond source code (renamed to avoid PATH conflicts)

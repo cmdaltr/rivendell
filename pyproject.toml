@@ -42,9 +42,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-linux = [
-    "python-evtx>=0.7.0",
-]
+linux = []
 windows = [
     "pywin32>=300; platform_system=='Windows'",
 ]

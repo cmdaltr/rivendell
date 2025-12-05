@@ -96,38 +96,26 @@ def configure_elastic_stack(verbosity, output_directory, case, stage, allimgs):
     if use_remote_elastic:
         # Remote Elasticsearch mode - containerized/external Elasticsearch instance
         # This mode is for when Elasticsearch is running in a separate container/server
-        # and we can't directly write to its configuration files
         elastic_user = os.environ.get('ELASTIC_USERNAME', 'elastic')
         elastic_pswd = os.environ.get('ELASTIC_PASSWORD', '')
+        kibana_host = os.environ.get('KIBANA_HOST', 'kibana')
+        kibana_port = os.environ.get('KIBANA_PORT', '5601')
 
-        if not elastic_pswd:
-            entry, prnt = "{},{},remote elasticsearch configured but ELASTIC_PASSWORD not set".format(
-                datetime.now().isoformat(),
-                "elasticsearch",
-            ), " -> {} -> remote elasticsearch configured but ELASTIC_PASSWORD environment variable not set".format(
-                datetime.now().isoformat().replace("T", " ")
-            )
-            write_audit_log_entry(verbosity, output_directory, entry, prnt)
-            print("\n     ERROR: ELASTIC_PASSWORD environment variable not set for remote Elasticsearch")
-            return
-
-        print(
-            "\n\n  -> \033[1;36mSkipping Elastic Phase (Remote Elasticsearch Mode)...\033[1;m\n  ----------------------------------------"
-        )
-        entry, prnt = "{},{},remote elasticsearch detected at {}:{} - skipping local configuration".format(
-            datetime.now().isoformat(),
-            "elasticsearch",
+        # Ingest data to remote Elasticsearch
+        from rivendell.post.elastic.ingest import ingest_elastic_data_remote
+        ingest_elastic_data_remote(
+            verbosity,
+            output_directory,
+            case,
+            stage,
+            allimgs,
             elastic_host,
             elastic_port,
-        ), " -> {} -> remote elasticsearch detected at {}:{} - skipping local elasticsearch configuration phase".format(
-            datetime.now().isoformat().replace("T", " "),
-            elastic_host,
-            elastic_port
+            elastic_user,
+            elastic_pswd,
+            kibana_host,
+            kibana_port,
         )
-        write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        print("     Remote Elasticsearch configured at {}:{}".format(elastic_host, elastic_port))
-        print("     Note: Data indexing to remote Elasticsearch must be configured separately")
-        print("     Analysis artifacts available in: {}".format(output_directory))
         return
 
     # Local Elasticsearch mode (original code path)

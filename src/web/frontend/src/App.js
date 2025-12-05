@@ -14,6 +14,7 @@ import AIAssistant from './components/AIAssistant';
 import JobList from './components/JobList';
 import JobDetails from './components/JobDetails';
 import Archive from './components/Archive';
+import AccountPage from './components/AccountPage';
 import './App.css';
 
 function Navigation() {
@@ -34,31 +35,22 @@ function Navigation() {
         <Link to="/mordor">Mordor</Link>
       </div>
       <div className="nav-right">
-        {isAuthenticated ? (
-          <>
-            <span style={{ color: '#f0dba5', marginRight: '1rem' }}>
-              {user?.username || 'User'}
-            </span>
-            <button
-              onClick={handleLogout}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#f0dba5',
-                cursor: 'pointer',
-                fontSize: 'inherit',
-                padding: 0,
-              }}
-            >
-              Logout
-            </button>
-          </>
-        ) : (
-          <Link to="/login">Account</Link>
-        )}
+        <Link to={isAuthenticated ? "/account" : "/login"}>Account</Link>
         <Link to="/jobs">Jobs</Link>
-        <Link to="/ai">Ask Eru (AI)</Link>
+        <Link to="/ai">Ask Eru</Link>
         <Link to="/help">About</Link>
+        <button
+          onClick={isAuthenticated ? handleLogout : undefined}
+          className={`logout-icon-btn ${!isAuthenticated ? 'disabled' : ''}`}
+          title={isAuthenticated ? "Sign Out" : "Not signed in"}
+          disabled={!isAuthenticated}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
       </div>
     </nav>
   );
@@ -100,6 +92,7 @@ function AppContent() {
             <Route path="/jobs" element={<JobList />} />
             <Route path="/jobs/:jobId" element={<JobDetails />} />
             <Route path="/archive" element={<Archive />} />
+            <Route path="/account" element={<AccountPage />} />
           </Routes>
         </main>
 
