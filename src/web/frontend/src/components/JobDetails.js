@@ -574,7 +574,7 @@ function JobDetails() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
                   {/* Splunk */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.splunk ? 'rgba(255, 107, 157, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.splunk ? 'rgba(255, 107, 157, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.splunk ? 1 : 0.4, cursor: job.options?.splunk ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={() => job.options?.splunk && window.open('http://localhost:7755', '_blank')}>
+                       onClick={() => job.options?.splunk && window.open('http://localhost:7755/en-GB/app/elrond/mitre', '_blank')}>
                     <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>
                       <defs>
                         <radialGradient id="splunkGradient" cx="30%" cy="30%">
@@ -591,7 +591,7 @@ function JobDetails() {
 
                   {/* Elastic/Kibana */}
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.elastic ? 'rgba(0, 191, 179, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.elastic ? 'rgba(0, 191, 179, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.elastic ? 1 : 0.4, cursor: job.options?.elastic ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={() => job.options?.elastic && window.open('http://localhost:5601/app/discover#/', '_blank')}>
+                       onClick={() => job.options?.elastic && window.open(`http://localhost:5601/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-20y,to:now))&_a=(columns:!(),filters:!(),index:${job.case_number},interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))`, '_blank')}>
                     <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>
                       <defs>
                         <linearGradient id="elasticYellow" x1="0%" y1="0%" x2="100%" y2="0%">
