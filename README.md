@@ -3,7 +3,7 @@
 <div align="center">
   <img src="./docs/images/rivendell.png" alt="Rivendell - The Last Homely House" width="800"/>
 
-  **Digital Forensics Suite v1.0.0**
+  **Digital Forensics Suite v2.0.0**
 </div>
 <div align="center">
   <i>The Last Homely House</i><br><br>
@@ -97,7 +97,7 @@ _3. Additional optional features_
 
 - **Remote Acquisition** - Collect artifacts from remote Windows, Linux, and macOS systems
 - **Automated Analysis** - Process evidence with 30+ integrated forensic tools
-- **MITRE ATT&CK Integration** - Automatic technique mapping and coverage analysis
+- **MITRE ATT&CK Integration** - Automatic technique mapping with comprehensive content-based detection and ATT&CK Navigator visualization
 - **Cloud Forensics** - AWS, Azure, and GCP investigation support
 - **AI-Powered Analysis** - Natural language queries of investigation data
 - **Memory Forensics** - Volatility 3 integration for memory analysis
@@ -185,14 +185,17 @@ Process and analyze forensic evidence with integrated tools.
 
 ### Feature 1: MITRE ATT&CK Integration
 
-Automatically map forensic findings to MITRE ATT&CK techniques.
+Automatically map forensic findings to MITRE ATT&CK techniques with comprehensive content-based detection.
 
 **Features:**
-- Auto-updates from MITRE ATT&CK framework
-- Technique mapping for 100+ techniques
-- ATT&CK matrix dashboard generation
-- Coverage analysis and gap identification
-- Integration with analysis pipeline
+- Auto-updates from MITRE ATT&CK framework (v18.1)
+- Content-based pattern matching for accurate technique detection
+- 600+ ATT&CK techniques with full descriptions
+- Multi-tactic technique support (techniques mapped to all relevant tactics)
+- ATT&CK Navigator layer generation with automatic visualization
+- Splunk dashboards for each technique with tactic badges
+- Comprehensive JSON record scanning (all records, not sampled)
+- Large file streaming support for files >10MB
 
 **Usage:**
 ```bash
@@ -202,15 +205,15 @@ python3 -m rivendell.mitre.updater
 # Map artifacts to techniques
 python3 -m rivendell.mitre.mapper /path/to/artifacts
 
-# Generate dashboard
+# Generate Navigator layer
 python3 -m rivendell.mitre.dashboard -o /output/dashboard.html
 ```
 
 **Coverage:**
-- 100+ ATT&CK techniques detected
+- 600+ ATT&CK techniques detected
 - All 14 tactics covered
-- Automatic technique identification
-- Evidence source mapping
+- Content-based pattern matching for accurate detection
+- Evidence source mapping with full metadata
 
 [Full Documentation →](docs/USER_GUIDE.md#feature-1-mitre-attack-integration)
 
@@ -492,7 +495,7 @@ And 25+ additional tools. See [TOOLS.md](docs/TOOLS.md) for the complete list.
 - **Integrated Tools**: 30+
 - **Supported Platforms**: Windows, Linux, macOS
 - **Cloud Providers**: AWS, Azure, GCP
-- **MITRE ATT&CK Techniques**: 100+
+- **MITRE ATT&CK Techniques**: 600+
 - **Artifact Types**: 50+
 
 ---

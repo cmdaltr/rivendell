@@ -96,7 +96,7 @@ def ingest_splunk_data(
                                     and "registry" not in atftroot
                                     and "evt" not in atftroot
                                 ):
-                                    sourcetype = "elrondJSON"
+                                    sourcetype = "json"
                                 else:
                                     sourcetype = ""
                             elif str(img.split("::")[-1])[1:].startswith("ac"):
@@ -110,7 +110,7 @@ def ingest_splunk_data(
                                     and "logs" not in atftroot
                                     and "plists" not in atftroot
                                 ):
-                                    sourcetype = "elrondJSON"
+                                    sourcetype = "json"
                                 elif atftfile.endswith("History.db.csv"):
                                     sourcetype = "elrondCSV"
                                 else:
@@ -126,7 +126,7 @@ def ingest_splunk_data(
                                     and "logs" not in atftroot
                                     and "services" not in atftroot
                                 ):
-                                    sourcetype = "elrondJSON_noTime"
+                                    sourcetype = "json_noTime"
                                 elif atftfile.endswith("sqlite.csv"):
                                     sourcetype = "elrondCSV"
                                 else:
@@ -149,7 +149,7 @@ def ingest_splunk_data(
                                     os.listdir(os.path.join(atftroot, atftdir))
                                 ) > 0 and (atftdir == "registry" or atftdir == "evt"):
                                     inputsconf.write(
-                                        "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = elrondJSON\nindex = {}\n\n".format(
+                                        "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = json\nindex = {}\n\n".format(
                                             os.path.join(atftroot, atftdir),
                                             str(img.split("::")[0]),
                                             case,
@@ -180,7 +180,7 @@ def ingest_splunk_data(
                                     os.listdir(os.path.join(atftroot, atftdir))
                                 ) > 0 and (atftdir == "logs" or atftdir == "plists"):
                                     inputsconf.write(
-                                        "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = elrondJSON\nindex = {}\n\n".format(
+                                        "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = json\nindex = {}\n\n".format(
                                             os.path.join(atftroot, atftdir),
                                             str(img.split("::")[0]),
                                             case,
@@ -191,7 +191,7 @@ def ingest_splunk_data(
                                     os.listdir(os.path.join(atftroot, atftdir))
                                 ) > 0 and (atftdir == "logs" or atftdir == "services"):
                                     inputsconf.write(
-                                        "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = elrondJSON\nindex = {}\n\n".format(
+                                        "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = json\nindex = {}\n\n".format(
                                             os.path.join(atftroot, atftdir),
                                             str(img.split("::")[0]),
                                             case,
@@ -202,7 +202,7 @@ def ingest_splunk_data(
                     + "/artefacts/cooked/memory/"
                 ):
                     inputsconf.write(
-                        "[monitor://{}/artefacts/cooked/memory/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = elrondJSON\nindex = {}\n\n".format(
+                        "[monitor://{}/artefacts/cooked/memory/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = json\nindex = {}\n\n".format(
                             os.path.realpath(output_directory + img.split("::")[0]),
                             img.split("::")[0],
                             case,
@@ -273,7 +273,7 @@ def ingest_splunk_data(
                 os.listdir(os.path.realpath(output_directory + img.split("::")[0]))
             ):
                 inputsconf.write(
-                    "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = elrondJSON\nindex = {}\n\n".format(
+                    "[monitor://{}/*.json]\ndisabled = false\ncrcSalt = <SOURCE>\nhost = {}\nsourcetype = json\nindex = {}\n\n".format(
                         os.path.realpath(output_directory + img.split("::")[0]),
                         img.split("::")[0],
                         case,

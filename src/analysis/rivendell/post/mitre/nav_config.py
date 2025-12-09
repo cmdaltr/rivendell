@@ -76,55 +76,109 @@ def write_navigator_layer(case: str, techniques: List[str], output_directory: Op
     # Navigator serves from /navigator/dist/assets, not the source folder
     nav_assets_dir = "/navigator/dist/assets"
 
-    # Create Navigator layer
-    nav_list = []
+    # Build techniques list as proper JSON objects
+    technique_objects = []
     for technique in techniques:
-        navlist = create_attack_navigator(nav_list, technique)
+        # Get technique entries from nav_attack (may return multiple for multi-tactic techniques)
+        nav_list = []
+        create_attack_navigator(nav_list, technique)
 
-    if not nav_list:
+        # Parse each entry and add to technique_objects
+        # nav_attack.py already replaces ±§§± with full JSON, entries end with '},\n        '
+        for entry in nav_list:
+            # Clean up the entry - remove trailing comma and whitespace
+            entry = entry.strip().rstrip(',').strip()
+
+            # Split on '},\n        {' to handle multi-tactic techniques
+            # But first wrap in array brackets to make it valid JSON
+            if entry.startswith('{') and '},\n        {' in entry:
+                # Multiple technique objects in one entry
+                json_array_str = '[' + entry + ']'
+                # Clean up any trailing commas before ]
+                json_array_str = json_array_str.replace(',\n        ]', ']').replace(',]', ']')
+                try:
+                    objs = json.loads(json_array_str)
+                    technique_objects.extend(objs)
+                except json.JSONDecodeError:
+                    # Try parsing individual objects
+                    for obj_str in entry.split('},\n        {'):
+                        obj_str = obj_str.strip().rstrip(',').strip()
+                        if not obj_str.startswith('{'):
+                            obj_str = '{' + obj_str
+                        if not obj_str.endswith('}'):
+                            obj_str = obj_str + '}'
+                        try:
+                            obj = json.loads(obj_str)
+                            technique_objects.append(obj)
+                        except json.JSONDecodeError:
+                            continue
+            else:
+                # Single technique object
+                if not entry.endswith('}'):
+                    entry = entry + '}'
+                try:
+                    obj = json.loads(entry)
+                    technique_objects.append(obj)
+                except json.JSONDecodeError:
+                    continue
+
+    if not technique_objects:
         return False
 
-    # Write interim file
-    interim_path = f"{nav_assets_dir}/.{case}.json"
+    # Deduplicate by (techniqueID, tactic) tuple
+    seen = set()
+    unique_techniques = []
+    for obj in technique_objects:
+        key = (obj.get("techniqueID", ""), obj.get("tactic", ""))
+        if key not in seen:
+            seen.add(key)
+            unique_techniques.append(obj)
+
+    # Build the complete Navigator layer structure
+    layer = {
+        "name": case,
+        "versions": {
+            "attack": "13",
+            "navigator": "5.1.0",
+            "layer": "4.5"
+        },
+        "domain": "enterprise-attack",
+        "description": "",
+        "filters": {
+            "platforms": ["Linux", "macOS", "Windows", "Containers"]
+        },
+        "sorting": 0,
+        "layout": {
+            "layout": "side",
+            "aggregateFunction": "average",
+            "showID": False,
+            "showName": True,
+            "showAggregateScores": False,
+            "countUnscored": False
+        },
+        "hideDisabled": False,
+        "techniques": unique_techniques,
+        "gradient": {
+            "colors": ["#ff6666ff", "#ffe766ff", "#8ec843ff"],
+            "minValue": 0,
+            "maxValue": 100
+        },
+        "legendItems": [{
+            "label": "Evidence of",
+            "color": "#00acb4"
+        }],
+        "metadata": [],
+        "showTacticRowBackground": False,
+        "tacticRowBackground": "#dddddd",
+        "selectTechniquesAcrossTactics": True,
+        "selectSubtechniquesWithParent": False
+    }
+
     final_path = f"{nav_assets_dir}/{case}.json"
 
     try:
-        with open(interim_path, "w") as f:
-            f.write(f'{{\n    "name": "{case}"')
-            f.write(f',\n    "versions": {{\n        "attack": "13",\n        "navigator": "5.1.0",\n        "layer": "4.5"\n    }},')
-            f.write('\n    "domain": "enterprise-attack",\n    "description": "",')
-            f.write('\n    "filters": {\n        "platforms": ["Linux", "macOS", "Windows", "Containers"]\n    },')
-            f.write('\n    "sorting": 0,')
-            f.write('\n    "layout": {\n        "layout": "side",\n        "aggregateFunction": "average",')
-            f.write('\n        "showID": false,\n        "showName": true,\n        "showAggregateScores": false,')
-            f.write('\n        "countUnscored": false\n    },')
-            f.write('\n    "hideDisabled": false,\n    "techniques": [\n        ')
-
-            # Write techniques
-            for i, entry in enumerate(str(navlist[:-1])[2:-2].split("\\n        ', '")):
-                f.write(entry.replace("\\n", "\n"))
-            f.write(navlist[-1][:-10])
-
-            f.write('\n    ],\n    "gradient": {\n        "colors": ["#ff6666ff", "#ffe766ff", "#8ec843ff"],')
-            f.write('\n        "minValue": 0,\n        "maxValue": 100\n    },')
-            f.write('\n    "legendItems": [{\n            "label": "Evidence of",\n            "color": "#00acb4"\n        }],')
-            f.write('\n    "metadata": [],\n    "showTacticRowBackground": false,')
-            f.write('\n    "tacticRowBackground": "#dddddd",\n    "selectTechniquesAcrossTactics": true,')
-            f.write('\n    "selectSubtechniquesWithParent": false\n}')
-
-        # Read and reformat
-        with open(interim_path, "r") as f:
-            jsoncontent = f.readlines()
-
         with open(final_path, "w") as f:
-            content = (str(jsoncontent)[2:-2]
-                .replace("', '", "")
-                .replace("\\n", "\n")
-                .replace("            {", "        {")
-                .replace("},{", "},\n        {"))
-            f.write(content)
-
-        os.remove(interim_path)
+            json.dump(layer, f, indent=4)
 
         # Write config.json
         write_navigator_config(case, nav_assets_dir)
@@ -248,19 +302,49 @@ def configure_navigator(verbosity, case, splunk, elastic, usercred, pswdcred, ou
 
     # Read techniques from mitre_techniques.txt file (created during enrichment)
     if output_directory:
-        # Find artefacts directory
-        artefacts_dirs = []
-        for root, dirs, files in os.walk(output_directory):
-            if "artefacts" in root or "cooked" in root:
-                artefacts_dirs.append(root)
-                break
+        # First, try to find mitre_techniques.txt directly in output_directory or its immediate subdirs
+        # The techniques file is written at the image level (parent of 'cooked' folder)
+        techniques_file = None
 
-        if artefacts_dirs:
-            print("     Reading techniques from enrichment output...")
-            file_techniques = collect_techniques_from_file(artefacts_dirs[0])
+        # Check output_directory itself first
+        direct_path = os.path.join(output_directory, TECHNIQUES_FILE)
+        if os.path.exists(direct_path):
+            techniques_file = direct_path
+        else:
+            # Check one level deep (e.g., output_directory/image_name/mitre_techniques.txt)
+            for item in os.listdir(output_directory):
+                item_path = os.path.join(output_directory, item)
+                if os.path.isdir(item_path):
+                    candidate = os.path.join(item_path, TECHNIQUES_FILE)
+                    if os.path.exists(candidate):
+                        techniques_file = candidate
+                        break
 
-            if file_techniques:
-                foundtechniques = list(file_techniques)
+        if techniques_file:
+            print(f"     Reading techniques from {techniques_file}...")
+            try:
+                with open(techniques_file, 'r') as f:
+                    file_techniques = set(line.strip() for line in f if line.strip())
+            except Exception as e:
+                print(f"     Warning: Error reading techniques file: {e}")
+                file_techniques = set()
+        else:
+            # Fallback: Find artefacts/cooked directory and look for techniques file nearby
+            artefacts_dirs = []
+            for root, dirs, files in os.walk(output_directory):
+                # Only match the 'cooked' directory itself, not subdirs like 'cooked/browsers'
+                if os.path.basename(root) == "cooked" or os.path.basename(root) == "artefacts":
+                    artefacts_dirs.append(root)
+                    break
+
+            if artefacts_dirs:
+                print("     Reading techniques from enrichment output...")
+                file_techniques = collect_techniques_from_file(artefacts_dirs[0])
+            else:
+                file_techniques = set()
+
+        if file_techniques:
+            foundtechniques = list(file_techniques)
 
     # Process found techniques
     if not foundtechniques:

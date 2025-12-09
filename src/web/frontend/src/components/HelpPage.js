@@ -23,8 +23,8 @@ const HelpPage = () => {
 ├───────────────────────────────────────────────────────┤
 │                                                        │
 │  ┌──────────────┐   ┌──────────────┐   ┌───────────┐  │
-│  │   Gandalf    │   │    Elrond    │   │    AI     │  │
-│  │ Acquisition  │ → │   Analysis   │ → │   Agent   │  │
+│  │   Gandalf    │   │    Elrond    │   │    Eru    │  │
+│  │ Acquisition  │ → │   Analysis   │ → │ AI Agent  │  │
 │  └──────────────┘   └──────────────┘   └───────────┘  │
 │         ↓                  ↓                 ↓         │
 │  ┌─────────────────────────────────────────────────┐  │
@@ -39,7 +39,7 @@ const HelpPage = () => {
             <li><strong>Automated Analysis (Elrond):</strong> Process evidence with 30+ integrated forensic tools</li>
             <li><strong>MITRE ATT&CK Integration:</strong> Automatic technique mapping and coverage analysis</li>
             <li><strong>Cloud Forensics:</strong> AWS, Azure, and GCP investigation support</li>
-            <li><strong>AI-Powered Analysis:</strong> Natural language queries using local LLM</li>
+            <li><strong>AI-Powered Analysis (Eru):</strong> Natural language queries using local LLM</li>
             <li><strong>Memory Forensics:</strong> Volatility 3 integration</li>
             <li><strong>Timeline Generation:</strong> Plaso/log2timeline support</li>
             <li><strong>SIEM Integration:</strong> Direct export to Splunk and Elasticsearch</li>
@@ -106,7 +106,7 @@ cd rivendell
       )
     },
     gandalf: {
-      title: 'Gandalf Acquisition',
+      title: 'Gandalf',
       content: (
         <>
           <h3>Remote Forensic Acquisition</h3>
@@ -176,7 +176,7 @@ sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence`}
       )
     },
     elrond: {
-      title: 'Elrond Analysis',
+      title: 'Elrond',
       content: (
         <>
           <h3>Automated Forensic Analysis</h3>
@@ -255,7 +255,7 @@ sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence`}
       )
     },
     mordor: {
-      title: 'Mordor Recordings',
+      title: 'Mordor',
       content: (
         <>
           <h3>Security Event Datasets</h3>
@@ -306,77 +306,14 @@ sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence`}
         </>
       )
     },
-    mitre: {
-      title: 'MITRE ATT&CK',
+    eru: {
+      title: 'Eru',
       content: (
         <>
-          <h3>ATT&CK Integration</h3>
-          <p>
-            Automatic mapping of forensic findings to MITRE ATT&CK techniques provides tactical context
-            and helps understand attacker methodologies.
-          </p>
-
-          <h4>Features</h4>
-          <ul>
-            <li>Auto-updates from MITRE ATT&CK framework</li>
-            <li>Technique mapping for forensic artifacts</li>
-            <li>ATT&CK matrix dashboard generation</li>
-            <li>Coverage analysis and reporting</li>
-            <li>Navigator layer export</li>
-          </ul>
-
-          <h4>Usage</h4>
-
-          <h5>Update MITRE Data</h5>
-          <pre className="code-block">
-{`python3 -m rivendell.mitre.updater`}
-          </pre>
-
-          <h5>Map Artifacts to Techniques</h5>
-          <pre className="code-block">
-{`python3 -m rivendell.mitre.mapper /path/to/artifacts`}
-          </pre>
-
-          <h5>Generate Dashboard</h5>
-          <pre className="code-block">
-{`python3 -m rivendell.mitre.dashboard -o /output`}
-          </pre>
-
-          <h4>Covered Tactics</h4>
-          <p>Rivendell detects evidence for 100+ techniques across all tactics:</p>
-          <ul>
-            <li>Initial Access</li>
-            <li>Execution</li>
-            <li>Persistence</li>
-            <li>Privilege Escalation</li>
-            <li>Defense Evasion</li>
-            <li>Credential Access</li>
-            <li>Discovery</li>
-            <li>Lateral Movement</li>
-            <li>Collection</li>
-            <li>Exfiltration</li>
-            <li>Impact</li>
-          </ul>
-
-          <h4>Artifact Mapping</h4>
-          <p>Forensic artifacts are automatically mapped to techniques:</p>
-          <ul>
-            <li><strong>Registry Keys:</strong> Persistence, Defense Evasion</li>
-            <li><strong>Prefetch Files:</strong> Execution</li>
-            <li><strong>Event Logs:</strong> Various tactics</li>
-            <li><strong>Memory Artifacts:</strong> Credential Access, Defense Evasion</li>
-            <li><strong>Network Connections:</strong> Command and Control</li>
-          </ul>
-        </>
-      )
-    },
-    ai: {
-      title: 'AI Agent',
-      content: (
-        <>
-          <h3>AI-Powered Analysis</h3>
+          <h3>Eru - AI-Powered Analysis</h3>
           <p>
             Query investigation data using natural language with a privacy-focused local LLM powered by Ollama.
+            Named after Eru Iluvatar, the supreme deity in Tolkien's legendarium.
           </p>
 
           <h4>Features</h4>
@@ -442,85 +379,94 @@ rivendell-ai query CASE-001 "List all suspicious IP addresses"`}
         </>
       )
     },
-    cloud: {
-      title: 'Cloud Forensics',
+    features: {
+      title: 'Features',
       content: (
         <>
-          <h3>Cloud Investigation</h3>
+          <h3>Advanced Features</h3>
           <p>
-            Acquire and analyze cloud infrastructure across AWS, Azure, and GCP with specialized forensic capabilities.
+            Rivendell includes powerful features for threat intelligence mapping, cloud forensics, and SIEM integration.
           </p>
 
-          <h4>Supported Providers</h4>
-
-          <h5>AWS</h5>
+          <h4>MITRE ATT&CK Integration</h4>
+          <p>
+            Automatic mapping of forensic findings to MITRE ATT&CK techniques provides tactical context
+            and helps understand attacker methodologies.
+          </p>
           <ul>
-            <li>EC2 instance snapshots</li>
-            <li>CloudTrail log analysis</li>
-            <li>S3 bucket forensics</li>
-            <li>IAM investigation</li>
+            <li>Auto-updates from MITRE ATT&CK framework</li>
+            <li>Technique mapping for forensic artifacts</li>
+            <li>ATT&CK matrix dashboard generation</li>
+            <li>Coverage analysis and reporting</li>
+            <li>Navigator layer export</li>
           </ul>
 
-          <h5>Azure</h5>
+          <h5>MITRE Usage</h5>
+          <pre className="code-block">
+{`# Update MITRE Data
+python3 -m rivendell.mitre.updater
+
+# Map Artifacts to Techniques
+python3 -m rivendell.mitre.mapper /path/to/artifacts
+
+# Generate Dashboard
+python3 -m rivendell.mitre.dashboard -o /output`}
+          </pre>
+
+          <h4>Cloud Forensics</h4>
+          <p>
+            Acquire and analyze cloud infrastructure across AWS, Azure, and GCP.
+          </p>
+
+          <h5>Supported Providers</h5>
           <ul>
-            <li>VM disk snapshots</li>
-            <li>Activity Log analysis</li>
-            <li>Storage account forensics</li>
-            <li>AAD investigation</li>
+            <li><strong>AWS:</strong> EC2 snapshots, CloudTrail, S3, IAM</li>
+            <li><strong>Azure:</strong> VM disks, Activity Logs, Storage, AAD</li>
+            <li><strong>GCP:</strong> Compute Engine, Cloud Logging, Storage, IAM</li>
           </ul>
 
-          <h5>GCP</h5>
+          <h5>Cloud Usage Examples</h5>
+          <pre className="code-block">
+{`# AWS - Acquire logs
+python3 -m rivendell.cloud.cli aws acquire-logs --days 7 --output ./logs
+
+# Azure - Acquire disk snapshot
+python3 -m rivendell.cloud.cli azure acquire-disk --instance-id vm-name
+
+# GCP - Create snapshot
+python3 -m rivendell.cloud.cli gcp snapshot --instance server-name`}
+          </pre>
+
+          <h4>SIEM Integration</h4>
+          <p>Export forensic findings directly to your SIEM platform.</p>
           <ul>
-            <li>Compute Engine snapshots</li>
-            <li>Cloud Logging analysis</li>
-            <li>Storage forensics</li>
-            <li>IAM investigation</li>
+            <li><strong>Splunk:</strong> HTTP Event Collector (HEC) integration</li>
+            <li><strong>Elasticsearch:</strong> Direct indexing with Kibana dashboards</li>
+            <li><strong>Custom:</strong> JSON/CSV export for other platforms</li>
           </ul>
 
-          <h4>AWS Usage</h4>
-          <pre className="code-block">
-{`# List instances
-python3 -m rivendell.cloud.cli aws list --credentials aws_creds.json
+          <h4>Memory Forensics</h4>
+          <p>Integrated Volatility 3 support for memory analysis.</p>
+          <ul>
+            <li>Process and DLL analysis</li>
+            <li>Network connection enumeration</li>
+            <li>Registry hive extraction</li>
+            <li>Malware detection</li>
+            <li>Memory timeline generation</li>
+          </ul>
 
-# Acquire logs
-python3 -m rivendell.cloud.cli aws acquire-logs \\
-  --days 7 \\
-  --analyze \\
-  --output ./logs
-
-# Analyze CloudTrail
-python3 -m rivendell.cloud.cli aws analyze-logs \\
-  --log-file cloudtrail.json`}
-          </pre>
-
-          <h4>Azure Usage</h4>
-          <pre className="code-block">
-{`# List VMs
-python3 -m rivendell.cloud.cli azure list \\
-  --credentials azure_creds.json
-
-# Acquire disk snapshot
-python3 -m rivendell.cloud.cli azure acquire-disk \\
-  --instance-id suspicious-vm \\
-  --resource-group production \\
-  --output ./output`}
-          </pre>
-
-          <h4>GCP Usage</h4>
-          <pre className="code-block">
-{`# List instances
-python3 -m rivendell.cloud.cli gcp list --credentials gcp_creds.json
-
-# Create snapshot
-python3 -m rivendell.cloud.cli gcp snapshot \\
-  --instance compromised-server \\
-  --zone us-central1-a`}
-          </pre>
+          <h4>Timeline Generation</h4>
+          <p>Plaso/log2timeline integration for comprehensive timelines.</p>
+          <ul>
+            <li>Multi-source timeline correlation</li>
+            <li>Customizable date range filtering</li>
+            <li>CSV and JSON export formats</li>
+          </ul>
         </>
       )
     },
     workflow: {
-      title: 'Complete Workflow',
+      title: 'Workflow',
       content: (
         <>
           <h3>End-to-End Investigation</h3>
@@ -730,21 +676,45 @@ python3 -m rivendell.analysis.engine`}
       </header>
 
       <div className="card">
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-          {Object.keys(sections).map(key => (
+        {/* Tab Navigation */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '2px solid #3f4b2a',
+          marginBottom: '1.5rem',
+          overflow: 'hidden',
+          width: '100%'
+        }}>
+          {Object.keys(sections).map((key, index) => (
             <button
               key={key}
               onClick={() => setActiveSection(key)}
               style={{
-                padding: '0.5rem 1rem',
-                background: activeSection === key ? '#a7db6c' : 'rgba(167, 219, 108, 0.15)',
-                color: activeSection === key ? '#0c1208' : '#a7db6c',
-                border: '1px solid #a7db6c',
-                borderRadius: '4px',
+                flex: '1 1 auto',
+                padding: '0.75rem 0.5rem',
+                background: activeSection === key ? 'rgba(167, 219, 108, 0.15)' : 'transparent',
+                color: activeSection === key ? '#a7db6c' : '#888',
+                border: 'none',
+                borderBottom: activeSection === key ? '2px solid #a7db6c' : '2px solid transparent',
+                marginBottom: '-2px',
                 cursor: 'pointer',
                 fontFamily: 'Cinzel, Times New Roman, serif',
-                fontSize: '0.9rem',
-                transition: 'all 0.3s ease'
+                fontSize: '0.85rem',
+                fontWeight: activeSection === key ? '600' : '400',
+                transition: 'all 0.2s ease',
+                whiteSpace: 'nowrap',
+                textAlign: 'center'
+              }}
+              onMouseOver={(e) => {
+                if (activeSection !== key) {
+                  e.target.style.color = '#a7db6c';
+                  e.target.style.background = 'rgba(167, 219, 108, 0.05)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (activeSection !== key) {
+                  e.target.style.color = '#888';
+                  e.target.style.background = 'transparent';
+                }
               }}
             >
               {sections[key].title}

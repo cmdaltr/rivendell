@@ -810,8 +810,8 @@ function JobList() {
                           className="progress-fill"
                           style={{ width: `${job.progress}%` }}
                         >
-                          {job.progress > 10 && `${job.progress}%`}
                         </div>
+                        {job.progress > 0 && <span className="progress-text">{job.progress}%</span>}
                       </div>
                     </td>
                     <td style={{ paddingLeft: '2rem' }}>{formatDate(job.created_at)}</td>

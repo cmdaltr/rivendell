@@ -66,18 +66,12 @@ TECHNIQUES_BY_TACTIC = {
 
 
 def create_nav_menu(defaultnav):
-    """Create the MITRE ATT&CK navigation menu with all techniques organized by tactic."""
+    """Create the ATT&CK navigation menu with all techniques organized by tactic."""
 
-    # MITRE Overview Section
-    defaultnav.write('<collection label="MITRE">\n\t\t')
-    defaultnav.write('<view name="mitre" default="true" />\n\t\t')
-    defaultnav.write('<a href="http://127.0.0.1:4200" target="_blank">ATT&amp;CK Navigator Mapping</a>\n\t\t')
-    defaultnav.write('<view name="info" />\n\t')
-    defaultnav.write('</collection>\n\t')
+    # Techniques collection containing tactics with techniques under each
+    defaultnav.write('<collection label="Techniques">\n\t\t')
 
-    # ATT&CK Techniques by Tactic
-    defaultnav.write('<collection label="ATT&amp;CK Techniques">\n\t\t')
-
+    # Each tactic as a sub-collection with techniques under it
     for tactic, techniques in TECHNIQUES_BY_TACTIC.items():
         # HTML escape the ampersand in "Command and Control"
         tactic_label = tactic.replace("&", "&amp;")

@@ -190,6 +190,18 @@ def process_browser_index(
             with open(output_file, "w") as f:
                 json.dump(history_entries, f, indent=2)
 
+            # Write technique ID to techniques file for Navigator
+            if history_entries:
+                techniques_file_path = os.path.join(
+                    os.path.dirname(os.path.dirname(browsers_output_dir)),
+                    "mitre_techniques.txt"
+                )
+                try:
+                    with open(techniques_file_path, 'a') as tf:
+                        tf.write(f"{BROWSER_MITRE_MAPPING['browser_history']['technique_id']}\n")
+                except:
+                    pass
+
 
 def process_browser(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
@@ -475,6 +487,20 @@ def process_browser(
     history_output = os.path.join(browser_output_dir, f"{user_profile}+{artifact_name}.json")
     with open(history_output, "w") as f:
         json.dump(history_entries, f, indent=2)
+
+    # Write technique IDs to techniques file for Navigator
+    techniques_file_path = os.path.join(
+        os.path.dirname(os.path.dirname(browser_output_dir)),
+        "mitre_techniques.txt"
+    )
+    try:
+        with open(techniques_file_path, 'a') as tf:
+            if history_entries:
+                tf.write(f"{BROWSER_MITRE_MAPPING['browser_history']['technique_id']}\n")
+            if download_entries:
+                tf.write(f"{BROWSER_MITRE_MAPPING['browser_download']['technique_id']}\n")
+    except:
+        pass
 
     # Write downloads JSON if there are any
     if download_entries:

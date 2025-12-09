@@ -23,12 +23,14 @@ def process_mft(
     mft_file_path = artefact
 
     # Always log MFT processing
+    import sys
     print(
         " -> {} -> processing '$MFT' for {}".format(
             datetime.now().isoformat().replace("T", " "),
             vssimage
         )
     )
+    sys.stdout.flush()
 
     if not os.path.exists(mft_file_path):
         print(
@@ -454,9 +456,16 @@ def process_wmi(
             print("     Warning: WMI repository not found at {}".format(wmi_dir))
         return
 
+    # Get specific file being processed for better logging
+    artefact_name = artefact.split("/")[-1] if artefact else "OBJECTS.DATA"
+
     if verbosity != "":
         print(
-            "     Processing WMI persistence for {}...".format(vssimage)
+            " -> {} -> processing WMI persistence '{}' for {}...".format(
+                datetime.now().isoformat().replace("T", " "),
+                artefact_name,
+                vssimage
+            )
         )
 
     artemis.extract_wmipersist(
@@ -488,10 +497,14 @@ def process_wbem(
             print("     Warning: WBEM repository not found at {}".format(wbem_dir))
         return
 
+    # Get specific file being processed for better logging
+    artefact_name = artefact.split("/")[-1] if artefact else "OBJECTS.DATA"
+
     if verbosity != "":
         print(
-            "     Processing WBEM '{}' for {}...".format(
-                artefact.split("/")[-1].split("_")[-1],
+            " -> {} -> processing WBEM '{}' for {}...".format(
+                datetime.now().isoformat().replace("T", " "),
+                artefact_name,
                 vssimage,
             )
         )

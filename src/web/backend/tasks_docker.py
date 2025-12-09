@@ -213,6 +213,7 @@ def start_analysis(self, job_id: str):
         env["ELROND_HOME"] = elrond_path
         env["ELROND_OUTPUT"] = str(settings.output_dir)
         env["ELROND_NONINTERACTIVE"] = "1"  # Signal non-interactive mode
+        env["PYTHONUNBUFFERED"] = "1"  # Disable Python output buffering for real-time logs
 
         process = subprocess.Popen(
             cmd,
@@ -244,7 +245,15 @@ def start_analysis(self, job_id: str):
                     "failed",
                     "completed",
                     "commencing",
+                    "processing",
+                    "still processing",
                 ]
+                # Exclude verbose MITRE enrichment messages
+                excluded_keywords = ["mitre", "extracting mitre", "mitre enrichment"]
+                has_excluded = any(kw in line.lower() for kw in excluded_keywords)
+                if has_excluded:
+                    continue
+
                 has_arrow = " -> " in line
                 has_important_keyword = any(
                     keyword in line.lower() for keyword in important_keywords
@@ -298,18 +307,27 @@ def start_analysis(self, job_id: str):
                         continue  # Skip duplicate phase message
                     seen_phases.add(phase_key)
 
-                # Deduplicate: Skip if this exact filepath was already logged
+                # Deduplicate: Skip if this exact action+filepath was already logged
                 # Normalize message for comparison (remove extra quotes and whitespace)
                 normalized_current = re.sub(r"'{2,}", "'", original_line).strip()
 
-                # Extract filepath from the message for deduplication
-                # Matches patterns like: '/path/to/file.ext' or "/path/to/file.ext"
-                filepath_match = re.search(r"['\"]?(/[^'\"]+)['\"]?", normalized_current)
-                if filepath_match:
+                # Extract action and filepath from the message for deduplication
+                # Different actions (collecting, processing, analysing) on the same file should all be shown
+                action = "unknown"
+                action_match = re.search(r"->\s*(collecting|processing|analysing|scanning|tagging|extracting)", normalized_current, re.IGNORECASE)
+                if action_match:
+                    action = action_match.group(1).lower()
+
+                # Matches patterns like: '/path/to/file.ext' or "/path/to/file.ext" or 'filename'
+                filepath_match = re.search(r"['\"]([^'\"]+)['\"]", normalized_current)
+                # Only deduplicate if BOTH action and filepath are found
+                # Messages without a clear filepath should always be shown
+                if filepath_match and action != "unknown":
                     filepath = filepath_match.group(1).lower()
-                    if filepath in seen_filepaths:
-                        continue  # Skip duplicate filepath message
-                    seen_filepaths.add(filepath)
+                    dedup_key = f"{action}:{filepath}"
+                    if dedup_key in seen_filepaths:
+                        continue  # Skip duplicate action+filepath message
+                    seen_filepaths.add(dedup_key)
 
                 last_log_message = original_line
 

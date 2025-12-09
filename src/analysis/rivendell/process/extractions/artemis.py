@@ -141,44 +141,430 @@ ARTEFACT_MITRE_MAPPING = {
 }
 
 
-def enrich_json_with_mitre(json_path: str, artifact_type: str) -> bool:
+def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
+    """
+    Fast MITRE enrichment for all artifact files.
+
+    Instead of loading the entire JSON and scanning every field, this:
+    1. Streams through the file line by line
+    2. Only extracts and scans relevant fields based on artifact type
+    3. Uses simple string matching for artifact-specific patterns
+
+    This is much faster than full regex scanning.
+    """
+    import re
+
+    # Determine techniques file path
+    # Need to go up to the image directory (parent of 'cooked')
+    # json_path example: /output/case/image/cooked/browsers/file.json
+    # We need: /output/case/image/mitre_techniques.txt
+    current_dir = os.path.dirname(json_path)
+    # Walk up until we find 'cooked' directory or reach a reasonable limit
+    image_dir = current_dir
+    for _ in range(5):  # Max 5 levels up
+        parent = os.path.dirname(image_dir)
+        if os.path.basename(image_dir) == "cooked":
+            image_dir = parent  # Found cooked, go one more level up to image dir
+            break
+        image_dir = parent
+    techniques_file_path = os.path.join(image_dir, "mitre_techniques.txt")
+    os.makedirs(os.path.dirname(techniques_file_path), exist_ok=True)
+
+    # Base technique for artifact type
+    base_technique = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower(), {}).get("technique_id")
+
+    found_techniques = set()
+    if base_technique:
+        found_techniques.add(base_technique)
+
+    # Get artifact-appropriate patterns and field extractors
+    patterns, field_pattern = _get_patterns_for_artifact(artifact_type)
+
+    if not patterns:
+        # No specific patterns for this artifact type, just write base technique
+        if base_technique:
+            with open(techniques_file_path, 'a') as f:
+                f.write(f"{base_technique}\n")
+        return True
+
+    field_regex = re.compile(field_pattern, re.IGNORECASE)
+
+    lines_processed = 0
+    try:
+        with open(json_path, 'r', errors='ignore') as f:
+            for line in f:
+                lines_processed += 1
+                # Progress every 500k lines
+                if lines_processed % 500000 == 0:
+                    print(f"    ...scanned {lines_processed:,} lines, found {len(found_techniques)} techniques", flush=True)
+
+                # Extract relevant fields from this line
+                matches = field_regex.findall(line)
+                for match in matches:
+                    match_lower = match.lower()
+                    for tech_id, indicators in patterns.items():
+                        for indicator in indicators:
+                            if indicator in match_lower:
+                                found_techniques.add(tech_id)
+                                break
+
+        # Write all found techniques
+        with open(techniques_file_path, 'a') as f:
+            for tech_id in found_techniques:
+                f.write(f"{tech_id}\n")
+
+        return True
+
+    except Exception as e:
+        print(f"    WARNING: Error during fast scan: {e}", flush=True)
+        if base_technique:
+            with open(techniques_file_path, 'a') as f:
+                f.write(f"{base_technique}\n")
+        return False
+
+
+def _get_patterns_for_artifact(artifact_type: str):
+    """
+    Return appropriate MITRE patterns and field extractor based on artifact type.
+
+    Returns:
+        tuple: (patterns_dict, field_regex_pattern) or (None, None) if no patterns apply
+    """
+    artifact_lower = artifact_type.lower()
+
+    # ========================================
+    # CROSS-PLATFORM: Event Logs (Windows evtx, macOS/Linux logs)
+    # ========================================
+    if artifact_lower in ["eventlogs", "evtx", "evt", "logs", "log"]:
+        patterns = {
+            # Windows Event ID based techniques
+            "T1070.001": ["1102", "104"],  # Log clearing
+            "T1053.005": ["4698", "4699", "4700", "4701", "4702"],  # Scheduled tasks
+            "T1136": ["4720", "4722", "4738"],  # Account creation/modification
+            "T1098": ["4728", "4732", "4756"],  # Group membership changes
+            "T1003": ["4656", "4663"],  # Credential access (LSASS)
+            "T1021.001": ["4624", "4625"],  # RDP logon
+            "T1021.002": ["5140", "5145"],  # SMB access
+            "T1547.001": ["7045"],  # Service installation
+            "T1059.001": ["4104", "4103", "powershell", ".ps1", "-enc", "-encodedcommand"],  # PowerShell
+            "T1569.002": ["7045", "4697"],  # Service execution
+            # Cross-platform command/process patterns
+            "T1059.003": ["cmd.exe", "cmd /c"],  # Windows cmd
+            "T1059.004": ["/bin/sh", "/bin/bash", "/bin/zsh", "sh -c"],  # Unix shell
+            "T1059.005": ["wscript", "cscript", ".vbs"],  # VBScript
+            "T1059.006": ["python", "/usr/bin/python"],  # Python
+            "T1218": ["mshta", "regsvr32", "rundll32", "msiexec", "certutil"],
+            "T1003.001": ["mimikatz", "procdump", "lsass"],
+            "T1105": ["psexec", "paexec", "bitsadmin", "certutil", "curl", "wget"],
+            # macOS/Linux specific
+            "T1053.003": ["cron", "crontab"],  # Cron
+            "T1543.002": ["systemctl", "service"],  # Systemd
+            "T1548.003": ["sudo", "doas"],  # Sudo abuse
+        }
+        # Extract Event IDs and message content
+        field_pattern = r'"(?:event_id|EventID|eventid|message|Message|CommandLine|command_line|msg|log)"\s*:\s*"?([^",}\]]+)"?'
+        return patterns, field_pattern
+
+    # ========================================
+    # WINDOWS-ONLY: Registry (may contain paths, files, and command lines)
+    # ========================================
+    if artifact_lower in ["registry", "reg", "shimcache", "amcache", "userassist"]:
+        patterns = {
+            # Registry-specific
+            "T1547.001": ["\\run", "\\runonce", "\\explorer\\shell", "\\winlogon"],  # Autostart
+            "T1546.001": ["\\classes\\", "\\shell\\open\\command"],  # File associations
+            "T1112": ["\\policies\\", "\\software\\microsoft\\"],  # Registry modification
+            "T1562.001": ["\\windows defender\\", "disableantispyware"],  # Disable security
+            # Command lines in registry values
+            "T1059.001": ["powershell", ".ps1", "-enc", "-encodedcommand", "-nop", "-w hidden"],
+            "T1059.003": ["cmd.exe", "cmd /c", "cmd /k"],
+            "T1059.005": ["wscript", "cscript", ".vbs"],
+            "T1218": ["mshta", "regsvr32", "rundll32", "msiexec", "certutil"],
+            # Files referenced in registry
+            "T1003": ["mimikatz", "procdump", "lsass", "sam", "system", "security", "pwdump"],
+            "T1105": ["psexec", "paexec", "bitsadmin"],
+            "T1219": ["anydesk", "teamviewer", "vnc", "logmein"],
+        }
+        field_pattern = r'"(?:path|key|value|name|full_path|data|command|arguments)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # WINDOWS-ONLY: Prefetch
+    # ========================================
+    if artifact_lower in ["prefetch", "pf"]:
+        patterns = {
+            "T1059": ["powershell", "cmd.exe", "wscript", "cscript", "python", "perl"],
+            "T1218": ["mshta", "regsvr32", "rundll32", "msiexec", "certutil", "cmstp"],
+            "T1003": ["mimikatz", "procdump", "pwdump", "gsecdump", "secretsdump"],
+            "T1105": ["psexec", "paexec", "bitsadmin", "curl", "wget"],
+            "T1036": ["svchost", "csrss", "lsass", "services"],  # Masquerading
+            "T1070.004": ["sdelete", "cipher"],  # File deletion
+            "T1219": ["anydesk", "teamviewer", "vnc", "logmein", "screenconnect"],
+        }
+        field_pattern = r'"(?:filename|name|path|executable)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # WINDOWS-ONLY: MFT, USNJrnl
+    # ========================================
+    if artifact_lower in ["mft", "usnjrnl"]:
+        patterns = {
+            "T1059": [".ps1", ".vbs", ".js", ".bat", ".cmd", "powershell", "wscript", "cscript"],
+            "T1036": ["svchost", "csrss", "lsass", "services", "winlogon", "explorer"],
+            "T1003": ["mimikatz", "procdump", "lsass.dmp", "sam.save", "system.save", "ntds.dit", "pwdump"],
+            "T1105": ["psexec", "paexec", "certutil", "bitsadmin"],
+            "T1218": ["mshta", "regsvr32", "rundll32", "msiexec"],
+            "T1547": ["\\run\\", "\\runonce\\", "startup"],
+            "T1070": ["wevtutil", "fsutil", "$recycle", "sdelete"],
+            "T1219": ["anydesk", "teamviewer", "vnc", "logmein", "ammyy"],
+            "T1486": [".encrypted", ".locked", ".crypto", "readme.txt", "decrypt"],  # Ransomware
+        }
+        field_pattern = r'"(?:full_path|filename|name|path)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # CROSS-PLATFORM: Generic file listings
+    # ========================================
+    if artifact_lower in ["filelisting", "files"]:
+        patterns = {
+            # Cross-platform scripting
+            "T1059.001": [".ps1", "powershell"],  # PowerShell (Windows)
+            "T1059.004": [".sh", "/bin/bash", "/bin/sh", "/bin/zsh"],  # Unix shell
+            "T1059.005": [".vbs", "wscript", "cscript"],  # VBScript (Windows)
+            "T1059.006": [".py", "python"],  # Python
+            "T1059.007": [".js"],  # JavaScript
+            # Cross-platform tools
+            "T1003": ["mimikatz", "procdump", "pwdump", "hashdump"],
+            "T1105": ["psexec", "paexec", "curl", "wget", "nc", "netcat"],
+            "T1219": ["anydesk", "teamviewer", "vnc", "logmein"],
+            "T1486": [".encrypted", ".locked", ".crypto", "ransom"],  # Ransomware
+            # Persistence locations
+            "T1547": ["startup", "autostart", ".bashrc", ".zshrc", "crontab", "launchagents"],
+        }
+        field_pattern = r'"(?:full_path|filename|name|path)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # MACOS/LINUX: Journal files
+    # ========================================
+    if artifact_lower in ["journal", "journalctl", "syslog"]:
+        patterns = {
+            "T1059.004": ["/bin/sh", "/bin/bash", "/bin/zsh", "sh -c"],  # Unix shell
+            "T1059.006": ["python", "/usr/bin/python"],  # Python
+            "T1053.003": ["cron", "crontab"],  # Cron
+            "T1543.002": ["systemctl", "service"],  # Systemd
+            "T1070.002": ["rm ", "unlink", "shred"],  # Log deletion
+            "T1105": ["curl", "wget", "nc", "netcat", "scp", "rsync"],
+        }
+        field_pattern = r'"(?:message|msg|command|unit|exe)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # MACOS-ONLY: Plists (may contain command lines)
+    # ========================================
+    if artifact_lower in ["plist", "launchagent", "launchdaemon", "loginitems"]:
+        patterns = {
+            # Plist-specific persistence
+            "T1543.001": ["launchagents"],  # Launch Agent
+            "T1543.004": ["launchdaemons"],  # Launch Daemon
+            "T1547.015": ["loginitems", "loginwindow"],  # Login Items
+            # Command lines in plists
+            "T1059.002": ["osascript", "applescript"],  # AppleScript
+            "T1059.004": ["/bin/sh", "/bin/bash", "/bin/zsh", "sh -c"],  # Unix shell
+            "T1059.006": ["python", "/usr/bin/python", "python3"],  # Python
+            "T1059.007": ["node", "javascript"],  # JavaScript
+            # Suspicious binaries
+            "T1105": ["curl", "wget", "nc", "netcat"],
+            "T1553.001": ["quarantine", "xattr"],  # Gatekeeper bypass
+        }
+        field_pattern = r'"(?:path|program|label|command|arguments|ProgramArguments|Program)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # BROWSER ARTIFACTS (Cross-platform)
+    # ========================================
+    if artifact_lower in ["browser", "chromium", "firefox", "safari", "history", "downloads"]:
+        patterns = {
+            "T1567": ["drive.google", "dropbox", "onedrive", "mega.nz", "wetransfer"],  # Exfil to cloud
+            "T1102": ["pastebin", "hastebin", "ghostbin"],  # Web service C2
+            "T1189": ["exploit", "payload", ".exe", ".dll", ".scr"],  # Drive-by
+            "T1566.002": ["login", "account", "verify", "suspended"],  # Phishing keywords
+        }
+        field_pattern = r'"(?:url|path|title|filename)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # WINDOWS-ONLY: Shellbags (may contain command lines in target paths)
+    # ========================================
+    if artifact_lower in ["shellbags"]:
+        patterns = {
+            "T1083": ["users\\", "documents", "desktop", "downloads"],  # File discovery
+            "T1005": ["confidential", "password", "secret", "backup"],  # Data from local system
+            "T1025": ["usb", "removable"],  # Removable media
+            # Command-related paths
+            "T1059": ["powershell", "cmd.exe", ".ps1", ".bat", ".vbs"],
+            "T1218": ["mshta", "regsvr32", "rundll32"],
+        }
+        field_pattern = r'"(?:path|name|full_path|target)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # CROSS-PLATFORM: Scheduled Tasks / Cron
+    # ========================================
+    if artifact_lower in ["tasks", "schtasks", "scheduled", "cron", "crontab"]:
+        patterns = {
+            # Task-specific
+            "T1053.005": ["schtasks", "at.exe"],  # Windows scheduled tasks
+            "T1053.003": ["cron", "crontab", "* * *"],  # Cron (macOS/Linux)
+            # Command lines in tasks
+            "T1059.001": ["powershell", ".ps1", "-enc", "-encodedcommand"],
+            "T1059.003": ["cmd.exe", "cmd /c"],
+            "T1059.004": ["/bin/sh", "/bin/bash", "sh -c"],
+            "T1059.005": ["wscript", "cscript", ".vbs"],
+            "T1059.006": ["python", "/usr/bin/python"],
+            "T1218": ["mshta", "regsvr32", "rundll32", "certutil"],
+            "T1105": ["curl", "wget", "psexec", "bitsadmin"],
+        }
+        field_pattern = r'"(?:path|command|action|name|arguments|program|schedule)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # WINDOWS-ONLY: Services (contain command lines)
+    # ========================================
+    if artifact_lower in ["services"]:
+        patterns = {
+            # Service-specific
+            "T1543.003": ["\\system32\\", "\\syswow64\\"],  # Windows Service paths
+            "T1569.002": ["psexec", "paexec"],  # Service Execution
+            "T1036": ["svchost", "csrss", "lsass"],  # Masquerading
+            # Command lines in service configs
+            "T1059.001": ["powershell", ".ps1", "-enc"],
+            "T1059.003": ["cmd.exe", "cmd /c"],
+            "T1218": ["mshta", "regsvr32", "rundll32", "msiexec"],
+            "T1105": ["certutil", "bitsadmin"],
+            "T1219": ["anydesk", "teamviewer", "vnc"],
+        }
+        field_pattern = r'"(?:path|binary_path|name|display_name|command|arguments|ImagePath)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # CROSS-PLATFORM: Generic text log files (.log)
+    # Could contain commands, paths, errors, etc.
+    # ========================================
+    if artifact_lower in ["logfile", "textlog", "syslog", "auth", "secure", "messages"]:
+        patterns = {
+            # Cross-platform commands
+            "T1059.001": ["powershell", ".ps1", "-enc", "-encodedcommand"],
+            "T1059.003": ["cmd.exe", "cmd /c"],
+            "T1059.004": ["/bin/sh", "/bin/bash", "/bin/zsh", "sh -c"],
+            "T1059.006": ["python", "/usr/bin/python"],
+            # Authentication/credential access
+            "T1110": ["failed password", "authentication failure", "invalid user"],
+            "T1078": ["accepted password", "session opened", "successful login"],
+            "T1548.003": ["sudo", "doas", "root"],
+            # Persistence
+            "T1053.003": ["cron", "crontab"],
+            "T1543.002": ["systemctl", "service"],
+            # Lateral movement / tools
+            "T1021.004": ["ssh", "sshd", "accepted publickey"],
+            "T1105": ["curl", "wget", "scp", "rsync", "nc", "netcat"],
+            # Suspicious activity
+            "T1070.002": ["log deleted", "cleared", "truncated"],
+            "T1003": ["mimikatz", "procdump", "lsass", "hashdump"],
+        }
+        field_pattern = r'"(?:message|msg|log|line|content|text|data)"\s*:\s*"([^"]+)"'
+        return patterns, field_pattern
+
+    # ========================================
+    # DEFAULT: Generic patterns (fallback)
+    # ========================================
+    patterns = {
+        "T1059": [".ps1", ".vbs", ".bat", ".sh", "powershell", "cmd.exe", "/bin/bash"],
+        "T1003": ["mimikatz", "procdump", "lsass"],
+        "T1105": ["psexec", "certutil", "curl", "wget"],
+    }
+    field_pattern = r'"(?:path|name|command|value|message|data)"\s*:\s*"([^"]+)"'
+    return patterns, field_pattern
+
+
+def enrich_json_with_mitre(json_path: str, artifact_type: str, techniques_file_path: str = None) -> bool:
     """
     Enrich a JSON file with MITRE ATT&CK metadata.
+
+    Uses the comprehensive MitreEnrichment class for content-based pattern matching.
+    Also writes technique IDs to the techniques file for Navigator layer generation.
 
     Args:
         json_path: Path to JSON file
         artifact_type: Type of artifact (prefetch, eventlogs, etc.)
+        techniques_file_path: Optional path to techniques file for Navigator
 
     Returns:
         True if successful
     """
-    mitre_data = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower())
-    if not mitre_data:
-        return False
-
     try:
-        with open(json_path, 'r') as f:
-            data = json.load(f)
+        # Use the comprehensive MitreEnrichment class for content-based pattern matching
+        from rivendell.post.mitre.enrichment import MitreEnrichment
+        enrichment = MitreEnrichment()
 
-        # Handle both single records and arrays
-        if isinstance(data, list):
-            for record in data:
-                if isinstance(record, dict):
-                    record["mitre_technique_id"] = mitre_data["technique_id"]
-                    record["mitre_technique_name"] = mitre_data["technique_name"]
-                    record["mitre_tactics"] = mitre_data["tactics"]
-                    record["mitre_groups"] = mitre_data["groups"]
-        elif isinstance(data, dict):
-            data["mitre_technique_id"] = mitre_data["technique_id"]
-            data["mitre_technique_name"] = mitre_data["technique_name"]
-            data["mitre_tactics"] = mitre_data["tactics"]
-            data["mitre_groups"] = mitre_data["groups"]
+        # Determine techniques file path if not provided
+        if not techniques_file_path:
+            # Go up from cooked dir to image dir, write mitre_techniques.txt there
+            # json_path example: /output/case/image/cooked/browsers/file.json
+            # We need: /output/case/image/mitre_techniques.txt
+            current_dir = os.path.dirname(json_path)
+            image_dir = current_dir
+            for _ in range(5):  # Max 5 levels up
+                parent = os.path.dirname(image_dir)
+                if os.path.basename(image_dir) == "cooked":
+                    image_dir = parent  # Found cooked, go one more level up to image dir
+                    break
+                image_dir = parent
+            techniques_file_path = os.path.join(image_dir, "mitre_techniques.txt")
 
-        with open(json_path, 'w') as f:
-            json.dump(data, f, indent=2)
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(techniques_file_path), exist_ok=True)
 
-        return True
+        # Open techniques file in append mode and enrich the JSON
+        with open(techniques_file_path, 'a') as techniques_file:
+            return enrichment.enrich_json_file_streaming(json_path, techniques_file, artifact_type)
 
+    except ImportError:
+        # Fallback to simple mapping if enrichment module not available
+        mitre_data = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower())
+        if not mitre_data:
+            return False
+
+        try:
+            with open(json_path, 'r') as f:
+                data = json.load(f)
+
+            # Handle both single records and arrays
+            if isinstance(data, list):
+                for record in data:
+                    if isinstance(record, dict):
+                        record["mitre_technique_id"] = mitre_data["technique_id"]
+                        record["mitre_technique_name"] = mitre_data["technique_name"]
+                        record["mitre_tactics"] = mitre_data["tactics"]
+                        record["mitre_groups"] = mitre_data["groups"]
+            elif isinstance(data, dict):
+                data["mitre_technique_id"] = mitre_data["technique_id"]
+                data["mitre_technique_name"] = mitre_data["technique_name"]
+                data["mitre_tactics"] = mitre_data["tactics"]
+                data["mitre_groups"] = mitre_data["groups"]
+
+            with open(json_path, 'w') as f:
+                json.dump(data, f, indent=2)
+
+            # Write technique ID to file if path provided
+            if techniques_file_path and mitre_data:
+                with open(techniques_file_path, 'a') as f:
+                    f.write(f"{mitre_data['technique_id']}\n")
+
+            return True
+
+        except Exception:
+            return False
     except Exception:
         return False
 
@@ -255,12 +641,34 @@ def run_artemis(
         cmd.extend([dir_arg, alt_dir])
 
     try:
+        import sys
+        import threading
+        import time as time_module
+
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
+
+        # Progress indicator for long-running operations
+        stop_progress = threading.Event()
+        def show_progress():
+            start_time = time_module.time()
+            # Use proper display name for artifacts
+            display_name = "$MFT" if artifact == "mft" else artifact
+            while not stop_progress.is_set():
+                elapsed = int(time_module.time() - start_time)
+                if elapsed > 0 and elapsed % 30 == 0:  # Every 30 seconds
+                    print(f" -> still processing {display_name}... ({elapsed}s elapsed)", flush=True)
+                stop_progress.wait(1)
+
+        progress_thread = threading.Thread(target=show_progress, daemon=True)
+        progress_thread.start()
+
         stdout_data, stderr_data = process.communicate()
+        stop_progress.set()
+        progress_thread.join(timeout=1)
 
         if process.returncode != 0:
             stderr_text = stderr_data.decode('utf-8', errors='replace') if stderr_data else ''
@@ -406,7 +814,8 @@ def extract_with_artemis(
     # Create output directory if needed
     os.makedirs(cooked_dir, exist_ok=True)
 
-    # Log start
+    # Log start - only show filename, not full path
+    artifact_display = os.path.basename(artifact_file) if artifact_file else (os.path.basename(artifact_dir.rstrip('/')) if artifact_dir else "system")
     entry, prnt = "{},{},{},'{}'\n".format(
         datetime.now().isoformat(),
         vssimage.replace("'", ""),
@@ -415,7 +824,7 @@ def extract_with_artemis(
     ), " -> {} {} '{}' for {}".format(
         stage,
         artifact_type,
-        artifact_file or artifact_dir or "system",
+        artifact_display,
         vssimage,
     )
     write_audit_log_entry(verbosity, output_directory, entry, prnt)
@@ -457,10 +866,10 @@ def extract_with_artemis(
         )
         return False
 
-    # Enrich JSON files with MITRE ATT&CK metadata
+    # Fast MITRE enrichment - scan JSON files for artifact-specific patterns
     import glob
     for json_file in glob.glob(os.path.join(cooked_dir, "*.json")):
-        enrich_json_with_mitre(json_file, artifact_type)
+        enrich_with_mitre(json_file, artifact_type)
 
     return True
 

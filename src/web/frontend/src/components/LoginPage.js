@@ -67,7 +67,7 @@ const LoginPage = () => {
         </p>
       </header>
 
-      <div className="card">
+      <div className="card" style={{ maxWidth: '3000px', margin: '0 auto' }}>
         <h3>Sign In</h3>
 
         {error && (
@@ -137,16 +137,6 @@ const LoginPage = () => {
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: '2rem', backgroundColor: 'rgba(240, 219, 165, 0.05)' }}>
-        <h4 style={{ marginTop: 0 }}>Default Admin Account</h4>
-        <p style={{ fontSize: '0.9rem', color: '#ccc' }}>
-          <strong>Email:</strong> admin@rivendell.app<br />
-          <strong>Password:</strong> IWasThere3000YearsAgo!
-        </p>
-        <p style={{ fontSize: '0.85rem', color: '#888', marginBottom: 0 }}>
-          Please change this password after your first login in production environments.
-        </p>
-      </div>
     </div>
   );
 };

@@ -910,5 +910,5 @@ def create_transforms(
             )
         )
     transformsconf.write(
-        '"-"{}, mitre_technique=split(mitre_techniques,"|")\n\n'.format(parentheses)
+        '"-"{}, mitre_technique_name=split(mitre_techniques,"|")\n\n'.format(parentheses)
     )

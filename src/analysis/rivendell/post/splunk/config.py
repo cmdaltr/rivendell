@@ -360,12 +360,12 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     )
                 )
                 propsconf.write(
-                    "[elrondJSON]\nDATETIME_CONFIG = \nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nTIMESTAMP_FIELDS = LastWriteTime\nTIME_FORMAT = %a %b %e %H:%M:%S %Y\ncategory = Custom\ndescription = JavaScript Object Notation format. For more information, visit http://json.org/\ndisabled = false\npulldown_type = true\n\n".format(
+                    "[json]\nDATETIME_CONFIG = \nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nTIMESTAMP_FIELDS = LastWriteTime\nTIME_FORMAT = %a %b %e %H:%M:%S %Y\ncategory = Custom\ndescription = JavaScript Object Notation format. For more information, visit http://json.org/\ndisabled = false\npulldown_type = true\n\n".format(
                         propsreports
                     )
                 )
                 propsconf.write(
-                    "[elrondJSON_noTime]\nDATETIME_CONFIG = CURRENT\nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nTIMESTAMP_FIELDS = LastWriteTime\nTIME_FORMAT = %a %b %e %H:%M:%S %Y\ncategory = Custom\ndescription = JavaScript Object Notation format. For more information, visit http://json.org/\ndisabled = false\npulldown_type = true\n\n".format(
+                    "[json_noTime]\nDATETIME_CONFIG = CURRENT\nINDEXED_EXTRACTIONS = json\nKV_MODE = none\nLINE_BREAKER = ([\\r\\n]+)\nMAX_DAYS_AGO = 999999\nMAX_DAYS_HENCE = 999999\nNO_BINARY_CHECK = true\n{}\nTIMESTAMP_FIELDS = LastWriteTime\nTIME_FORMAT = %a %b %e %H:%M:%S %Y\ncategory = Custom\ndescription = JavaScript Object Notation format. For more information, visit http://json.org/\ndisabled = false\npulldown_type = true\n\n".format(
                         propsreports
                     )
                 )
@@ -475,7 +475,7 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     "disabled = false\n"
                     "crcSalt = <SOURCE>\n"
                     "host = {}\n"
-                    "sourcetype = elrondJSON\n"
+                    "sourcetype = json\n"
                     "index = {}\n\n".format(cooked_path, img_name, case)
                 )
 
@@ -485,7 +485,7 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     "disabled = false\n"
                     "crcSalt = <SOURCE>\n"
                     "host = {}\n"
-                    "sourcetype = elrondJSON\n"
+                    "sourcetype = json\n"
                     "index = {}\n\n".format(cooked_path, img_name, case)
                 )
 
@@ -495,7 +495,7 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     "disabled = false\n"
                     "crcSalt = <SOURCE>\n"
                     "host = {}\n"
-                    "sourcetype = elrondJSON\n"
+                    "sourcetype = json\n"
                     "index = {}\n\n".format(cooked_path, img_name, case)
                 )
 
@@ -505,7 +505,7 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     "disabled = false\n"
                     "crcSalt = <SOURCE>\n"
                     "host = {}\n"
-                    "sourcetype = elrondJSON\n"
+                    "sourcetype = json\n"
                     "index = {}\n\n".format(cooked_path, img_name, case)
                 )
                 inputs_entries.append(
@@ -513,7 +513,7 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     "disabled = false\n"
                     "crcSalt = <SOURCE>\n"
                     "host = {}\n"
-                    "sourcetype = elrondJSON\n"
+                    "sourcetype = json\n"
                     "index = {}\n\n".format(cooked_path, img_name, case)
                 )
 

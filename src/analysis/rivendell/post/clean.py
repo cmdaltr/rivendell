@@ -100,3 +100,52 @@ def delete_artefacts(verbosity, output_directory):
 
 
 alist = []
+
+
+def cleanup_small_files_and_empty_dirs(output_directory, min_file_size=10):
+    """
+    Clean up small files (<10 bytes) and empty directories after processing.
+
+    This removes artifacts that are effectively empty or contain no useful data.
+
+    Args:
+        output_directory: Base output directory to clean
+        min_file_size: Minimum file size in bytes (files smaller than this are deleted)
+
+    Returns:
+        Tuple of (deleted_files_count, deleted_dirs_count)
+    """
+    deleted_files = 0
+    deleted_dirs = 0
+
+    print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> cleaning up small files and empty directories...")
+
+    # First pass: delete small files
+    for root, dirs, files in os.walk(output_directory):
+        for filename in files:
+            filepath = os.path.join(root, filename)
+            try:
+                file_size = os.path.getsize(filepath)
+                if file_size < min_file_size:
+                    os.remove(filepath)
+                    deleted_files += 1
+            except (OSError, IOError):
+                pass
+
+    # Second pass: delete empty directories (bottom-up)
+    # We need to walk bottom-up so we can delete nested empty dirs
+    for root, dirs, files in os.walk(output_directory, topdown=False):
+        for dirname in dirs:
+            dirpath = os.path.join(root, dirname)
+            try:
+                # Only delete if directory is empty
+                if not os.listdir(dirpath):
+                    os.rmdir(dirpath)
+                    deleted_dirs += 1
+            except (OSError, IOError):
+                pass
+
+    if deleted_files > 0 or deleted_dirs > 0:
+        print(f"     Cleaned up {deleted_files} small files and {deleted_dirs} empty directories")
+
+    return deleted_files, deleted_dirs

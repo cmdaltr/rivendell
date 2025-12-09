@@ -492,33 +492,36 @@ function JobDetails() {
 
         {error && <div className="error">{error}</div>}
 
-        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.8fr 0.8fr 0.8fr 1.6fr', gap: '1rem', marginBottom: '2rem' }}>
+        {/* Row 1: Case # | Destination | Progress */}
+        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.525fr 0.66fr 1.5fr', gap: '1rem', marginBottom: '1rem' }}>
           <div className="info-item">
             <strong>Case #:</strong>
             <span>{job.case_number}</span>
           </div>
           <div className="info-item">
-            <strong>Status:</strong>
-            <span className={getStatusClass(job.status)} style={{ display: 'inline-block', width: '50%', textAlign: 'center' }}>{job.status}</span>
+            <strong>Destination:</strong>
+            <span>{job.destination_path ? job.destination_path.replace(/\/[^/]+$/, '') : 'Default location'}</span>
           </div>
           <div className="info-item">
-            <strong>Progress:</strong>
             <div className="progress-bar" style={{ marginRight: 'auto', width: '80%' }}>
               <div
                 className="progress-fill"
                 style={{ width: `${job.progress}%` }}
               >
-                {job.progress}%
               </div>
+              {job.progress > 0 && <span className="progress-text">{job.progress}%</span>}
             </div>
           </div>
+        </div>
+        {/* Row 2: Status | Duration | Started | Completed */}
+        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.72fr 0.9fr 1fr 1fr', gap: '1rem', marginBottom: '0.5rem' }}>
           <div className="info-item">
-            <strong>Destination:</strong>
-            <span style={{ fontSize: '0.85rem' }}>{job.destination_path || 'Default location'}</span>
+            <strong>Status:</strong>
+            <span className={getStatusClass(job.status)} style={{ display: 'inline-block', width: '50%', textAlign: 'center' }}>{job.status}</span>
           </div>
           <div className="info-item">
-            <strong>Created:</strong>
-            <span>{formatDate(job.created_at)}</span>
+            <strong>Duration:</strong>
+            <span>{formatDuration(job.started_at, job.completed_at)}</span>
           </div>
           <div className="info-item">
             <strong>Started:</strong>
@@ -527,10 +530,6 @@ function JobDetails() {
           <div className="info-item">
             <strong>Completed:</strong>
             <span>{formatDate(job.completed_at)}</span>
-          </div>
-          <div className="info-item">
-            <strong>Duration:</strong>
-            <span>{formatDuration(job.started_at, job.completed_at)}</span>
           </div>
         </div>
 
@@ -568,12 +567,6 @@ function JobDetails() {
         {job.result && job.status === 'completed' && (
           <div className="result-section">
             <h3>Results</h3>
-            <div className="success">
-              Analysis completed successfully!
-            </div>
-            <div className="result-info">
-              <strong>Output Directory:</strong> {job.result.output_directory}
-            </div>
 
             {/* SIEM Quick Access Links */}
             {(job.options?.splunk || job.options?.elastic || job.options?.navigator) && (

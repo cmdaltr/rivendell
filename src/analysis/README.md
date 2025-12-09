@@ -1,6 +1,6 @@
 # Elrond - Digital Forensics Automation Tool
 
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/yourusername/elrond)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/yourusername/elrond)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -31,7 +31,7 @@
 - 🧠 **Memory Forensics**: Full Volatility 3 plugin suite
 - 🔍 **IOC Detection**: YARA rules and keyword searching
 - 🗂️ **Artifact Collection**: Automated collection of key forensic artifacts
-- 📈 **MITRE ATT&CK Mapping**: Automatic mapping to ATT&CK framework
+- 📈 **MITRE ATT&CK Mapping**: Comprehensive content-based technique detection with 600+ techniques, multi-tactic support, and ATT&CK Navigator visualization
 - 🔐 **Malware Detection**: ClamAV integration for malware scanning
 - 📤 **SIEM Export**: Direct export to Splunk and Elastic
 

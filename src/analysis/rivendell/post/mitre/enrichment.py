@@ -5,8 +5,12 @@ MITRE ATT&CK Enrichment for JSON Artefacts
 Adds MITRE ATT&CK technique metadata to processed JSON artefact files.
 This enables Navigator layer generation without SIEM dependencies.
 
+Uses content-based pattern matching (from patterns.py) to identify techniques
+based on the actual content of artefacts, ensuring consistent results
+regardless of SIEM platform.
+
 Author: Rivendell DF Acceleration Suite
-Version: 2.3.0
+Version: 3.0.0
 """
 
 import json
@@ -20,7 +24,34 @@ from datetime import datetime
 # Techniques file name - written incrementally during enrichment
 TECHNIQUES_FILE = "mitre_techniques.txt"
 
-# Try to import the MITRE modules
+# Import the content-based pattern matcher
+try:
+    from rivendell.post.mitre.patterns import get_pattern_matcher, scan_json_record
+    PATTERNS_AVAILABLE = True
+except ImportError:
+    try:
+        from .patterns import get_pattern_matcher, scan_json_record
+        PATTERNS_AVAILABLE = True
+    except ImportError:
+        PATTERNS_AVAILABLE = False
+        get_pattern_matcher = None
+        scan_json_record = None
+
+# Import the comprehensive ATT&CK data
+try:
+    from rivendell.post.mitre.attack_data import get_technique_data, enrich_technique, ATTACK_TECHNIQUES
+    ATTACK_DATA_AVAILABLE = True
+except ImportError:
+    try:
+        from .attack_data import get_technique_data, enrich_technique, ATTACK_TECHNIQUES
+        ATTACK_DATA_AVAILABLE = True
+    except ImportError:
+        ATTACK_DATA_AVAILABLE = False
+        get_technique_data = None
+        enrich_technique = None
+        ATTACK_TECHNIQUES = {}
+
+# Try to import the MITRE modules (legacy)
 try:
     from analysis.mitre import MitreAttackUpdater, TechniqueMapper
     MITRE_AVAILABLE = True
@@ -252,32 +283,76 @@ class MitreEnrichment:
         """
         Add MITRE ATT&CK metadata to a JSON record.
 
+        Uses content-based pattern matching to identify techniques, then embeds
+        full ATT&CK metadata including:
+        - Technique ID and Name
+        - Tactics
+        - CTI (Threat Groups and Software)
+        - Procedure Examples
+
         Args:
             record: The JSON record to enrich
             artefact_type: Type of artefact (e.g., 'prefetch', 'browser_history')
 
         Returns:
-            Enriched record with MITRE metadata
+            Enriched record with full MITRE metadata
         """
-        techniques = self.get_techniques_for_artefact(artefact_type)
+        all_technique_ids = set()
 
-        if techniques:
-            # Add primary technique (first one)
-            primary = techniques[0]
-            record["mitre_technique_id"] = primary["technique_id"]
-            record["mitre_technique_name"] = primary["technique_name"]
-            record["mitre_tactics"] = primary["tactics"]
-            record["mitre_groups"] = primary["groups"]
+        # 1. Get base techniques from artefact type
+        base_techniques = self.get_techniques_for_artefact(artefact_type)
+        for tech in base_techniques:
+            all_technique_ids.add(tech["technique_id"])
+
+        # 2. Use content-based pattern matching for additional techniques
+        if PATTERNS_AVAILABLE and scan_json_record:
+            content_techniques = scan_json_record(record)
+            all_technique_ids.update(content_techniques)
+
+        if not all_technique_ids:
+            return record
+
+        # 3. Build full enrichment data for all techniques
+        if ATTACK_DATA_AVAILABLE and enrich_technique:
+            # Get full metadata for primary technique (first from base or content)
+            technique_ids = sorted(all_technique_ids)
+            primary_id = technique_ids[0]
+            primary_data = enrich_technique(primary_id)
+
+            # Add primary technique fields
+            record["mitre_technique_id"] = primary_data["mitre_technique_id"]
+            record["mitre_technique_name"] = primary_data["mitre_technique_name"]
+            record["mitre_tactics"] = primary_data["mitre_tactics"]
+            record["mitre_description"] = primary_data["mitre_description"]
+            record["mitre_groups"] = primary_data["mitre_groups"]
+            record["mitre_software"] = primary_data["mitre_software"]
+            record["mitre_procedure_examples"] = primary_data["mitre_procedure_examples"]
 
             # Add all techniques if more than one
-            if len(techniques) > 1:
-                record["mitre_techniques"] = techniques
+            if len(technique_ids) > 1:
+                record["mitre_techniques"] = [
+                    enrich_technique(tid) for tid in technique_ids
+                ]
+        else:
+            # Fallback to basic enrichment without full ATT&CK data
+            if base_techniques:
+                primary = base_techniques[0]
+                record["mitre_technique_id"] = primary["technique_id"]
+                record["mitre_technique_name"] = primary["technique_name"]
+                record["mitre_tactics"] = primary["tactics"]
+                record["mitre_groups"] = primary.get("groups", [])
+
+                if len(base_techniques) > 1:
+                    record["mitre_techniques"] = base_techniques
 
         return record
 
     def enrich_json_file_streaming(self, filepath: str, techniques_file: TextIO, artefact_type: Optional[str] = None) -> bool:
         """
         Enrich a JSON artefact file with MITRE metadata using streaming approach.
+
+        Uses content-based pattern matching to identify techniques from the actual
+        artefact content, ensuring consistent results independent of SIEM platform.
 
         Writes discovered techniques directly to the techniques file to avoid
         keeping them in memory. Processes files line-by-line for large files.
@@ -300,61 +375,106 @@ class MitreEnrichment:
             if not artefact_type:
                 artefact_type = self._detect_artefact_type(filepath)
 
-            if not artefact_type:
-                # Unknown artefact type - still process but no techniques to add
-                return True
+            # Get base techniques for this artefact type
+            base_techniques = set()
+            if artefact_type:
+                for tech in self.get_techniques_for_artefact(artefact_type):
+                    tech_id = tech.get("technique_id")
+                    if tech_id:
+                        base_techniques.add(tech_id)
 
-            # Get techniques for this artefact type (these are the techniques we'll add)
-            techniques = self.get_techniques_for_artefact(artefact_type)
-            if not techniques:
-                return True
-
-            # Write techniques to file immediately (before processing the JSON)
-            # This ensures we capture techniques even if file processing has issues
-            for tech in techniques:
-                tech_id = tech.get("technique_id")
-                if tech_id:
-                    techniques_file.write(f"{tech_id}\n")
-            techniques_file.flush()  # Ensure written to disk
-
-            # For large files, use a streaming approach
-            # Read and write in chunks to avoid loading entire file into memory
+            # For large files (>10MB), use streaming content scanning
             if file_size > 10 * 1024 * 1024:  # > 10MB
+                # Write base techniques
+                for tech_id in base_techniques:
+                    techniques_file.write(f"{tech_id}\n")
+
+                # Stream through file to find patterns without loading all into memory
+                if PATTERNS_AVAILABLE:
+                    try:
+                        with open(filepath, 'r') as f:
+                            # Read in chunks and scan for patterns
+                            chunk_size = 1024 * 1024  # 1MB chunks
+                            while True:
+                                chunk = f.read(chunk_size)
+                                if not chunk:
+                                    break
+                                chunk_techniques = get_pattern_matcher().match_content(chunk)
+                                for tech_id in chunk_techniques:
+                                    techniques_file.write(f"{tech_id}\n")
+                    except Exception as e:
+                        self.logger.warning(f"Error streaming large file {filepath}: {e}")
+
+                techniques_file.flush()
                 return self._enrich_large_file(filepath, artefact_type)
 
-            # For smaller files, use standard approach
+            # For smaller files, use content-based pattern matching
             with open(filepath, 'r') as f:
                 content = f.read().strip()
 
             if not content:
                 return True
 
-            data = json.loads(content)
+            # Parse JSON
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError:
+                # Try to scan raw content even if JSON is invalid
+                if PATTERNS_AVAILABLE:
+                    content_techniques = get_pattern_matcher().match_content(content)
+                    for tech_id in content_techniques:
+                        techniques_file.write(f"{tech_id}\n")
+                    techniques_file.flush()
+                return True
+
             del content
             gc.collect()
 
             if isinstance(data, list) and len(data) == 0:
                 return True
 
-            # Enrich records
-            if isinstance(data, list):
-                enriched = []
-                for record in data:
-                    if isinstance(record, dict):
-                        enriched.append(self.enrich_json_record(record, artefact_type))
-                del data
-                gc.collect()
-            else:
-                enriched = self.enrich_json_record(data, artefact_type)
-                del data
+            # Collect all techniques from content-based scanning
+            all_techniques = set(base_techniques)
+
+            # Use content-based pattern matching if available
+            if PATTERNS_AVAILABLE:
+                if isinstance(data, list):
+                    # Scan ALL records for comprehensive technique detection
+                    # This is critical for consistent Navigator results
+                    for record in data:
+                        if isinstance(record, dict):
+                            record_techniques = scan_json_record(record)
+                            all_techniques.update(record_techniques)
+                elif isinstance(data, dict):
+                    record_techniques = scan_json_record(data)
+                    all_techniques.update(record_techniques)
+
+            # Write all discovered techniques to file
+            for tech_id in all_techniques:
+                techniques_file.write(f"{tech_id}\n")
+            techniques_file.flush()
+
+            # Enrich records with MITRE metadata (using artefact type for primary technique)
+            if artefact_type:
+                if isinstance(data, list):
+                    enriched = []
+                    for record in data:
+                        if isinstance(record, dict):
+                            enriched.append(self.enrich_json_record(record, artefact_type))
+                    del data
+                    gc.collect()
+                else:
+                    enriched = self.enrich_json_record(data, artefact_type)
+                    del data
+                    gc.collect()
+
+                # Write back
+                with open(filepath, 'w') as f:
+                    json.dump(enriched, f, indent=2)
+
+                del enriched
                 gc.collect()
 
-            # Write back
-            with open(filepath, 'w') as f:
-                json.dump(enriched, f, indent=2)
-
-            del enriched
-            gc.collect()
             return True
 
         except json.JSONDecodeError:
@@ -506,6 +626,17 @@ def enrich_artefacts_directory(directory: str) -> Dict:
         "techniques_file": None,
     }
 
+    # Count total files first for progress reporting
+    json_files = []
+    for root, dirs, files in os.walk(directory):
+        for filename in files:
+            if filename.endswith('.json'):
+                json_files.append(os.path.join(root, filename))
+
+    total_json_files = len(json_files)
+    if total_json_files > 0:
+        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> MITRE tagging: found {total_json_files} JSON files to process (this may take several minutes)...")
+
     # Determine where to write the techniques file
     # Go up from 'cooked' to the image directory
     parent_dir = os.path.dirname(directory.rstrip('/'))
@@ -515,21 +646,25 @@ def enrich_artefacts_directory(directory: str) -> Dict:
     # Open techniques file for writing (append mode in case of retries)
     with open(techniques_filepath, 'w') as techniques_file:
         # Process all JSON files
-        for root, dirs, files in os.walk(directory):
-            for filename in files:
-                if filename.endswith('.json'):
-                    filepath = os.path.join(root, filename)
-                    stats["total_files"] += 1
+        for filepath in json_files:
+            filename = os.path.basename(filepath)
+            stats["total_files"] += 1
 
-                    # Use streaming method that writes techniques directly to file
-                    if enrichment.enrich_json_file_streaming(filepath, techniques_file):
-                        stats["enriched_files"] += 1
-                    else:
-                        stats["failed_files"] += 1
+            # Use streaming method that writes techniques directly to file
+            if enrichment.enrich_json_file_streaming(filepath, techniques_file):
+                stats["enriched_files"] += 1
+            else:
+                stats["failed_files"] += 1
 
-                    # Periodic garbage collection every 50 files
-                    if stats["total_files"] % 50 == 0:
-                        gc.collect()
+            # Progress reporting every 100 files or at milestones
+            processed = stats["total_files"]
+            if processed % 100 == 0 or processed == total_json_files:
+                pct = int((processed / total_json_files) * 100) if total_json_files > 0 else 100
+                print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> MITRE tagging progress: {processed}/{total_json_files} files ({pct}%)")
+
+            # Periodic garbage collection every 50 files
+            if stats["total_files"] % 50 == 0:
+                gc.collect()
 
     # Read techniques file to get unique count
     try:

@@ -1,21 +1,22 @@
 # MITRE ATT&CK Integration Module
 
-**Version:** 2.1.0
+**Version:** 2.0.0
 **Status:** ✅ Production Ready
 
 ## Overview
 
-The MITRE ATT&CK Integration Module provides automatic technique mapping and dashboard generation for forensic artifact analysis in Rivendell. This module ensures always-current ATT&CK framework data and provides standalone coverage analysis independent of SIEM platforms.
+The MITRE ATT&CK Integration Module provides comprehensive content-based technique detection and dashboard generation for forensic artifact analysis in Rivendell. This module features pattern matching across all artifact content, multi-tactic technique support, and automatic ATT&CK Navigator layer generation.
 
 ## Features
 
-- ✅ **Automatic ATT&CK Updates**: Downloads latest STIX data from MITRE GitHub
-- ✅ **Dynamic Technique Mapping**: Maps 50+ artifact types to ATT&CK techniques
-- ✅ **Confidence Scoring**: Provides confidence scores (0.0-1.0) for all mappings
-- ✅ **Context-Aware Detection**: Pattern-based detection for PowerShell obfuscation, mimikatz, etc.
-- ✅ **Dashboard Generation**: Creates Splunk, Elastic, and Navigator dashboards
-- ✅ **Standalone Coverage**: Builds coverage independent of SIEM
-- ✅ **CLI Tools**: Command-line interface for all operations
+- ✅ **Comprehensive Content Scanning**: Scans ALL JSON records (no sampling) for accurate detection
+- ✅ **Large File Streaming**: Supports files >10MB with chunked content scanning
+- ✅ **600+ ATT&CK Techniques**: Full MITRE ATT&CK v18.1 coverage with descriptions
+- ✅ **Multi-Tactic Support**: Techniques mapped to all relevant tactics (e.g., T1078 maps to 4 tactics)
+- ✅ **Pattern-Based Detection**: Content matching for PowerShell, mimikatz, lateral movement, etc.
+- ✅ **ATT&CK Navigator Integration**: Automatic layer file generation for visualization
+- ✅ **Splunk Dashboards**: Individual technique dashboards with inline tactic badges
+- ✅ **Full Technique Descriptions**: Complete descriptions from enterprise_attack.csv
 - ✅ **Elrond Integration**: Seamless integration with existing analysis pipeline
 
 ## Quick Start
@@ -528,6 +529,6 @@ For issues or questions:
 
 ---
 
-**Version:** 2.1.0
-**Last Updated:** 2025-11-12
+**Version:** 2.0.0
+**Last Updated:** 2025-12-07
 **Status:** ✅ Production Ready

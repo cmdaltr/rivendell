@@ -57,7 +57,7 @@ def generate_mitre_overview_dashboard(case_name, index_pattern):
                         "shape": "donut",
                         "layers": [{
                             "layerId": "layer1",
-                            "primaryGroups": ["mitre_technique"],
+                            "primaryGroups": ["mitre_technique_id"],
                             "metrics": ["count"],
                             "numberDisplay": "percent",
                             "categoryDisplay": "default",
@@ -71,11 +71,11 @@ def generate_mitre_overview_dashboard(case_name, index_pattern):
                             "layers": {
                                 "layer1": {
                                     "columns": {
-                                        "mitre_technique": {
+                                        "mitre_technique_id": {
                                             "label": "Technique",
                                             "dataType": "string",
                                             "operationType": "terms",
-                                            "sourceField": "mitre_technique.keyword",
+                                            "sourceField": "mitre_technique_id.keyword",
                                             "params": {"size": 20, "orderBy": {"type": "column", "columnId": "count"}, "orderDirection": "desc"}
                                         },
                                         "count": {
@@ -85,7 +85,7 @@ def generate_mitre_overview_dashboard(case_name, index_pattern):
                                             "isBucketed": False
                                         }
                                     },
-                                    "columnOrder": ["mitre_technique", "count"]
+                                    "columnOrder": ["mitre_technique_id", "count"]
                                 }
                             }
                         }
@@ -119,7 +119,7 @@ def generate_mitre_overview_dashboard(case_name, index_pattern):
                             "seriesType": "bar_stacked",
                             "showGridlines": False,
                             "xAccessor": "@timestamp",
-                            "splitAccessor": "mitre_technique"
+                            "splitAccessor": "mitre_technique_id"
                         }]
                     },
                     "query": {"query": "", "language": "kuery"},
@@ -241,7 +241,7 @@ def generate_mitre_overview_dashboard(case_name, index_pattern):
                         "columns": [
                             {"columnId": "@timestamp"},
                             {"columnId": "hostname"},
-                            {"columnId": "mitre_technique"},
+                            {"columnId": "mitre_technique_id"},
                             {"columnId": "artefact"},
                             {"columnId": "_source"}
                         ],
@@ -363,7 +363,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
                             "splitAccessor": "hostname"
                         }]
                     },
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"},
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"},
                     "filters": []
                 }
             }
@@ -381,7 +381,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
                 "title": "Total Events",
                 "visualizationType": "lnsMetric",
                 "state": {
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"}
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"}
                 }
             }
         }
@@ -398,7 +398,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
                 "title": "Unique Hosts",
                 "visualizationType": "lnsMetric",
                 "state": {
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"}
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"}
                 }
             }
         }
@@ -423,7 +423,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
                             "metrics": ["count"]
                         }]
                     },
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"}
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"}
                 }
             }
         }
@@ -449,7 +449,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
                             "xAccessor": "artefact"
                         }]
                     },
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"}
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"}
                 }
             }
         }
@@ -476,7 +476,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
                         "layerId": "layer1",
                         "paging": {"size": 50, "enabled": True}
                     },
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"}
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"}
                 }
             }
         }
@@ -499,7 +499,7 @@ def generate_technique_dashboard(technique_id, case_name, index_pattern):
             "timeFrom": "now-90d",
             "kibanaSavedObjectMeta": {
                 "searchSourceJSON": json.dumps({
-                    "query": {"query": f'mitre_technique:"{technique_id}"', "language": "kuery"},
+                    "query": {"query": f'mitre_technique_id:"{technique_id}"', "language": "kuery"},
                     "filter": []
                 })
             }

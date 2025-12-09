@@ -53,7 +53,11 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
 
     try {
       const data = await browsePath(path);
-      setItems(data);
+      // Filter out hidden files (starting with .) except for ".." navigation
+      const filteredData = data.filter(item =>
+        item.name === '..' || !item.name.startsWith('.')
+      );
+      setItems(filteredData);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load directory');
     } finally {
@@ -61,8 +65,21 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
     }
   };
 
+  // Check if a path is within or is the jobs directory
+  const isJobsPath = (path) => {
+    if (!path) return false;
+    // Normalize path separators and check if path contains /jobs or ends with /jobs
+    const normalizedPath = path.replace(/\\/g, '/');
+    return normalizedPath.includes('/rivendell/jobs/') || normalizedPath.endsWith('/rivendell/jobs');
+  };
+
   const handleItemClick = (item) => {
     if (disabled) return;
+
+    // Prevent navigation into or selection within jobs directory
+    if (isJobsPath(item.path) && item.name !== '..') {
+      return;
+    }
 
     if (item.is_directory) {
       setCurrentPath(item.path);
@@ -146,13 +163,16 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
         <div className="loading">Loading...</div>
       ) : (
         <div className="file-browser">
-          {items.map((item, index) => (
+          {items.map((item, index) => {
+            const isRestricted = isJobsPath(item.path) && item.name !== '..';
+            return (
             <div
               key={index}
               className={`file-item ${
                 selectedFiles.includes(item.path) ? 'selected' : ''
-              } ${item.is_image ? 'image' : ''}`}
+              } ${item.is_image ? 'image' : ''} ${isRestricted ? 'restricted' : ''}`}
               onClick={() => handleItemClick(item)}
+              style={isRestricted ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
             >
               <span className="file-icon">
                 {item.name === '..' ? '⬆️' : item.is_directory ? '📁' : item.is_image ? '💿' : '📄'}
@@ -169,7 +189,8 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
                 <span className="image-badge">IMAGE</span>
               )}
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 

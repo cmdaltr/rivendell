@@ -5,6 +5,8 @@ Utility functions for Elrond
 import os
 import re
 import sys
+from pathlib import Path
+from typing import List, Iterator
 
 
 def is_noninteractive():
@@ -81,3 +83,102 @@ def safe_input(prompt, default="y"):
     else:
         # In interactive mode, use regular input
         return input(prompt)
+
+
+def safe_listdir(path: str) -> List[str]:
+    """
+    Safely list directory contents, working around macOS Docker VirtioFS/gRPC-FUSE issues.
+
+    On macOS with Docker Desktop, the VirtioFS filesystem can cause os.listdir() to fail
+    with FileNotFoundError even when the directory exists. This function uses a file
+    descriptor-based workaround that resolves the issue.
+
+    Args:
+        path: Directory path to list
+
+    Returns:
+        List of directory entry names
+
+    Raises:
+        FileNotFoundError: If the directory truly doesn't exist
+        NotADirectoryError: If path is not a directory
+    """
+    try:
+        # Try standard listdir first (works in most cases)
+        return os.listdir(path)
+    except FileNotFoundError:
+        # If standard listdir fails but path might exist (VirtioFS bug),
+        # try using file descriptor approach
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                return os.listdir(fd)
+            finally:
+                os.close(fd)
+        except FileNotFoundError:
+            # If both methods fail, directory truly doesn't exist
+            raise
+
+
+def safe_iterdir(path: str) -> Iterator[os.DirEntry]:
+    """
+    Safely iterate directory contents using scandir, with VirtioFS workaround.
+
+    Similar to safe_listdir but yields DirEntry objects for more efficient
+    attribute access (like is_dir(), is_file()).
+
+    Args:
+        path: Directory path to iterate
+
+    Yields:
+        os.DirEntry objects for each directory entry
+
+    Raises:
+        FileNotFoundError: If the directory truly doesn't exist
+        NotADirectoryError: If path is not a directory
+    """
+    try:
+        # Try standard scandir first
+        with os.scandir(path) as entries:
+            for entry in entries:
+                yield entry
+    except FileNotFoundError:
+        # Use file descriptor workaround for VirtioFS
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                # listdir(fd) gives us names, but we need to construct DirEntry-like info
+                for name in os.listdir(fd):
+                    # Yield pseudo-DirEntry using scandir on parent
+                    full_path = os.path.join(path, name)
+                    # Create a simple object with DirEntry-like interface
+                    yield _SimpleDirEntry(name, full_path)
+            finally:
+                os.close(fd)
+        except FileNotFoundError:
+            raise
+
+
+class _SimpleDirEntry:
+    """Simple DirEntry-like class for VirtioFS workaround"""
+    def __init__(self, name: str, path: str):
+        self.name = name
+        self.path = path
+
+    def is_dir(self, follow_symlinks=True):
+        if follow_symlinks:
+            return os.path.isdir(self.path)
+        return os.path.isdir(self.path) and not os.path.islink(self.path)
+
+    def is_file(self, follow_symlinks=True):
+        if follow_symlinks:
+            return os.path.isfile(self.path)
+        return os.path.isfile(self.path) and not os.path.islink(self.path)
+
+    def is_symlink(self):
+        return os.path.islink(self.path)
+
+    def stat(self, follow_symlinks=True):
+        if follow_symlinks:
+            return os.stat(self.path)
+        return os.lstat(self.path)

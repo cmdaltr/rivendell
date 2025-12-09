@@ -475,6 +475,11 @@ def start_analysis(self, job_id: str):
             "finalizing": 95
         }
 
+        # Track processing progress within the processing phase (45-75%)
+        processing_artefact_count = 0
+        processing_base_progress = 45
+        processing_max_progress = 75
+
         line_count = 0
         for line in iter(process.stdout.readline, ""):
             line = line.strip()
@@ -482,16 +487,9 @@ def start_analysis(self, job_id: str):
                 # Clean line: remove ANSI color codes
                 line = re.sub(r'\x1b\[[0-9;]*m', '', line)  # Remove ANSI codes like [1;36m, [1;m, etc.
 
-                # Check for critical messages that should ALWAYS be logged
-                line_lower = line.lower()
-                is_critical = any(keyword in line_lower for keyword in [
-                    'error', 'exception', 'traceback', 'failed', 'failure',
-                    'skipped', 'missing', 'not found', 'warning', 'warn'
-                ])
-
-                # Filter out unwanted log messages
-                # Keep formatted audit log lines (contain " -> ") OR critical messages
-                if " -> " not in line and not is_critical:
+                # STRICT filtering: Only show lines containing ' -> '
+                # This ensures only properly formatted audit log entries are shown
+                if " -> " not in line:
                     continue
 
                 # Skip noisy internal processing messages even if they contain arrows
@@ -514,15 +512,28 @@ def start_analysis(self, job_id: str):
                     r"^-> (analysis completed|elrond completed) for .*$",  # "-> analysis completed for 'image.E01'" - we add our own completion message
                 ]
 
-                # Check if this line should be skipped (but never skip critical messages)
+                # Check if this line should be skipped
                 should_skip = False
-                if not is_critical:  # Don't skip critical messages
-                    for pattern in skip_patterns:
-                        if re.search(pattern, line, re.IGNORECASE):
-                            should_skip = True
-                            break
+                for pattern in skip_patterns:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        should_skip = True
+                        break
 
                 if should_skip:
+                    # Even if skipped from log, still count for progress tracking during processing
+                    if current_phase == "processing":
+                        processing_artefact_count += 1
+                        # Increment progress gradually during processing (45% to 75%)
+                        # Assume ~100 artefacts per image on average, cap at 75%
+                        incremental_progress = processing_base_progress + min(
+                            (processing_artefact_count * 0.3),  # ~0.3% per artefact
+                            processing_max_progress - processing_base_progress
+                        )
+                        if incremental_progress > job.progress:
+                            job.progress = int(incremental_progress)
+                            # Save progress update periodically
+                            if processing_artefact_count % 20 == 0:
+                                job_storage.save_job(job)
                     continue
 
                 # Remove duplicate timestamp if present (e.g., "-> 2025-11-23 20:51:49.011749 -> ")

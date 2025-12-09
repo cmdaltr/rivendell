@@ -11,7 +11,7 @@ from rivendell.collect.collect import collect_artefacts
 # Reorganise functionality removed - redundant
 from rivendell.process.select import select_pre_process_artefacts
 from rivendell.process.timeline import create_plaso_timeline
-from rivendell.utils import safe_input
+from rivendell.utils import safe_input, safe_listdir, safe_iterdir
 
 
 def collect_process_keyword_analysis_timeline(
@@ -79,13 +79,12 @@ def collect_process_keyword_analysis_timeline(
             memtimeline,
             stage,
         )
-        for eachdir in os.listdir(output_directory):
-            if (
-                os.path.isdir(os.path.join(output_directory, eachdir))
-                and eachdir != ".DS_Store"
-            ):
-                if len(os.listdir(os.path.join(output_directory, eachdir))) == 0:
-                    os.rmdir(os.path.join(output_directory, eachdir))
+        # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
+        for entry in safe_iterdir(output_directory):
+            eachdir = entry.name
+            if entry.is_dir() and eachdir != ".DS_Store":
+                if len(safe_listdir(entry.path)) == 0:
+                    os.rmdir(entry.path)
         if process:
             select_pre_process_artefacts(
                 output_directory,
@@ -134,7 +133,9 @@ def collect_process_keyword_analysis_timeline(
             time.sleep(1)
     if analysis or extractiocs:
         alysdirs = []
-        for eachdir in os.listdir(output_directory):
+        # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
+        for entry in safe_iterdir(output_directory):
+            eachdir = entry.name
             if os.path.exists(output_directory + eachdir + "/artefacts"):
                 alysdirs.append(output_directory + eachdir + "/artefacts")
         if len(alysdirs) > 0:
@@ -184,7 +185,9 @@ def collect_process_keyword_analysis_timeline(
             if not img.split("::")[1].endswith("memory"):
                 timelineimages.append(img.split("::")[0])
         if len(timelineimages) > 0:
-            for each in os.listdir(output_directory):
+            # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
+            for entry in safe_iterdir(output_directory):
+                each = entry.name
                 if each + "/" == output_directory or each == img.split("::")[0]:
                     if not os.path.exists(
                         output_directory + img.split("::")[0] + "/artefacts/"

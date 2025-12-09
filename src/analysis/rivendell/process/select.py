@@ -8,6 +8,7 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 from rivendell.process.process import determine_vss_image
 from rivendell.process.process import process_artefacts
+from rivendell.utils import safe_listdir, safe_iterdir
 
 
 def select_artefacts_to_process(img, process_list, artefacts_list, processed_artefacts):
@@ -118,11 +119,13 @@ def select_pre_process_artefacts(
         ].endswith(
             "memory"
         ):  # identifying artefacts for processing
-            for each in os.listdir(output_directory):
+            # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
+            for entry in safe_iterdir(output_directory):
+                each = entry.name
                 if each + "/" == output_directory or each == img.split("::")[0]:
-                    for eachdir in os.listdir(
-                        os.path.realpath(output_directory + each + "/artefacts/raw")
-                    ):
+                    raw_path = os.path.join(output_directory, each, "artefacts", "raw")
+                    for raw_entry in safe_iterdir(raw_path):
+                        eachdir = raw_entry.name
                         if (
                             "vss" in eachdir
                             and os.path.isdir(
@@ -182,7 +185,7 @@ def select_pre_process_artefacts(
             )
         else:
             vssimage = "'" + img.split("::")[0] + "'"
-        print("    Processing artefacts for {}...".format(vssimage))
+        print("    processing artefacts for {}...".format(vssimage), flush=True)
         entry, prnt = "{},{},{},commenced\n".format(
             datetime.now().isoformat(), vssimage.replace("'", ""), stage
         ), " -> {} -> {} artefacts for {}".format(

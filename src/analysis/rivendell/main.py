@@ -19,9 +19,9 @@ from rivendell.mount import unmount_images
 from rivendell.post.clam import run_clamscan
 from rivendell.post.clean import archive_artefacts
 from rivendell.post.clean import delete_artefacts
+from rivendell.post.clean import cleanup_small_files_and_empty_dirs
 from rivendell.post.elastic.config import configure_elastic_stack
 from rivendell.post.mitre.nav_config import configure_navigator
-from rivendell.post.mitre.enrichment import enrich_artefacts_directory
 from rivendell.post.splunk.config import configure_splunk_stack
 from rivendell.post.yara import run_yara_signatures
 from rivendell.utils import safe_input, is_noninteractive, safe_print
@@ -694,23 +694,28 @@ def main(
             memtimeline,
             stage,
         )
-        # Run MITRE enrichment immediately after processing if Navigator is enabled
-        # This tags artefacts with MITRE techniques during processing, not Navigator phase
+        # MITRE tagging now happens incrementally during artefact extraction in artemis.py
+        # Here we just deduplicate the techniques file for Navigator layer generation
         if navigator and process:
-            print(" -> {} -> tagging artefacts with MITRE ATT&CK techniques...".format(
-                datetime.now().isoformat().replace("T", " ")
-            ))
             for root, dirs, _ in os.walk(output_directory):
-                if "cooked" in dirs:
-                    cooked_path = os.path.join(root, "cooked")
+                # Find the image directory containing mitre_techniques.txt
+                techniques_file = os.path.join(root, "mitre_techniques.txt")
+                if os.path.exists(techniques_file):
                     try:
-                        stats = enrich_artefacts_directory(cooked_path)
-                        enriched = stats.get('enriched_files', 0)
-                        techniques = stats.get('technique_count', 0)
-                        print(f"     Tagged {enriched} files, identified {techniques} MITRE techniques")
+                        # Read and deduplicate techniques
+                        with open(techniques_file, 'r') as f:
+                            techniques = set(line.strip() for line in f if line.strip())
+                        # Rewrite with unique techniques only
+                        with open(techniques_file, 'w') as f:
+                            for tech_id in sorted(techniques):
+                                f.write(f"{tech_id}\n")
+                        if techniques:
+                            print(" -> {} -> MITRE tagging complete: {} unique techniques identified".format(
+                                datetime.now().isoformat().replace("T", " "),
+                                len(techniques)
+                            ))
                     except Exception as e:
-                        print(f"     Warning: MITRE tagging error: {e}")
-                    break
+                        print(f"     Warning: MITRE techniques file error: {e}")
     allimgs, imgs, elrond_mount, img_list = (
         OrderedDict(sorted(allimgs.items(), key=lambda x: x[1])),
         OrderedDict(sorted(imgs.items(), key=lambda x: x[1])),
@@ -876,10 +881,17 @@ def main(
             )
             time.sleep(1)
 
+        # Clean up small files (<10 bytes) and empty directories after processing
+        cleanup_small_files_and_empty_dirs(output_directory)
+
         # Initialize credentials to None (will be set if Splunk/Elastic configured)
         usercred, pswdcred = None, None
 
         if splunk:
+            print(
+                "\n\n  -> \033[1;36mCommencing Splunk Phase...\033[1;m\n  ----------------------------------------"
+            )
+            print("     Indexing artefacts to Splunk (this may take several minutes for large datasets)...")
             # Ensure Splunk is installed before configuring
             try:
                 from elrond.tools.siem_installer import SIEMInstaller
@@ -913,6 +925,8 @@ def main(
             print(
                 "\n\n  -> \033[1;36mCommencing Elastic Phase...\033[1;m\n  ----------------------------------------"
             )
+            print("     Indexing artefacts to Elasticsearch and generating Kibana dashboards...")
+            print("     (this may take several minutes for large datasets)")
             # Ensure Elasticsearch and Kibana are installed before configuring
             siem_installer = None
             try:
@@ -954,6 +968,7 @@ def main(
             print(
                 "\n\n  -> \033[1;36mCommencing Navigator Phase...\033[1;m\n  ----------------------------------------"
             )
+            print("     Generating ATT&CK Navigator layer from identified MITRE techniques...")
             time.sleep(1)
             # MITRE techniques were already identified during processing phase
             # Navigator just reads the techniques file and generates the layer
