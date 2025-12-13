@@ -28,9 +28,6 @@ def collect_process_keyword_analysis_timeline(
     keywords,
     volatility,
     metacollected,
-    superquick,
-    quick,
-    reorganise,
     symlinks,
     userprofiles,
     verbose,
@@ -49,8 +46,10 @@ def collect_process_keyword_analysis_timeline(
     vssmem,
     memtimeline,
     stage,
+    phase=None,  # Phase control: "collect", "process", or None for full pipeline
 ):
-    if collect and len(imgs) != 0:
+    # PHASE CONTROL: Skip collection if in "process" or "analyse" phase
+    if collect and len(imgs) != 0 and phase not in ("process", "analyse"):
         collect_artefacts(
             auto,
             vss,
@@ -59,8 +58,6 @@ def collect_process_keyword_analysis_timeline(
             keywords,
             volatility,
             metacollected,
-            superquick,
-            quick,
             symlinks,
             userprofiles,
             verbose,
@@ -78,6 +75,7 @@ def collect_process_keyword_analysis_timeline(
             vssmem,
             memtimeline,
             stage,
+            phase,  # Pass phase to control output messages
         )
         # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
         for entry in safe_iterdir(output_directory):
@@ -85,26 +83,43 @@ def collect_process_keyword_analysis_timeline(
             if entry.is_dir() and eachdir != ".DS_Store":
                 if len(safe_listdir(entry.path)) == 0:
                     os.rmdir(entry.path)
-        if process:
-            select_pre_process_artefacts(
-                output_directory,
-                verbosity,
-                d,
-                flags,
-                stage,
-                cwd,
-                imgs,
-                f,
-                path,
-                vssmem,
-                volatility,
-                volchoice,
-                vss,
-                memtimeline,
-                collectfiles,
-            )
+
+        # PHASE CONTROL: If collect-only phase, return after collection
+        if phase == "collect":
+            return
+
+    # PHASE CONTROL: Skip processing if in "collect" or "analyse" phase
+    if phase in ("collect", "analyse"):
+        pass  # Fall through to analysis section for "analyse" phase
+    elif process:
+        select_pre_process_artefacts(
+            output_directory,
+            verbosity,
+            d,
+            flags,
+            stage,
+            cwd,
+            imgs,
+            f,
+            path,
+            vssmem,
+            volatility,
+            volchoice,
+            vss,
+            memtimeline,
+            collectfiles,
+        )
         if os.path.exists("/opt/elrond/elrond/tools/.profiles"):
             os.remove("/opt/elrond/elrond/tools/.profiles")
+
+    # PHASE CONTROL: If process-only phase, return after processing
+    if phase == "process":
+        return
+
+    # PHASE CONTROL: Skip analysis/keyword search if in collect or process phase
+    if phase in ("collect", "process"):
+        return
+
     if keywords:
         if not os.path.exists(keywords[0]):
             continue_with_kw = safe_input("\n    {} is an invalid path because it does not exist. Continue? Y/n [Y] \n".format(
@@ -133,6 +148,7 @@ def collect_process_keyword_analysis_timeline(
             time.sleep(1)
     if analysis or extractiocs:
         alysdirs = []
+        analysis_errors = []  # Track any errors during analysis
         # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
         for entry in safe_iterdir(output_directory):
             eachdir = entry.name
@@ -144,33 +160,57 @@ def collect_process_keyword_analysis_timeline(
             )
             time.sleep(1)
             for mnt, img in imgs.items():
-                if "vss" in img.split("::")[1]:
-                    vssimage = (
-                        "'"
-                        + img.split("::")[0]
-                        + "' ("
-                        + img.split("::")[1]
-                        .split("_")[1]
-                        .replace("vss", "volume shadow copy #")
-                        + ")"
+                try:
+                    # Parse image info - handle both "image::type" and plain "image" formats
+                    img_parts = img.split("::")
+                    img_name = img_parts[0]
+                    img_type = img_parts[1] if len(img_parts) > 1 else ""
+
+                    if "vss" in img_type:
+                        vssimage = (
+                            "'"
+                            + img_name
+                            + "' ("
+                            + img_type
+                            .split("_")[1]
+                            .replace("vss", "volume shadow copy #")
+                            + ")"
+                        )
+                    else:
+                        vssimage = "'" + img_name + "'"
+
+                    print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> analysing artefacts for {vssimage}...", flush=True)
+
+                    analyse_artefacts(
+                        verbosity,
+                        output_directory,
+                        img,
+                        mnt,
+                        analysis,
+                        magicbytes,
+                        extractiocs,
+                        vssimage,
                     )
-                else:
-                    vssimage = "'" + img.split("::")[0] + "'"
-                analyse_artefacts(
-                    verbosity,
-                    output_directory,
-                    img,
-                    mnt,
-                    analysis,
-                    magicbytes,
-                    extractiocs,
-                    vssimage,
-                )
+
+                    print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> completed analysis for {vssimage}", flush=True)
+                except Exception as e:
+                    import traceback
+                    # Use img_name if available, otherwise use raw img
+                    image_desc = vssimage if 'vssimage' in dir() else img
+                    error_msg = f"Error analysing {image_desc}: {str(e)}"
+                    analysis_errors.append(error_msg)
+                    print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> ERROR: {error_msg}", flush=True)
+                    print(f"    Traceback: {traceback.format_exc()}", flush=True)
+                    # Continue processing other images
         else:
             print(
                 "  -> Analysis could not be conducted as there are no artefacts processed (-P), please try again.\n"
             )
         flags.append("04analysis")
+        if analysis_errors:
+            print(f"  -> WARNING: {len(analysis_errors)} error(s) occurred during analysis:")
+            for err in analysis_errors:
+                print(f"     - {err}")
         print(
             "  ----------------------------------------\n  -> Completed Analysis Phase.\n"
         )

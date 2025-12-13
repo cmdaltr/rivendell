@@ -6,6 +6,7 @@ import subprocess
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.process.extractions.mitre_tagger import tag_mitre_technique
 
 
 def tidy_journalentry(entry):
@@ -171,8 +172,10 @@ def process_journal(
                 journalentry = tidy_journalentry(entry)
                 with open(journal_tmpfile, "a") as journaljson:
                     journaljson.write(journalentry)
-        with open(journal_tmpfile) as journaljson:
+        with open(journal_tmpfile, encoding="utf-8", errors="ignore") as journaljson:
             journal = journaljson.read()
         with open(journal_outfile, "w") as finaljournaljson:
             finaljournaljson.write("[{}]".format(journal[0:-2]))
         os.remove(journal_tmpfile)
+        # Tag MITRE technique for journal processing
+        tag_mitre_technique(output_directory, img, "journal")

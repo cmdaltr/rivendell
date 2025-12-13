@@ -42,7 +42,7 @@ parser.add_argument(
 )  # outstanding - Out-of-Sequence Windows-based file activity
 parser.add_argument(
     "--Brisk",
-    help="'Brisk Mode.' Invokes Analysis, clamaV, extractIocs, Navigator, Process, superQuick, quick, and Userprofiles. You MUST provide either --Collect, --Gandalf or --Reorganise depending on whether you've acquired disk images, leveraged gandalf or seperately acquired artefacts, respectively.",
+    help="'Brisk Mode.' Invokes Analysis, extractIocs, Navigator, Process, and Userprofiles. You MUST provide either --Collect or --Gandalf depending on whether you've acquired disk images or leveraged gandalf, respectively.",
     action="store_const",
     const=True,
     default=False,
@@ -85,20 +85,6 @@ parser.add_argument(
 parser.add_argument(
     "--extractIocs",
     help="Extract IOCs from processed files collected from disk; WARNING: This can take a long time!",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
-    "--imageinfo",
-    help="Obtain E01 disk image metadata and information including acquired date/time; disk size, ID & sector sizes",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
-    "--lotr",
-    help="Show Tolkien-themed ASCII art upon running elrond",
     action="store_const",
     const=True,
     default=False,
@@ -160,27 +146,6 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "--superQuick",
-    help="Super Quick mode. Do NOT obtain last access & creation times, hash files, perform entropy analysis or extract metadata; WARNING: Not invoking this flag can take a long time!",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
-    "--quick",
-    help="Quick mode. Obtain last access & creation times but do NOT hash files, perform entropy analysis or extract metadata; WARNING: Not invoking this flag can take a long time!",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
-    "--Reorganise",
-    help="Reorganise artefacts NOT collected using gandalf",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
     "--Splunk",
     help="Output data and index into local Splunk instance",
     action="store_const",
@@ -216,22 +181,8 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
-    "--unmount",
-    help="Do not unmount, currently mounted images (in /mnt/elrond_mountXX)",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
-    "--clamaV",
-    help="Run ClamAV against mounted image",
-    action="store_const",
-    const=True,
-    default=False,
-)
-parser.add_argument(
     "--eXhaustive",
-    help="Exhaustive mode. Invoke all flags: Brisk, Delete, Elastic, lotr, Memory, nsrl, Splunk, Timeline, memorytimeline, and Ziparchive. You MUST provide either --Collect, --Gandalf or --Reorganise depending on whether you've acquired disk images, leveraged gandalf or seperately acquired artefacts, respectively.",
+    help="Exhaustive mode. Invoke all flags: Brisk, Delete, Elastic, Memory, nsrl, Splunk, Timeline, memorytimeline, and Ziparchive. You MUST provide either --Collect or --Gandalf depending on whether you've acquired disk images or leveraged gandalf, respectively.",
     action="store_const",
     const=True,
     default=False,
@@ -257,8 +208,6 @@ elastic = args.Elastic
 gandalf = args.Gandalf
 collectfiles = args.collectFiles
 extractiocs = args.extractIocs
-imageinfo = args.imageinfo
-lotr = args.lotr
 keywords = args.Keywords
 volatility = args.Memory
 metacollected = args.metacollected
@@ -266,16 +215,11 @@ navigator = args.Navigator
 nsrl = args.nsrl
 magicbytes = args.magicBytes
 process = args.Process
-superquick = args.superQuick
-quick = args.quick
-reorganise = args.Reorganise
 splunk = args.Splunk
 symlinks = args.symlinks
 timeline = args.Timeline
 memorytimeline = args.memorytimeline
 userprofiles = args.Userprofiles
-unmount = args.unmount
-clamav = args.clamaV
 yara = args.Yara
 exhaustive = args.eXhaustive
 archive = args.Ziparchive
@@ -455,11 +399,8 @@ if __name__ == "__main__":
         brisk = True
         delete = True
         elastic = True
-        lotr = True
         volatility = True
         nsrl = True
-        superquick = False
-        quick = False
         splunk = True
         timeline = True
         memorytimeline = True
@@ -472,56 +413,379 @@ if __name__ == "__main__":
         metacollected = True
         navigator = True
         process = True
-        superquick = True
-        quick = True
         userprofiles = True
     veryverbose = True
     verbose = True
-    main(
-        directory,
-        case,
-        analysis,
-        auto,
-        collect,
-        vss,
-        delete,
-        elastic,
-        gandalf,
-        collectfiles,
-        extractiocs,
-        imageinfo,
-        lotr,
-        keywords,
-        volatility,
-        metacollected,
-        navigator,
-        nsrl,
-        magicbytes,
-        hashall,
-        hashcollected,
-        process,
-        superquick,
-        quick,
-        reorganise,
-        splunk,
-        symlinks,
-        timeline,
-        memorytimeline,
-        userprofiles,
-        unmount,
-        clamav,
-        veryverbose,
-        verbose,
-        yara,
-        archive,
-        d,
-        cwd,
-        sha256,
-        allimgs,
-        flags,
-        elrond_mount,
-        ewf_mount,
-        system_artefacts,
-        quotes,
-        asciitext,
-    )
+
+    # Handle multiple source images
+    # Format: case source1 [source2 ... sourceN] [destination]
+    # Detect if paths are image files by extension
+    IMAGE_EXTENSIONS = ('.e01', '.E01', '.vmdk', '.VMDK', '.dd', '.DD', '.raw', '.RAW', '.img', '.IMG', '.001')
+
+    def is_image_file(path):
+        """Check if a path is a disk/memory image file by extension."""
+        return any(path.endswith(ext) for ext in IMAGE_EXTENSIONS)
+
+    if len(directory) >= 2:
+        # Check if the last path is an image file or a directory
+        last_path = directory[-1]
+        if is_image_file(last_path):
+            # All paths are image files - use current directory as destination
+            sources = directory
+            destination = None
+        else:
+            # Last path is not an image file - treat it as destination
+            sources = directory[:-1]
+            destination = last_path
+    else:
+        sources = directory  # Single source
+        destination = None  # Will default to "./" in main()
+
+    # Phased multi-image processing:
+    # Phase 1: Mount all images (mount img1, mount img2, mount img3)
+    # Phase 2: Collect from all images (collect img1, collect img2, collect img3)
+    # Phase 3: Process all images (process img1, process img2, process img3)
+
+    # Store mounted image data for each source
+    mounted_data = {}
+
+    # =========================================================================
+    # PHASE 1: Mount all images
+    # =========================================================================
+    print("\n  -> \033[1;36mCommencing Identification Phase...\033[1;m\n  ----------------------------------------")
+
+    for idx, source in enumerate(sources):
+        print(f"\n  [{idx + 1}/{len(sources)}] Mounting: {source}\n")
+
+        # Create directory array for this source
+        if destination:
+            source_directory = [source, destination]
+        else:
+            source_directory = [source]
+
+        # Reset state for this image
+        source_allimgs = {}
+        source_sha256 = hashlib.sha256() if hashcollected or hashall else None
+        source_flags = []
+
+        # Call main with phase="mount" to just mount the image
+        # skip_unmount=True so we don't unmount previous images
+        result = main(
+            source_directory,
+            case,
+            analysis,
+            auto,
+            collect,
+            vss,
+            delete,
+            elastic,
+            gandalf,
+            collectfiles,
+            extractiocs,
+            keywords,
+            volatility,
+            metacollected,
+            navigator,
+            nsrl,
+            magicbytes,
+            hashall,
+            hashcollected,
+            process,
+            splunk,
+            symlinks,
+            timeline,
+            memorytimeline,
+            userprofiles,
+            veryverbose,
+            verbose,
+            yara,
+            archive,
+            source,
+            cwd,
+            source_sha256,
+            source_allimgs,
+            source_flags,
+            elrond_mount,
+            ewf_mount,
+            system_artefacts,
+            quotes,
+            asciitext,
+            skip_unmount=(idx > 0),  # Don't unmount after first image
+            phase="mount",
+        )
+
+        # Store the mounted image data for later phases
+        if result:
+            allimgs, imgs, output_directory, partitions = result
+            mounted_data[source] = {
+                "allimgs": allimgs,
+                "imgs": imgs,
+                "output_directory": output_directory,
+                "partitions": partitions,
+                "source_directory": source_directory,
+                "source_sha256": source_sha256,
+                "source_flags": source_flags,
+            }
+            print(f"  -> Mounted: {len(imgs)} image(s) from {source}")
+
+    print("\n  ----------------------------------------\n  -> Completed Identification Phase.\n")
+    print("\n  -> \033[1;36mCommencing Collection Phase...\033[1;m\n  ----------------------------------------")
+
+    for idx, source in enumerate(sources):
+        if source not in mounted_data:
+            print(f"\n  [{idx + 1}/{len(sources)}] Skipping {source} (not mounted)")
+            continue
+
+        print(f"\n  [{idx + 1}/{len(sources)}] Collecting from: {source}\n")
+
+        data = mounted_data[source]
+
+        # Call main with phase="collect" to collect artefacts
+        result = main(
+            data["source_directory"],
+            case,
+            analysis,
+            auto,
+            collect,
+            vss,
+            delete,
+            elastic,
+            gandalf,
+            collectfiles,
+            extractiocs,
+            keywords,
+            volatility,
+            metacollected,
+            navigator,
+            nsrl,
+            magicbytes,
+            hashall,
+            hashcollected,
+            process,
+            splunk,
+            symlinks,
+            timeline,
+            memorytimeline,
+            userprofiles,
+            veryverbose,
+            verbose,
+            yara,
+            archive,
+            source,
+            cwd,
+            data["source_sha256"],
+            data["allimgs"],
+            data["source_flags"],
+            elrond_mount,
+            ewf_mount,
+            system_artefacts,
+            quotes,
+            asciitext,
+            skip_unmount=True,  # Don't unmount - images are still mounted
+            phase="collect",
+            mounted_imgs=data,
+        )
+
+        # Update mounted data with any changes from collection phase
+        if result:
+            allimgs, imgs, output_directory, partitions = result
+            mounted_data[source]["allimgs"] = allimgs
+            mounted_data[source]["imgs"] = imgs
+            print(f"  -> Collection complete for {source}")
+
+    print("\n  ----------------------------------------\n  -> Completed Collection Phase.\n")
+    print("\n  -> \033[1;36mCommencing Processing Phase...\033[1;m\n  ----------------------------------------")
+
+    for idx, source in enumerate(sources):
+        if source not in mounted_data:
+            print(f"\n  [{idx + 1}/{len(sources)}] Skipping {source} (not mounted)")
+            continue
+
+        print(f"\n  [{idx + 1}/{len(sources)}] Processing: {source}\n")
+
+        data = mounted_data[source]
+
+        # Call main with phase="process" to process artefacts
+        # This also handles analysis, MITRE tagging, Splunk, Elastic, cleanup, etc.
+        main(
+            data["source_directory"],
+            case,
+            analysis,
+            auto,
+            collect,
+            vss,
+            delete,
+            elastic,
+            gandalf,
+            collectfiles,
+            extractiocs,
+            keywords,
+            volatility,
+            metacollected,
+            navigator,
+            nsrl,
+            magicbytes,
+            hashall,
+            hashcollected,
+            process,
+            splunk,
+            symlinks,
+            timeline,
+            memorytimeline,
+            userprofiles,
+            veryverbose,
+            verbose,
+            yara,
+            archive,
+            source,
+            cwd,
+            data["source_sha256"],
+            data["allimgs"],
+            data["source_flags"],
+            elrond_mount,
+            ewf_mount,
+            system_artefacts,
+            quotes,
+            asciitext,
+            skip_unmount=True,  # Don't unmount between processing
+            phase="process",
+            mounted_imgs=data,
+        )
+
+        print(f"  -> Processing complete for {source}")
+
+    print("\n  ----------------------------------------\n  -> Completed Processing Phase.\n")
+
+    # ========== PHASE 4: ANALYSE ALL IMAGES ==========
+    print("\n  -> \033[1;36mCommencing Analysis Phase...\033[1;m\n  ----------------------------------------", flush=True)
+
+    for idx, source in enumerate(sources):
+        if source not in mounted_data:
+            print(f"  -> [{idx + 1}/{len(sources)}] Skipping {source} (not mounted)", flush=True)
+            continue
+
+        print(f"  -> [{idx + 1}/{len(sources)}] Analysing: {source}", flush=True)
+
+        data = mounted_data[source]
+
+        # Call main with phase="analyse" to run keywords, analysis, timeline, metadata, YARA
+        try:
+            main(
+                data["source_directory"],
+                case,
+                analysis,
+                auto,
+                collect,
+                vss,
+                delete,
+                elastic,
+                gandalf,
+                collectfiles,
+                extractiocs,
+                keywords,
+                volatility,
+                metacollected,
+                navigator,
+                nsrl,
+                magicbytes,
+                hashall,
+                hashcollected,
+                process,
+                splunk,
+                symlinks,
+                timeline,
+                memorytimeline,
+                userprofiles,
+                veryverbose,
+                verbose,
+                yara,
+                archive,
+                source,
+                cwd,
+                data["source_sha256"],
+                data["allimgs"],
+                data["source_flags"],
+                elrond_mount,
+                ewf_mount,
+                system_artefacts,
+                quotes,
+                asciitext,
+                skip_unmount=True,
+                phase="analyse",
+                mounted_imgs=data,
+            )
+            print(f"  -> Analysis complete for {source}", flush=True)
+        except Exception as e:
+            import traceback
+            print(f"  -> ERROR during analysis of {source}: {str(e)}", flush=True)
+            print(f"     Traceback: {traceback.format_exc()}", flush=True)
+            print(f"  -> Continuing to next source...", flush=True)
+
+    print("\n  ----------------------------------------\n  -> Completed Analysis Phase.\n", flush=True)
+
+    # ========== PHASE 5: INDEX ALL IMAGES ==========
+    if splunk or elastic:
+        print("\n  -> \033[1;36mCommencing Indexing Phase...\033[1;m\n  ----------------------------------------")
+
+        for idx, source in enumerate(sources):
+            if source not in mounted_data:
+                print(f"\n  [{idx + 1}/{len(sources)}] Skipping {source} (not mounted)")
+                continue
+
+            print(f"\n  [{idx + 1}/{len(sources)}] Indexing: {source}\n")
+
+            data = mounted_data[source]
+
+            # Call main with phase="index" to run Splunk/Elastic/Navigator indexing
+            main(
+                data["source_directory"],
+                case,
+                analysis,
+                auto,
+                collect,
+                vss,
+                delete,
+                elastic,
+                gandalf,
+                collectfiles,
+                extractiocs,
+                keywords,
+                volatility,
+                metacollected,
+                navigator,
+                nsrl,
+                magicbytes,
+                hashall,
+                hashcollected,
+                process,
+                splunk,
+                symlinks,
+                timeline,
+                memorytimeline,
+                userprofiles,
+                veryverbose,
+                verbose,
+                yara,
+                archive,
+                source,
+                cwd,
+                data["source_sha256"],
+                data["allimgs"],
+                data["source_flags"],
+                elrond_mount,
+                ewf_mount,
+                system_artefacts,
+                quotes,
+                asciitext,
+                skip_unmount=True,
+                phase="index",
+                mounted_imgs=data,
+            )
+
+            print(f"  -> Indexing complete for {source}")
+
+        print("\n  ----------------------------------------\n  -> Completed Indexing Phase.\n")
+
+    print("\n" + "=" * 60)
+    print("  ALL PHASES COMPLETE")
+    print("=" * 60 + "\n")

@@ -50,8 +50,8 @@ services:
   # Celery worker for background tasks (forensics-enabled)
   celery-worker:
     build:
-      context: ./src/web/backend
-      dockerfile: Dockerfile.forensics
+      context: .
+      dockerfile: src/web/backend/Dockerfile.forensics
     container_name: rivendell-celery-worker
     privileged: true  # Required for mounting forensic images
     devices:
@@ -71,11 +71,15 @@ services:
       - ELASTICSEARCH_PORT=9200
       - ELASTIC_USERNAME=elastic
       - ELASTIC_PASSWORD=rivendell
+      # Set to 'true' to exclude cache directories from user profile copies (faster but less complete)
+      - RIVENDELL_EXCLUDE_PROFILE_CACHE=true
     volumes:
       - ./src/web/backend:/app
-      - ./src/analysis:/opt/elrond-src  # Mount elrond source code (renamed to avoid PATH conflicts)
+      # NOTE: elrond source is now copied into the image during build (see Dockerfile.forensics)
+      # to avoid OneDrive file locking conflicts with Docker VirtioFS on macOS
       # - /mnt:/mnt:ro  # Linux only
       # - /media:/media:ro  # Linux only
+      - /Volumes:/Volumes  # Mount macOS /Volumes for external drives - needs write for output
       - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
       - rivendell_uploads:/tmp/elrond/uploads  # For uploaded forensic images
       - splunk_etc:/opt/splunk/etc

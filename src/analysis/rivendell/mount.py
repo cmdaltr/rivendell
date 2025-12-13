@@ -73,6 +73,17 @@ def unmount_images(elrond_mount, ewf_mount):
             if eachewf != "/mnt/ewf_mount":
                 remove_directories(eachewf)
 
+    # Clean up all loop devices to prevent exhaustion on subsequent runs
+    # This detaches any stale loop devices that weren't properly cleaned up
+    try:
+        subprocess.Popen(
+            ["losetup", "-D"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).communicate()
+    except Exception:
+        pass  # Ignore errors - losetup may not be available or may fail
+
 
 def collect_ewfinfo(elrond_mount, ewf_mount, path, intermediate_mount, cwd):
     ewfinfo = list(
@@ -140,28 +151,36 @@ def obtain_offset(
 
 
 def mounted_image(allimgs, disk_image, destination_mount, disk_file, index):
+    # Convert index to int for comparison if it's a string number
+    try:
+        idx = int(index) if isinstance(index, str) and index != "0" else index
+    except ValueError:
+        idx = index
+
     if index == "0":
         partition = ""
-    elif index == 0:
+    elif idx == 0:
         partition = " (zeroth partition)"
-    elif index == 1:
+    elif idx == 1:
         partition = " (first partition)"
-    elif index == 2:
+    elif idx == 2:
         partition = " (second partition)"
-    elif index == 3:
+    elif idx == 3:
         partition = " (third partition)"
-    elif index == 4:
+    elif idx == 4:
         partition = " (forth partition)"
-    elif index == 5:
+    elif idx == 5:
         partition = " (fifth partition)"
-    elif index == 6:
+    elif idx == 6:
         partition = " (sixth partition)"
-    elif index == 7:
+    elif idx == 7:
         partition = " (seventh partition)"
-    elif index == 8:
+    elif idx == 8:
         partition = " (eighth partition)"
-    elif index == 9:
+    elif idx == 9:
         partition = " (ninth partition)"
+    else:
+        partition = f" (partition {idx})"
     if "::Windows" in disk_image or "::macOS" in disk_image or "::Linux" in disk_image:
         allimgs[destination_mount] = disk_image
         print(
@@ -174,6 +193,214 @@ def mounted_image(allimgs, disk_image, destination_mount, disk_file, index):
     return partition
 
 
+def _try_guestmount(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+    """
+    Try to mount a disk image using guestmount (libguestfs).
+    This is a FUSE-based solution that works in Docker without loop devices.
+    It can automatically detect and mount partitions from various disk image formats.
+    """
+    try:
+        # Check if guestmount is available
+        which_result = subprocess.run(
+            ["which", "guestmount"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5
+        )
+        if which_result.returncode != 0:
+            return False
+
+        print(f"  -> Trying guestmount for {disk_file}...")
+
+        # First, list partitions using virt-filesystems
+        virt_fs_result = subprocess.run(
+            ["virt-filesystems", "-a", path, "-l"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=60
+        )
+
+        if virt_fs_result.returncode != 0:
+            # virt-filesystems may fail, try guestmount directly with inspection
+            pass
+
+        # Try guestmount with automatic inspection (mounts the largest/main partition)
+        guestmount_result = subprocess.run(
+            ["guestmount", "-a", path, "-i", "--ro", destination_mount],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=120
+        )
+
+        if guestmount_result.returncode == 0:
+            # Check if mount succeeded (destination should have files)
+            if os.path.exists(destination_mount) and os.listdir(destination_mount):
+                print(f"  -> Successfully mounted {disk_file} via guestmount")
+                disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, "0")
+                partitions.append(f"{partition}||{disk_image}")
+                return True
+
+        # If automatic inspection failed, try mounting specific partitions
+        # Parse virt-filesystems output to find mountable partitions
+        if virt_fs_result.returncode == 0 and virt_fs_result.stdout:
+            for line in virt_fs_result.stdout.strip().split('\n'):
+                if '/dev/' in line:
+                    parts = line.split()
+                    if parts:
+                        dev_name = parts[0]  # e.g., /dev/sda1
+                        # Try mounting this partition
+                        gm_result = subprocess.run(
+                            ["guestmount", "-a", path, "-m", dev_name, "--ro", destination_mount],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            timeout=120
+                        )
+                        if gm_result.returncode == 0 and os.listdir(destination_mount):
+                            print(f"  -> Successfully mounted {dev_name} from {disk_file} via guestmount")
+                            disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                            partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, "0")
+                            partitions.append(f"{partition}||{disk_image}")
+                            return True
+
+        return False
+
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        print(f"  -> guestmount failed: {e}")
+        return False
+    except Exception as e:
+        print(f"  -> guestmount error: {e}")
+        return False
+
+
+def _check_nbd_available():
+    """Check if nbd kernel module is available and functional."""
+    try:
+        # First try to load the nbd module
+        result = subprocess.run(
+            ["modprobe", "nbd"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5
+        )
+        # modprobe must succeed (exit code 0)
+        if result.returncode != 0:
+            return False
+        # Check if any /dev/nbd* devices exist after modprobe
+        import glob
+        return len(glob.glob("/dev/nbd*")) > 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _mount_with_kpartx(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+    """Mount raw/dd image using kpartx (fallback when nbd unavailable)."""
+    print(f"  -> Using kpartx to mount {disk_file}...")
+
+    # Use kpartx to create loop device mappings
+    kpartx_result = subprocess.run(
+        ["kpartx", "-av", path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    if kpartx_result.returncode != 0:
+        print(f"  -> kpartx failed: {kpartx_result.stderr}")
+        return False
+
+    # Parse kpartx output to find created loop devices
+    # Output format: "add map loopXpY (253:Z): 0 SECTORS linear /dev/loopX OFFSET"
+    import re
+    loop_devices = re.findall(r'add map (loop\d+p\d+)', kpartx_result.stdout)
+
+    if not loop_devices:
+        # Try direct loop mount for single-partition images
+        print(f"  -> No partitions found, trying direct loop mount...")
+        # Extended filesystem list including macOS HFS+
+        for fs_type in ["ext4", "ntfs", "xfs", "exfat", "hfsplus"]:
+            if fs_type == "ext4":
+                mount_opts = "ro,norecovery,loop"
+            elif fs_type == "ntfs":
+                mount_opts = "ro,loop,show_sys_files,streams_interface=windows"
+            elif fs_type == "xfs":
+                mount_opts = "ro,norecovery,loop"
+            else:
+                mount_opts = "ro,loop"
+
+            mount_result = subprocess.run(
+                ["mount", "-t", fs_type, "-o", mount_opts, path, destination_mount],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if mount_result.returncode == 0:
+                print(f"  -> Successfully mounted as {fs_type}")
+                disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, "0")
+                partitions.append(f"{partition}||{disk_image}")
+                return True
+
+        # Try APFS with apfs-fuse (macOS 10.13+)
+        try:
+            apfs_result = subprocess.run(
+                ["/usr/local/bin/apfs-fuse", "-o", "allow_other", path, destination_mount],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if apfs_result.returncode == 0:
+                print(f"  -> Successfully mounted as APFS (via apfs-fuse)")
+                disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, "0")
+                partitions.append(f"{partition}||{disk_image}")
+                return True
+        except FileNotFoundError:
+            pass  # apfs-fuse not installed
+
+        # Try guestmount for partitioned images (works in Docker without loop devices)
+        if _try_guestmount(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+            return True
+
+        return False
+
+    # Mount each partition found by kpartx
+    mounted_any = False
+    for idx, loop_dev in enumerate(loop_devices):
+        dev_path = f"/dev/mapper/{loop_dev}"
+
+        # Try different filesystem types including macOS HFS+
+        for fs_type in ["ntfs", "ext4", "xfs", "exfat", "hfsplus"]:
+            if fs_type == "ext4":
+                mount_opts = "ro,norecovery"
+            elif fs_type == "ntfs":
+                mount_opts = "ro,show_sys_files,streams_interface=windows"
+            elif fs_type == "xfs":
+                mount_opts = "ro,norecovery"
+            else:
+                mount_opts = "ro"
+
+            mount_result = subprocess.run(
+                ["mount", "-t", fs_type, "-o", mount_opts, dev_path, destination_mount],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            if mount_result.returncode == 0:
+                print(f"  -> Partition {idx} mounted as {fs_type}")
+                disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, str(idx))
+                partitions.append(f"{partition}||{disk_image}")
+                mounted_any = True
+                break
+
+    return mounted_any
+
+
 def mount_vmdk_image(
     verbosity,
     output_directory,
@@ -184,10 +411,27 @@ def mount_vmdk_image(
     allimgs,
     partitions,
 ):
+    # Check if nbd is available (won't work in Docker containers)
+    nbd_available = _check_nbd_available()
+
+    if not nbd_available:
+        # Use kpartx-based mounting (works in Docker without kernel modules)
+        print(f"  -> nbd unavailable (Docker environment), using kpartx for {disk_file}...")
+        if _mount_with_kpartx(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+            return partitions
+        else:
+            print(f"  -> kpartx mounting failed for {disk_file}")
+            # Try guestmount as final fallback
+            if _try_guestmount(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+                return partitions
+            print(f"   '{disk_file}' could not be mounted (no working mount method available)")
+            return partitions
+
+    # Try apfs-fuse first for APFS volumes (installed in Docker container)
     try:
         subprocess.Popen(
             [
-                "/usr/local/bin/apfs-fuse/build/./apfs-fuse",
+                "/usr/local/bin/apfs-fuse",
                 "-o",
                 "allow_other",
                 intermediate_mount,
@@ -197,10 +441,10 @@ def mount_vmdk_image(
             stderr=subprocess.PIPE,
         ).communicate()
     except:
-        # apfs-fuse is now installed by default in the Docker container
-        # No need to prompt for installation
+        # apfs-fuse may not be installed or may fail
         pass
 
+    # Try nbd-based mounting (original logic - only if nbd is available)
     subprocess.Popen(
         [
             "modprobe",
@@ -503,7 +747,6 @@ def mount_images(
     elrond_mount,
     ewf_mount,
     allimgs,
-    imageinfo,
     imgformat,
     vss,
     stage,
@@ -533,7 +776,6 @@ def mount_images(
             elrond_mount,
             ewf_mount,
             allimgs,
-            imageinfo,
             imgformat,
             vss,
             stage,
@@ -541,6 +783,8 @@ def mount_images(
             quotes,
             partitions,
         )
+        # Return after recursive call to avoid falling through to else block
+        return allimgs, partitions
     else:  # mounting images
         if "EWF" in imgformat or "Expert Witness" in imgformat:
             if not os.path.exists(ewf_mount[0]):
@@ -565,7 +809,6 @@ def mount_images(
                     elrond_mount,
                     ewf_mount,
                     allimgs,
-                    imageinfo,
                     imgformat,
                     vss,
                     stage,
@@ -573,157 +816,258 @@ def mount_images(
                     quotes,
                     partitions,
                 )
+                # Return after recursive call to avoid falling through to mount code below
+                return allimgs, partitions
             destination_mount, intermediate_mount = elrond_mount[0], ewf_mount[0]
             mount_ewf(path, intermediate_mount)
-            if imageinfo:
+
+            # Try multiple filesystem types for E01 images
+            # Order: NTFS (Windows), HFS+ (macOS), ext4 (Linux), XFS (Linux)
+            mount_attempts = [
+                # NTFS for Windows
+                ("ntfs", ["mount", "-o", "ro,loop,show_sys_files,streams_interface=windows",
+                          intermediate_mount + "/ewf1", destination_mount]),
+                # HFS+ for older macOS
+                ("hfsplus", ["mount", "-t", "hfsplus", "-o", "ro,loop",
+                             intermediate_mount + "/ewf1", destination_mount]),
+                # ext4 for Linux
+                ("ext4", ["mount", "-t", "ext4", "-o", "ro,loop,norecovery",
+                          intermediate_mount + "/ewf1", destination_mount]),
+                # XFS for Linux
+                ("xfs", ["mount", "-t", "xfs", "-o", "ro,loop,norecovery",
+                         intermediate_mount + "/ewf1", destination_mount]),
+            ]
+
+            mounterr = "mount_not_attempted"
+            mounted_fs_type = None
+            for fs_type, mount_cmd in mount_attempts:
+                mounterr = str(
+                    subprocess.Popen(
+                        mount_cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                    ).communicate()[1]
+                )
+                if mounterr == "b''":
+                    mounted_fs_type = fs_type
+                    if verbosity != "":
+                        print(f"    Mounted E01 as {fs_type} filesystem")
+                    break
+                # Unmount if partial mount happened
+                subprocess.Popen(["umount", destination_mount],
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+
+            # If standard loop mounts failed, try FUSE-based mounting
+            # This is needed in Docker containers where loop mounts on FUSE-exposed files fail
+            if mounterr != "b''":
+                ewf1_path = intermediate_mount + "/ewf1"
+
+                # Try NTFS via ntfs-3g (FUSE-based, works in Docker)
                 try:
-                    collect_ewfinfo(
-                        elrond_mount, ewf_mount, path, intermediate_mount, cwd
+                    ntfs3g_result = subprocess.run(
+                        ["ntfs-3g", "-o", "ro,allow_other,streams_interface=windows",
+                         ewf1_path, destination_mount],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=60
                     )
-                except:
+                    if ntfs3g_result.returncode == 0:
+                        mounterr = "b''"
+                        mounted_fs_type = "ntfs-3g"
+                        if verbosity != "":
+                            print(f"    Mounted E01 as NTFS filesystem (via ntfs-3g FUSE)")
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    pass
+
+            # Try ext4 via fuse2fs if available
+            if mounterr != "b''":
+                print(f"    Trying fuse2fs for ext4 filesystem on {ewf1_path}...")
+                try:
+                    fuse2fs_result = subprocess.run(
+                        ["fuse2fs", "-o", "ro,allow_other,fakeroot",
+                         ewf1_path, destination_mount],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=60
+                    )
+                    if fuse2fs_result.returncode == 0:
+                        mounterr = "b''"
+                        mounted_fs_type = "ext4-fuse"
+                        print(f"    Mounted E01 as ext4 filesystem (via fuse2fs)")
+                    else:
+                        stderr_msg = fuse2fs_result.stderr.decode('utf-8', errors='ignore').strip()[:200]
+                        print(f"    fuse2fs failed (exit code {fuse2fs_result.returncode}): {stderr_msg}")
+                except FileNotFoundError:
+                    print("    fuse2fs not found - cannot mount ext4 filesystems")
+                except subprocess.TimeoutExpired:
+                    print("    fuse2fs timed out after 60 seconds")
+                except Exception as e:
+                    print(f"    fuse2fs error: {e}")
+
+            # Try APFS with apfs-fuse (macOS 10.13+)
+            if mounterr != "b''":
+                try:
+                    apfs_result = subprocess.run(
+                        ["/usr/local/bin/apfs-fuse", "-o", "allow_other",
+                         ewf1_path, destination_mount],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=60
+                    )
+                    if apfs_result.returncode == 0:
+                        mounterr = "b''"
+                        mounted_fs_type = "apfs"
+                        if verbosity != "":
+                            print(f"    Mounted E01 as APFS filesystem (via apfs-fuse)")
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    # apfs-fuse not installed or timed out
+                    pass
+
+            if mounterr != "b''":
+                # All mount attempts failed - provide diagnostic information
+                print(f"    ERROR: All mount attempts failed for E01 image '{disk_file}'")
+                print(f"    Attempted filesystem types: NTFS (loop), HFS+ (loop), ext4 (loop), XFS (loop), ntfs-3g (FUSE), fuse2fs (ext4 FUSE), apfs-fuse")
+                print(f"    This may be due to:")
+                print(f"      - Unsupported or corrupted filesystem")
+                print(f"      - Missing kernel modules in container")
+                print(f"      - Permission issues with FUSE devices")
+                # Check if ewf1 file exists
+                ewf1_check_path = intermediate_mount + "/ewf1"
+                if os.path.exists(ewf1_check_path):
+                    try:
+                        file_result = subprocess.run(["file", ewf1_check_path], capture_output=True, text=True, timeout=10)
+                        print(f"    Raw disk type: {file_result.stdout.strip()}")
+                    except:
+                        pass
+                return allimgs, partitions  # Return early since mount failed
+
+            # Mount succeeded - identify the disk image and add to allimgs
+            disk_image = identify_disk_image(
+                verbosity, output_directory, disk_file, destination_mount
+            )
+            partition = mounted_image(
+                allimgs, disk_image, destination_mount, disk_file, "0"
+            )
+            partitions.append(
+                "{}||{}".format(
+                    partition[2:-1]
+                    .replace("partition", "")
+                    .replace("zeroth", "00zeroth")
+                    .replace("first", "01first")
+                    .replace("second", "02second")
+                    .replace("third", "03third")
+                    .replace("forth", "04forth")
+                    .replace("fifth", "05fifth")
+                    .replace("sixth", "06sixth")
+                    .replace("seventh", "07seventh")
+                    .replace("eighth", "08eighth")
+                    .replace("ninth", "09ninth")
+                    .strip(),
+                    disk_image,
+                )
+            )
+            if vss:
+                if verbosity != "":
                     print(
-                        "  -> Information for '{}' could not be obtained".format(path)
+                        "    Attempting to mount Volume Shadow Copies for '{}'...".format(
+                            disk_file
+                        )
                     )
-                elrond_mount.pop(0)
-                ewf_mount.pop(0)
-            mounterr = str(
+                # Ensure parent directory exists
+                if not os.path.exists("/mnt/vss/"):
+                    os.makedirs("/mnt/vss/")
+                os.mkdir("/mnt/vss/" + disk_file.split("::")[0] + "/")
                 subprocess.Popen(
                     [
-                        "mount",
-                        "-o",
-                        "ro,loop,show_sys_files,streams_interface=windows",
+                        "vshadowmount",
                         intermediate_mount + "/ewf1",
-                        destination_mount,
+                        "/mnt/vss/" + disk_file.split("::")[0] + "/",
                     ],
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                ).communicate()[1]
-            )
-            if mounterr == "b''":
-                disk_image = identify_disk_image(
-                    verbosity, output_directory, disk_file, destination_mount
-                )
-                partition = mounted_image(
-                    allimgs, disk_image, destination_mount, disk_file, "0"
-                )
-                partitions.append(
-                    "{}||{}".format(
-                        partition[2:-1]
-                        .replace("partition", "")
-                        .replace("zeroth", "00zeroth")
-                        .replace("first", "01first")
-                        .replace("second", "02second")
-                        .replace("third", "03third")
-                        .replace("forth", "04forth")
-                        .replace("fifth", "05fifth")
-                        .replace("sixth", "06sixth")
-                        .replace("seventh", "07seventh")
-                        .replace("eighth", "08eighth")
-                        .replace("ninth", "09ninth")
-                        .strip(),
-                        disk_image,
-                    )
-                )
-                if vss:
-                    if verbosity != "":
-                        print(
-                            "    Attempting to mount Volume Shadow Copies for '{}'...".format(
-                                disk_file
-                            )
-                        )
-                    # Ensure parent directory exists
-                    if not os.path.exists("/mnt/vss/"):
-                        os.makedirs("/mnt/vss/")
-                    os.mkdir("/mnt/vss/" + disk_file.split("::")[0] + "/")
-                    subprocess.Popen(
-                        [
-                            "vshadowmount",
-                            intermediate_mount + "/ewf1",
-                            "/mnt/vss/" + disk_file.split("::")[0] + "/",
-                        ],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                    ).communicate()
-                    time.sleep(0.5)
-                    if os.path.exists(
+                ).communicate()
+                time.sleep(0.5)
+                if os.path.exists(
+                    "/mnt/shadow_mount/" + disk_file.split("::")[0] + "/"
+                ):
+                    for current in os.listdir(
                         "/mnt/shadow_mount/" + disk_file.split("::")[0] + "/"
                     ):
-                        for current in os.listdir(
+                        subprocess.Popen(
+                            [
+                                "umount",
+                                "/mnt/shadow_mount/"
+                                + disk_file.split("::")[0]
+                                + "/"
+                                + current,
+                            ],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                        ).communicate()
+                        time.sleep(0.1)
+                        shutil.rmtree(
+                            "/mnt/shadow_mount/"
+                            + disk_file.split("::")[0]
+                            + "/"
+                            + current
+                        )
+                        shutil.rmtree(
                             "/mnt/shadow_mount/" + disk_file.split("::")[0] + "/"
-                        ):
+                        )
+                else:
+                    # Ensure parent directory exists
+                    if not os.path.exists("/mnt/shadow_mount/"):
+                        os.makedirs("/mnt/shadow_mount/")
+                    os.mkdir("/mnt/shadow_mount/" + disk_file.split("::")[0] + "/")
+                    for i in os.listdir(
+                        "/mnt/vss/" + disk_file.split("::")[0] + "/"
+                    ):
+                        os.mkdir(
+                            "/mnt/shadow_mount/"
+                            + disk_file.split("::")[0]
+                            + "/"
+                            + i
+                        )
+                        try:
                             subprocess.Popen(
                                 [
-                                    "umount",
+                                    "mount",
+                                    "-o",
+                                    "ro,loop,show_sys_files,streams_interface=windows",
+                                    "/mnt/vss/"
+                                    + disk_file.split("::")[0]
+                                    + "/"
+                                    + i,
                                     "/mnt/shadow_mount/"
                                     + disk_file.split("::")[0]
                                     + "/"
-                                    + current,
+                                    + i,
                                 ],
                                 stdout=subprocess.PIPE,
                                 stderr=subprocess.PIPE,
                             ).communicate()
                             time.sleep(0.1)
-                            shutil.rmtree(
-                                "/mnt/shadow_mount/"
-                                + disk_file.split("::")[0]
-                                + "/"
-                                + current
-                            )
-                            shutil.rmtree(
-                                "/mnt/shadow_mount/" + disk_file.split("::")[0] + "/"
-                            )
-                    else:
-                        # Ensure parent directory exists
-                        if not os.path.exists("/mnt/shadow_mount/"):
-                            os.makedirs("/mnt/shadow_mount/")
-                        os.mkdir("/mnt/shadow_mount/" + disk_file.split("::")[0] + "/")
-                        for i in os.listdir(
-                            "/mnt/vss/" + disk_file.split("::")[0] + "/"
-                        ):
-                            os.mkdir(
-                                "/mnt/shadow_mount/"
-                                + disk_file.split("::")[0]
-                                + "/"
-                                + i
-                            )
-                            try:
-                                subprocess.Popen(
-                                    [
-                                        "mount",
-                                        "-o",
-                                        "ro,loop,show_sys_files,streams_interface=windows",
-                                        "/mnt/vss/"
-                                        + disk_file.split("::")[0]
-                                        + "/"
-                                        + i,
-                                        "/mnt/shadow_mount/"
-                                        + disk_file.split("::")[0]
-                                        + "/"
-                                        + i,
-                                    ],
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                ).communicate()
-                                time.sleep(0.1)
-                            except:
-                                pass
-                    if verbosity != "":
-                        print(
-                            "    All valid Volume Shadow Copies for '{}' have been successfully mounted.".format(
-                                disk_file
-                            )
+                        except:
+                            pass
+                if verbosity != "":
+                    print(
+                        "    All valid Volume Shadow Copies for '{}' have been successfully mounted.".format(
+                            disk_file
                         )
-                    os.chdir(cwd)
+                    )
+                os.chdir(cwd)
             elif (
                 "unknown filesystem type 'apfs'" in mounterr
                 or "wrong fs type" in mounterr
             ):  # mounting images with multiple valid partitions
                 if "unknown filesystem type 'apfs'" in mounterr:
                     try:
+                        # Try apfs-fuse for APFS filesystems (macOS 10.13+)
+                        # Path: /usr/local/bin/apfs-fuse (symlinked in Dockerfile)
                         attempt_to_mount = str(
                             subprocess.Popen(
                                 [
-                                    "/usr/local/bin/apfs-fuse/build/./apfs-fuse",
+                                    "/usr/local/bin/apfs-fuse",
                                     "-o",
                                     "allow_other",
                                     intermediate_mount + "/ewf1",
@@ -914,10 +1258,63 @@ def mount_images(
                     allimgs,
                     partitions,
                 )
-        entry, prnt = "{},{},{},commenced\n".format(
+        elif imgformat.strip() == "data" and (
+            disk_file.endswith(".raw")
+            or disk_file.endswith(".img")
+            or disk_file.endswith(".dd")
+        ):
+            # Handle raw filesystem images (no partition table) - common for macOS HFS+/APFS
+            # These show as "data" from `file` command since they're raw filesystem dumps
+            print(f"  -> Detected raw filesystem image (no partition table): {disk_file}")
+            destination_mount = elrond_mount[0]
+
+            # Try APFS first (macOS 10.13+)
+            try:
+                apfs_result = subprocess.run(
+                    ["/usr/local/bin/apfs-fuse", "-o", "allow_other", path, destination_mount],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=60
+                )
+                if apfs_result.returncode == 0 and os.listdir(destination_mount):
+                    print(f"  -> Successfully mounted {disk_file} as APFS")
+                    disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                    partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, "0")
+                    partitions.append(f"{partition[2:-1].strip()}||{disk_image}")
+                else:
+                    raise Exception("APFS mount failed")
+            except (FileNotFoundError, subprocess.TimeoutExpired, Exception) as e:
+                # Try HFS+ (older macOS)
+                try:
+                    hfs_result = subprocess.run(
+                        ["mount", "-t", "hfsplus", "-o", "ro,loop", path, destination_mount],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True,
+                        timeout=30
+                    )
+                    if hfs_result.returncode == 0 and os.listdir(destination_mount):
+                        print(f"  -> Successfully mounted {disk_file} as HFS+")
+                        disk_image = identify_disk_image(verbosity, output_directory, disk_file, destination_mount)
+                        partition = mounted_image(allimgs, disk_image, destination_mount, disk_file, "0")
+                        partitions.append(f"{partition[2:-1].strip()}||{disk_image}")
+                    else:
+                        raise Exception("HFS+ mount failed")
+                except Exception:
+                    # Try kpartx fallback (may be a partitioned image misidentified by `file`)
+                    if _mount_with_kpartx(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+                        pass  # Successfully mounted via kpartx
+                    else:
+                        # Try guestmount as final fallback
+                        if not _try_guestmount(path, destination_mount, disk_file, allimgs, partitions, verbosity, output_directory):
+                            print(f"   ERROR: '{disk_file}' could not be mounted.")
+                            print(f"   This appears to be a raw filesystem image but no compatible filesystem was found.")
+                            print(f"   For macOS HFS+ images in Docker, the kernel module may not be available.")
+                            print(f"   Consider using a native Linux host with hfsplus kernel module loaded.")
+        # Log to audit file but don't print "commenced" - it's superfluous output
+        entry = "{},{},{},commenced\n".format(
             datetime.now().isoformat(), disk_file, stage
-        ), " -> {} -> mounting '{}' commenced".format(
-            datetime.now().isoformat().replace("T", " "), disk_file
         )
-        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        write_audit_log_entry(verbosity, output_directory, entry, "")
     return allimgs, partitions

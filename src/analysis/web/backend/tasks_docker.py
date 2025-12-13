@@ -56,8 +56,6 @@ def start_analysis(self, job_id: str):
         cmd = build_elrond_command(job)
 
         logger.info(f"Running command: {' '.join(cmd)}")
-        job.log.append(f"[{datetime.now().isoformat()}] Command: {' '.join(cmd)}")
-        job_storage.save_job(job)
 
         # Set destination directory
         dest_dir = job.destination_path or str(Path(settings.output_dir) / job.case_number)
@@ -139,8 +137,16 @@ def start_analysis(self, job_id: str):
             # Check for generated files
             output_path = Path(dest_dir)
             if output_path.exists():
-                result_info["output_files"] = len(list(output_path.rglob("*")))
-                result_info["output_size"] = sum(f.stat().st_size for f in output_path.rglob("*") if f.is_file())
+                try:
+                    # Skip macOS resource fork files (._*) which can cause permission errors
+                    all_files = [f for f in output_path.rglob("*") if not f.name.startswith('._')]
+                    result_info["output_files"] = len(all_files)
+                    result_info["output_size"] = sum(f.stat().st_size for f in all_files if f.is_file())
+                except (FileNotFoundError, PermissionError, OSError) as e:
+                    # Handle cases where paths don't exist or are inaccessible
+                    logger.warning(f"Error calculating output stats: {e}")
+                    result_info["output_files"] = 0
+                    result_info["output_size"] = 0
 
             job.result = result_info
 

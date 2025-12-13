@@ -1,6 +1,10 @@
 # Forensics-enabled Celery Worker
 # Based on the full elrond forensics image with all tools
+# Build steps: 5 total
 
+# =============================================================================
+# Step 1/5: Initialize base image
+# =============================================================================
 FROM ubuntu:22.04
 
 # Prevent interactive prompts during build
@@ -9,7 +13,12 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV TZ=UTC
 
-# Install system dependencies and forensic tools
+# =============================================================================
+# Step 2/5: System and OS-level forensics tools
+# - System dependencies, build tools, pip upgrade
+# - Forensic libraries (libesedb, libevtx, etc.)
+# - apfs-fuse for macOS APFS filesystem support
+# =============================================================================
 RUN apt-get update && apt-get install -y \
     # Python and build tools
     python3 \
@@ -35,15 +44,23 @@ RUN apt-get update && apt-get install -y \
     ntfs-3g \
     exfat-fuse \
     e2fsprogs \
+    hfsprogs \
+    hfsplus \
+    xfsprogs \
     # Mounting tools
     fuse3 \
     libfuse3-dev \
+    libfuse-dev \
     kpartx \
     qemu-utils \
+    # For FUSE-based partition mounting (avoids loop device issues in Docker)
+    libguestfs-tools \
+    fuse2fs \
     # Archive tools
     p7zip-full \
     unzip \
     zip \
+    bzip2 \
     # Network tools
     curl \
     wget \
@@ -55,15 +72,21 @@ RUN apt-get update && apt-get install -y \
     git \
     sudo \
     file \
+    systemd \
     ca-certificates \
+    kmod \
+    fdisk \
+    util-linux \
+    mount \
     # Perl for RegRipper
     perl \
-    # Cleanup
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install libevtx and other forensic libraries
-RUN apt-get update && apt-get install -y \
+    libparse-win32registry-perl \
+    # Additional build dependencies for apfs-fuse
+    libbz2-dev \
+    libz-dev \
+    libattr1-dev \
+    zlib1g-dev \
+    # Forensic libraries
     libesedb-utils \
     libevt-utils \
     libevtx-utils \
@@ -71,14 +94,28 @@ RUN apt-get update && apt-get install -y \
     libregf-utils \
     libscca-utils \
     libsigscan-utils \
-    libvshadow-utils \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* || true
+    && rm -rf /var/lib/apt/lists/* \
+    # Upgrade pip, setuptools, wheel
+    && python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    # Build and install apfs-fuse from source (macOS 10.13+ APFS filesystem support)
+    && cd /opt \
+    && git clone https://github.com/sgan81/apfs-fuse.git \
+    && cd apfs-fuse \
+    && git submodule init \
+    && git submodule update \
+    && mkdir build \
+    && cd build \
+    && cmake .. \
+    && make \
+    && ln -s /opt/apfs-fuse/build/apfs-fuse /usr/local/bin/apfs-fuse
 
-# Upgrade pip
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
-
-# Install core forensic Python packages
+# =============================================================================
+# Step 3/5: Python forensics tools
+# - Python forensic packages
+# - Backend requirements.txt dependencies
+# =============================================================================
+COPY src/web/backend/requirements.txt /tmp/requirements.txt
 RUN pip3 install --no-cache-dir \
     python-registry \
     regipy \
@@ -97,12 +134,18 @@ RUN pip3 install --no-cache-dir \
     unicodecsv \
     pandas \
     numpy \
-    openpyxl
+    openpyxl \
+    && pip3 install --no-cache-dir -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
 
-# Install Artemis - comprehensive Rust-based forensic parser
-# Supports: prefetch, eventlogs, mft, shimcache, amcache, registry, userassist,
-# shellbags, usnjrnl, bits, srum, search, tasks, services, shortcuts, jumplists,
-# recyclebin, outlook, wmipersist - all with --alt-file/--alt-dir for offline analysis
+# =============================================================================
+# Step 4/5: Additional forensics tools
+# =============================================================================
+
+# 4a: Install Artemis (Rust-based forensic parser)
+# Parses: prefetch, eventlogs, mft, shimcache, amcache, registry, userassist,
+#         shellbags, usnjrnl, bits, srum, search, tasks, services, shortcuts,
+#         jumplists, recyclebin, outlook, wmipersist
 RUN ARTEMIS_VERSION="v0.16.0" && \
     ARCH=$(uname -m) && \
     if [ "$ARCH" = "x86_64" ]; then \
@@ -112,29 +155,50 @@ RUN ARTEMIS_VERSION="v0.16.0" && \
     else \
         echo "Unsupported architecture: $ARCH" && exit 1; \
     fi && \
-    curl -L -o /tmp/artemis.tar.gz "https://github.com/puffyCid/artemis/releases/download/${ARTEMIS_VERSION}/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}.tar.gz" && \
+    echo "Downloading Artemis ${ARTEMIS_VERSION} for ${ARTEMIS_ARCH}..." && \
+    curl -fL -o /tmp/artemis.tar.gz "https://github.com/puffyCid/artemis/releases/download/${ARTEMIS_VERSION}/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}.tar.gz" && \
     tar -xzf /tmp/artemis.tar.gz -C /tmp && \
     cp /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}/artemis /usr/local/bin/ && \
     chmod +x /usr/local/bin/artemis && \
-    rm -rf /tmp/artemis.tar.gz /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH}
+    rm -rf /tmp/artemis.tar.gz /tmp/artemis-${ARTEMIS_VERSION}-${ARTEMIS_ARCH} && \
+    echo "Artemis installed: $(artemis --version)"
 
-# Install plaso (timeline analysis) - optional, may fail
+# 4b: Install RegRipper 3.0 for Windows registry analysis
+RUN cd /opt && \
+    git clone https://github.com/keydet89/RegRipper3.0.git regripper && \
+    cd regripper && \
+    sed -i '1s|^#!.*|#!/usr/bin/perl|' rip.pl && \
+    chmod +x rip.pl && \
+    ln -s /opt/regripper/rip.pl /usr/local/bin/rip.pl
+
+# 4c: Install USN-Journal-Parser for $UsnJrnl analysis
+RUN cd /opt && \
+    git clone https://github.com/PoorBillionaire/USN-Journal-Parser.git && \
+    cd USN-Journal-Parser && \
+    python3 setup.py install
+
+# 4d: Install plaso (timeline analysis) - optional, may fail on some architectures
 RUN pip3 install --no-cache-dir plaso || echo "Plaso installation skipped"
 
-# Set working directory
-WORKDIR /app
+# 4e: Create symlink for log2timeline.py (elrond looks for .py extension)
+RUN ln -s /usr/local/bin/log2timeline /usr/local/bin/log2timeline.py || true
 
-# Copy backend requirements and install
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+# =============================================================================
+# Step 5/5: Rivendell source code configuration
+# - Copy elrond forensics source code (avoids OneDrive file locking issues)
+# - Copy backend application code
+# - Create mount directories
+# - Set working directory and environment variables
+# =============================================================================
+# Copy elrond forensics source code into the image
+# This avoids the OneDrive file locking deadlock issue when mounting from macOS
+COPY src/analysis /opt/elrond-src
 
 # Copy backend application code
-COPY . .
+COPY src/web/backend /app
 
-# Note: elrond source code will be mounted as a volume in docker-compose.yml
-# This allows for hot-reloading during development
+WORKDIR /app
 
-# Create necessary directories
 RUN mkdir -p \
     /mnt/elrond_mount00 \
     /mnt/elrond_mount01 \
@@ -144,37 +208,12 @@ RUN mkdir -p \
     /tmp/elrond/jobs \
     /var/log/elrond
 
-# Set environment variables for elrond
 # NOTE: elrond is mounted at /opt/elrond-src to avoid PATH conflicts
 ENV PATH="/usr/local/bin:/usr/bin:/bin:${PATH}"
-ENV PYTHONPATH="/opt/elrond-src:/app:${PYTHONPATH}"
+ENV PYTHONPATH="/opt/elrond-src:/app"
 ENV ELROND_HOME="/opt/elrond-src"
 ENV ELROND_OUTPUT="/tmp/elrond/output"
 ENV ELROND_NONINTERACTIVE="1"
-
-# Create symlink for log2timeline.py (elrond looks for .py extension)
-RUN ln -s /usr/local/bin/log2timeline /usr/local/bin/log2timeline.py
-
-# Install RegRipper for Windows registry analysis
-RUN cd /opt && \
-    git clone https://github.com/keydet89/RegRipper3.0.git regripper && \
-    cd regripper && \
-    # Fix Windows-style shebang to Unix-style
-    sed -i '1s|^#!.*|#!/usr/bin/perl|' rip.pl && \
-    chmod +x rip.pl && \
-    # Make rip.pl available in PATH
-    ln -s /opt/regripper/rip.pl /usr/local/bin/rip.pl && \
-    # Install Parse::Win32Registry Perl module
-    apt-get update && \
-    apt-get install -y libparse-win32registry-perl && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Install USN-Journal-Parser for $UsnJrnl analysis
-RUN cd /opt && \
-    git clone https://github.com/PoorBillionaire/USN-Journal-Parser.git && \
-    cd USN-Journal-Parser && \
-    python3 setup.py install
 
 # Default command (overridden by docker-compose for celery worker)
 CMD ["celery", "-A", "tasks.celery_app", "worker", "--loglevel=info"]

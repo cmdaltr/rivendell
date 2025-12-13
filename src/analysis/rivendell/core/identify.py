@@ -65,15 +65,44 @@ def identify_disk_image(verbosity, output_directory, disk_image, mount_location)
             """
             print_identification(verbosity, output_directory, disk_image, windows_os)
             disk_image = disk_image + "::" + windows_os
+        # macOS detection: Check for /Applications, /System, /Library (standard macOS layout)
+        elif (
+            "Applications" in str(os.listdir(mount_location))
+            and "System" in str(os.listdir(mount_location))
+            and "Library" in str(os.listdir(mount_location))
+        ):
+            print_identification(verbosity, output_directory, disk_image, "macOS")
+            disk_image = disk_image + "::macOS"
+        # APFS container detection: macOS in /root subdirectory (apfs-fuse mounts)
+        elif (
+            "root" in str(os.listdir(mount_location))
+            and os.path.isdir(os.path.join(mount_location, "root"))
+            and os.path.exists(os.path.join(mount_location, "root", "Applications"))
+            and os.path.exists(os.path.join(mount_location, "root", "System"))
+            and os.path.exists(os.path.join(mount_location, "root", "Library"))
+        ):
+            print_identification(verbosity, output_directory, disk_image, "macOS")
+            disk_image = disk_image + "::macOS"
+        # Linux detection: Check for standard Linux directories
+        # /etc, /usr, /var are more reliable indicators than root+media
+        elif (
+            "etc" in str(os.listdir(mount_location))
+            and "usr" in str(os.listdir(mount_location))
+            and "var" in str(os.listdir(mount_location))
+        ):
+            # Verify it's not macOS (which also has etc, usr, var)
+            if not (
+                "Applications" in str(os.listdir(mount_location))
+                and "System" in str(os.listdir(mount_location))
+            ):
+                print_identification(verbosity, output_directory, disk_image, "Linux")
+                disk_image = disk_image + "::Linux"
+        # Fallback: Original Linux detection for backwards compatibility
         elif "root" in str(os.listdir(mount_location)) and "media" in str(
             os.listdir(mount_location)
         ):
             print_identification(verbosity, output_directory, disk_image, "Linux")
             disk_image = disk_image + "::Linux"
-        elif os.path.exists(mount_location + "root"):
-            if "Applications" in str(os.listdir(mount_location + "root")):
-                print_identification(verbosity, output_directory, disk_image, "macOS")
-                disk_image = disk_image + "::macOS"
     return disk_image
 
 
@@ -82,8 +111,6 @@ def identify_memory_image(
     output_directory,
     flags,
     auto,
-    superquick,
-    quick,
     metacollected,
     cwd,
     sha256,
@@ -102,7 +129,7 @@ def identify_memory_image(
     else:
         wtm = "y"
     if wtm != "n":
-        if not superquick and not quick and not metacollected:
+        if not metacollected:
             extract_metadata(
                 verbosity,
                 output_directory,

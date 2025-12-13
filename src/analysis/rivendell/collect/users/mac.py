@@ -290,6 +290,7 @@ def mac_users(
                     entry,
                     prnt,
                 )
+                mail_file_count = 0
                 for (
                     mailroot,
                     _,
@@ -344,6 +345,16 @@ def mac_users(
                                         ),
                                         dest + "/mail/emails/" + mbox + "/" + mailfile,
                                     )
+                                    mail_file_count += 1
+                                    if mail_file_count % 100 == 0:
+                                        print(
+                                            " -> {} -> collected {} mail files for '{}' for '{}'".format(
+                                                datetime.now().isoformat().replace("T", " "),
+                                                mail_file_count,
+                                                each,
+                                                img.split("::")[0],
+                                            )
+                                        )
                                 except:
                                     pass
                             elif "Attachment" in mailroot:
@@ -400,8 +411,28 @@ def mac_users(
                                         + "+"
                                         + mailfile,
                                     )
+                                    mail_file_count += 1
+                                    if mail_file_count % 100 == 0:
+                                        print(
+                                            " -> {} -> collected {} mail files for '{}' for '{}'".format(
+                                                datetime.now().isoformat().replace("T", " "),
+                                                mail_file_count,
+                                                each,
+                                                img.split("::")[0],
+                                            )
+                                        )
                                 except:
                                     pass
+                # Log final mail count if any files were collected
+                if mail_file_count > 0:
+                    print(
+                        " -> {} -> finished collecting {} mail files for '{}' for '{}'".format(
+                            datetime.now().isoformat().replace("T", " "),
+                            mail_file_count,
+                            each,
+                            img.split("::")[0],
+                        )
+                    )
             if not each.startswith("."):
                 try:
                     os.stat(bwsrdest + each + "/safari/")
@@ -595,12 +626,14 @@ def mac_users(
                 except:
                     os.makedirs(userdest)
                 if os.path.isdir(item + each):
-                    if verbosity != "":
-                        print(
-                            "     Collecting user profile for '{}' for {}...".format(
-                                each, vssimage
-                            )
+                    # Print initiation message BEFORE the copy starts
+                    print(
+                        " -> {} -> copying full user profile '{}' for '{}'...".format(
+                            datetime.now().isoformat().replace("T", " "),
+                            each,
+                            img.split("::")[0],
                         )
+                    )
                     (
                         entry,
                         prnt,
@@ -625,11 +658,28 @@ def mac_users(
                         entry,
                         prnt,
                     )
+                    # Ignore macOS resource fork files (._*) which can cause FUSE hangs
+                    def ignore_macos_resource_forks(directory, files):
+                        return [f for f in files if f.startswith('._')]
                     try:
                         shutil.copytree(
                             item + each,
                             userdest + "/" + each,
                             symlinks=symlinkvalue,
+                            ignore=ignore_macos_resource_forks,
                         )
-                    except:
-                        pass
+                    except Exception as e:
+                        # Extract just source file paths from shutil.Error
+                        if hasattr(e, 'args') and e.args and isinstance(e.args[0], list):
+                            failed_files = [err[0] for err in e.args[0] if isinstance(err, tuple) and len(err) >= 1]
+                            error_msg = str(failed_files)
+                        else:
+                            error_msg = str(e)[:100]
+                        print(
+                            " -> {} -> error during copying user profile '{}' for '{}': {}".format(
+                                datetime.now().isoformat().replace("T", " "),
+                                each,
+                                img.split("::")[0],
+                                error_msg,
+                            )
+                        )

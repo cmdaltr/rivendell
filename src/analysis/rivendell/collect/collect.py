@@ -27,8 +27,6 @@ def collect_artefacts(
     keywords,
     volatility,
     metacollected,
-    superquick,
-    quick,
     symlinks,
     userprofiles,
     verbose,
@@ -46,6 +44,7 @@ def collect_artefacts(
     vssmem,
     memtimeline,
     stage,
+    phase=None,  # Phase control: "collect" for multi-image phased mode
 ):
     volume_shadow_copies = []
     if not volatility and len(imgs) <= 0:
@@ -84,7 +83,7 @@ def collect_artefacts(
                         "     If you wish to utilise the NSRL hash database, run the '.../elrond/tools/scripts/nsrl.sh' script, before running elrond and try again.\n\n"
                     )
                     sys.exit()
-        if not superquick and not quick and not metacollected:
+        if not metacollected:
             print(
                 "\n\n  -> \033[1;36mCommencing Metadata Phase...\033[1;m\n  ----------------------------------------"
             )
@@ -142,128 +141,6 @@ def collect_artefacts(
                 "\n  -> Completed Metadata Phase.\n  ----------------------------------------\n"
             )
             time.sleep(1)
-        elif not superquick:
-            print(
-                "\n\n  -> \033[1;36mCommencing Metadata Phase...\033[1;m\n  ----------------------------------------"
-            )
-            time.sleep(1)
-            stage = "metadata"
-            for each in imgs:
-                mnt, img = [each, imgs[each]]
-                if "vss" in img.split("::")[1]:
-                    metaimage, vsstext = "'" + img.split("::")[0] + "' (" + img.split(
-                        "::"
-                    )[1].split("_")[1].replace(
-                        "vss", "volume shadow copy #"
-                    ) + ")", " from " + img.split(
-                        "::"
-                    )[
-                        1
-                    ].split(
-                        "_"
-                    )[
-                        1
-                    ].replace(
-                        "vss", "volume shadow copy #"
-                    )
-                else:
-                    metaimage, vsstext = "'" + img.split("::")[0] + "'", ""
-                print("    Collecting Metadata for {}...".format(metaimage))
-                entry, prnt = "{},{},{},commenced\n".format(
-                    datetime.now().isoformat(),
-                    metaimage.replace("'", ""),
-                    stage,
-                ), " -> {} -> collecting {}{} for '{}'".format(
-                    datetime.now().isoformat().replace("T", " "),
-                    stage,
-                    vsstext,
-                    img.split("::")[0],
-                )
-                write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                if verbosity != "":
-                    print(
-                        "     Ascertaining file timestamps for {}...".format(metaimage)
-                    )
-                entry, prnt = "{},{},collecting,timestamps\n".format(
-                    datetime.now().isoformat(), metaimage
-                ), " -> {} -> collecting various timestamps for {}".format(
-                    datetime.now().isoformat().replace("T", " "), metaimage
-                )
-                write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                with open(
-                    output_directory + img.split("::")[0] + "/lat.audit", "a"
-                ) as lathef:
-                    if "Windows" in img.split("::")[1]:
-                        processtype = "Process"
-                    else:
-                        processtype = "Process"
-                    lathef.write(
-                        "Filename,CreationTime,LastAccessTime,LastWriteTime,{}\n".format(
-                            processtype
-                        )
-                    )
-                    for hr, _, hf in os.walk(mnt):
-                        for intgfile in hf:
-                            if os.path.exists(os.path.join(hr, intgfile)):
-                                try:
-                                    iinfo = os.stat(os.path.join(hr, intgfile))
-                                    isize = iinfo.st_size
-                                except:
-                                    pass
-                                if isize > 0:
-                                    lathef.write(
-                                        "{},{},{},{},{}\n".format(
-                                            str(
-                                                os.path.join(hr, intgfile).split("/")[
-                                                    -1
-                                                ]
-                                            ),
-                                            str(
-                                                datetime.fromtimestamp(
-                                                    os.path.getctime(
-                                                        os.path.join(hr, intgfile)
-                                                    )
-                                                )
-                                            ),
-                                            str(
-                                                datetime.fromtimestamp(
-                                                    os.path.getatime(
-                                                        os.path.join(hr, intgfile)
-                                                    )
-                                                )
-                                            ),
-                                            str(
-                                                datetime.fromtimestamp(
-                                                    os.path.getmtime(
-                                                        os.path.join(hr, intgfile)
-                                                    )
-                                                )
-                                            ),
-                                            str(
-                                                os.path.join(hr, intgfile).split("/")[
-                                                    -1
-                                                ]
-                                            ).lower(),
-                                        )
-                                    )
-
-                entry, prnt = "{},{},{},completed\n".format(
-                    datetime.now().isoformat(),
-                    metaimage.replace("'", ""),
-                    stage,
-                ), " -> {} -> {} completed{} for '{}'".format(
-                    datetime.now().isoformat().replace("T", " "),
-                    stage,
-                    vsstext,
-                    img.split("::")[0],
-                )
-                write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                print("  -> Completed Metadata Phase for {}.\n".format(metaimage))
-                flags.append("00metadata")
-            print(
-                "  ----------------------------------------\n  -> Completed Metadata Phase.\n"
-            )
-            time.sleep(1)
         if keywords:
             prepare_keywords(
                 verbosity, output_directory, auto, imgs, flags, keywords, stage
@@ -272,10 +149,12 @@ def collect_artefacts(
         OrderedDict(sorted(imgs.items(), key=lambda x: x[1])),
         "collecting",
     )
-    print(
-        "\n\n  -> \033[1;36mCommencing Collection Phase...\033[1;m\n  ----------------------------------------"
-    )
-    time.sleep(1)
+    # Don't print phase start in collect phase - elrond.py handles it
+    if phase != "collect":
+        print(
+            "\n\n  -> \033[1;36mCommencing Collection Phase...\033[1;m\n  ----------------------------------------"
+        )
+        time.sleep(1)
     if symlinks:
         symlinkvalue = False
     else:
@@ -507,10 +386,14 @@ def collect_artefacts(
             datetime.now().isoformat().replace("T", " "), vssimage
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        print("  -> Completed Collection Phase for {}".format(vssimage))
-        print()
+        # Don't print per-image completion in collect phase - elrond.py handles it
+        if phase != "collect":
+            print("  -> Completed Collection Phase for {}".format(vssimage))
+            print()
     flags.append("01collection")
-    print(
-        "  ----------------------------------------\n  -> Completed Collection Phase.\n"
-    )
-    time.sleep(1)
+    # Don't print phase completion in collect phase - elrond.py handles it after all images
+    if phase != "collect":
+        print(
+            "  ----------------------------------------\n  -> Completed Collection Phase.\n"
+        )
+        time.sleep(1)

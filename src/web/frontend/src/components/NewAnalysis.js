@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FileBrowser from './FileBrowser';
 import GandalfJobBrowser from './GandalfJobBrowser';
@@ -6,10 +6,17 @@ import OptionsPanel from './OptionsPanel';
 import { createJob } from '../api';
 import axios from 'axios';
 
+// File requirements for certain options
+const FILE_REQUIREMENTS = {
+  keywords: { filename: 'keywords.txt', label: 'Keywords Search', description: 'Text file with one keyword per line' },
+  yara: { filename: 'yara.yar', label: 'YARA Rules', description: 'YARA rules file (.yar or .yara)' },
+  collectFiles: { filename: 'files.txt', label: 'Collect Specific Files', description: 'Text file with file paths/patterns to collect' },
+};
+
 function NewAnalysis() {
   const navigate = useNavigate();
   const [caseNumber, setCaseNumber] = useState('');
-  const [analysisMode, setAnalysisMode] = useState('local'); // 'local' or 'gandalf'
+  const [analysisMode, setAnalysisMode] = useState('local'); // 'local', 'gandalf', or 'cloud'
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [destinationPath, setDestinationPath] = useState('');
   const [options, setOptions] = useState({});
@@ -20,6 +27,10 @@ function NewAnalysis() {
   const [overwriteModalData, setOverwriteModalData] = useState({ type: '', message: '', path: '' });
   const [caseIdExists, setCaseIdExists] = useState(false);
   const [checkingCaseId, setCheckingCaseId] = useState(false);
+  const [showFileUploadModal, setShowFileUploadModal] = useState(false);
+  const [missingFiles, setMissingFiles] = useState([]);
+  const [uploadedFiles, setUploadedFiles] = useState({});
+  const fileInputRefs = useRef({});
 
   // Clear error when options change
   const handleOptionsChange = (newOptions) => {
@@ -124,11 +135,97 @@ function NewAnalysis() {
     setShowAvWarning(false);
     setError(null);
 
+    // Check if any file-requiring options are selected
+    const requiredOptions = Object.keys(FILE_REQUIREMENTS).filter(key => options[key]);
+
+    if (requiredOptions.length > 0) {
+      // Check which files exist on the server
+      try {
+        const response = await axios.post(
+          `${process.env.REACT_APP_API_URL || 'http://localhost:5688'}/api/check-required-files`,
+          { options: requiredOptions }
+        );
+
+        const missing = response.data.missing || [];
+
+        if (missing.length > 0) {
+          setMissingFiles(missing);
+          setUploadedFiles({});
+          setShowFileUploadModal(true);
+          return;
+        }
+      } catch (err) {
+        console.error('Error checking required files:', err);
+        // If we can't check, assume files are missing and prompt
+        setMissingFiles(requiredOptions);
+        setUploadedFiles({});
+        setShowFileUploadModal(true);
+        return;
+      }
+    }
+
     await startJobCreation(false);
   };
 
   const handleAvWarningCancel = () => {
     setShowAvWarning(false);
+  };
+
+  const handleFileUpload = (optionKey, event) => {
+    const file = event.target.files[0];
+    if (file) {
+      setUploadedFiles(prev => ({ ...prev, [optionKey]: file }));
+    }
+  };
+
+  const handleFileUploadConfirm = async () => {
+    // Check all required files are uploaded
+    const allUploaded = missingFiles.every(key => uploadedFiles[key]);
+
+    if (!allUploaded) {
+      setError('Please upload all required files');
+      return;
+    }
+
+    // Upload the files to the server
+    try {
+      const formData = new FormData();
+      missingFiles.forEach(key => {
+        formData.append(key, uploadedFiles[key]);
+      });
+
+      await axios.post(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5688'}/api/upload-required-files`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+
+      setShowFileUploadModal(false);
+      await startJobCreation(false);
+    } catch (err) {
+      setError('Failed to upload files: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleFileUploadCancel = () => {
+    setShowFileUploadModal(false);
+    setMissingFiles([]);
+    setUploadedFiles({});
+  };
+
+  const handleFileUploadSkip = async () => {
+    // Deselect the options that require files and continue
+    const newOptions = { ...options };
+    missingFiles.forEach(key => {
+      newOptions[key] = false;
+    });
+    setOptions(newOptions);
+    setShowFileUploadModal(false);
+    setMissingFiles([]);
+    setUploadedFiles({});
+
+    // Continue with job creation
+    await startJobCreation(false);
   };
 
   const handleOverwriteConfirm = async () => {
@@ -419,6 +516,215 @@ function NewAnalysis() {
         </div>
       )}
 
+      {/* File Upload Modal */}
+      {showFileUploadModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15, 15, 35, 0.98) 0%, rgba(25, 25, 45, 0.98) 100%)',
+            border: '2px solid rgba(240, 219, 165, 0.5)',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '680px',
+            width: '100%',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
+          }}>
+            <h3 style={{
+              color: '#66d9ef',
+              marginBottom: '1rem',
+              fontFamily: "'Cinzel', 'Times New Roman', serif",
+              fontSize: '1.5rem',
+              textAlign: 'center'
+            }}>
+              Required Files
+            </h3>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '1.5rem',
+              fontSize: '1rem',
+              textAlign: 'center'
+            }}>
+              The following files are required but were not found in <code style={{ background: 'rgba(102, 217, 239, 0.2)', padding: '2px 6px', borderRadius: '3px' }}>/tmp/rivendell</code>
+            </p>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              {missingFiles.map(key => {
+                const req = FILE_REQUIREMENTS[key];
+                const uploaded = uploadedFiles[key];
+                return (
+                  <div key={key} style={{
+                    background: 'rgba(240, 219, 165, 0.05)',
+                    border: '1px solid rgba(240, 219, 165, 0.2)',
+                    borderRadius: '6px',
+                    padding: '1rem',
+                    marginBottom: '0.75rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <div>
+                        <strong style={{ color: '#f0dba5' }}>{req.label}</strong>
+                        <span style={{ color: '#888', fontSize: '0.9rem', marginLeft: '0.5rem' }}>({req.filename})</span>
+                      </div>
+                      {uploaded && (
+                        <span style={{ color: '#a7db6c', fontSize: '0.9rem' }}>✓ {uploaded.name}</span>
+                      )}
+                    </div>
+                    <p style={{ color: '#999', fontSize: '0.85rem', marginBottom: '0.75rem' }}>{req.description}</p>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="file"
+                        accept=".txt,.yar,.yara"
+                        onChange={(e) => handleFileUpload(key, e)}
+                        ref={el => fileInputRefs.current[key] = el}
+                        style={{
+                          position: 'absolute',
+                          width: '100%',
+                          height: '100%',
+                          opacity: 0,
+                          cursor: 'pointer',
+                          zIndex: 2
+                        }}
+                      />
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '1rem',
+                        padding: '0.6rem 1rem',
+                        borderRadius: '4px',
+                        border: '1px solid #3f4b2a',
+                        background: 'rgba(15, 15, 35, 0.8)',
+                        color: '#f0dba5',
+                      }}>
+                        <span style={{
+                          padding: '0.4rem 1rem',
+                          background: 'linear-gradient(135deg, rgba(63, 75, 42, 0.8) 0%, rgba(45, 55, 30, 0.8) 100%)',
+                          border: '1px solid rgba(240, 219, 165, 0.3)',
+                          borderRadius: '4px',
+                          color: '#f0dba5',
+                          fontFamily: "'Cinzel', 'Times New Roman', serif",
+                          fontSize: '0.85rem',
+                          fontWeight: 600,
+                          whiteSpace: 'nowrap'
+                        }}>
+                          Browse...
+                        </span>
+                        <span style={{ color: uploaded ? '#a7db6c' : '#666', fontSize: '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {uploaded ? uploaded.name : 'No file selected'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {error && (
+              <div style={{ color: '#f44336', marginBottom: '1rem', textAlign: 'center' }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={handleFileUploadCancel}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  minWidth: '120px',
+                  height: '48px',
+                  background: 'rgba(244, 67, 54, 0.2)',
+                  border: '1px solid rgba(244, 67, 54, 0.5)',
+                  borderRadius: '4px',
+                  color: '#f44336',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(244, 67, 54, 0.2)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFileUploadSkip}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  minWidth: '120px',
+                  height: '48px',
+                  background: 'rgba(255, 193, 7, 0.2)',
+                  border: '1px solid rgba(255, 193, 7, 0.5)',
+                  borderRadius: '4px',
+                  color: '#ffc107',
+                  cursor: 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = 'rgba(255, 193, 7, 0.3)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(255, 193, 7, 0.2)';
+                }}
+                title="Skip these options and continue without them"
+              >
+                Skip
+              </button>
+              <button
+                onClick={handleFileUploadConfirm}
+                disabled={!missingFiles.every(key => uploadedFiles[key])}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  minWidth: '120px',
+                  height: '48px',
+                  background: missingFiles.every(key => uploadedFiles[key]) ? 'rgba(102, 217, 239, 0.3)' : 'rgba(102, 217, 239, 0.1)',
+                  border: '1px solid rgba(102, 217, 239, 0.5)',
+                  borderRadius: '4px',
+                  color: missingFiles.every(key => uploadedFiles[key]) ? '#66d9ef' : '#666',
+                  cursor: missingFiles.every(key => uploadedFiles[key]) ? 'pointer' : 'not-allowed',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => {
+                  if (missingFiles.every(key => uploadedFiles[key])) {
+                    e.target.style.background = 'rgba(102, 217, 239, 0.4)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (missingFiles.every(key => uploadedFiles[key])) {
+                    e.target.style.background = 'rgba(102, 217, 239, 0.3)';
+                  }
+                }}
+              >
+                Upload
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2>New Forensic Analysis</h2>
 
@@ -486,6 +792,22 @@ function NewAnalysis() {
                     style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
                   Gandalf Acquisition
+                </label>
+                <label
+                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 0.5 : 0.3, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
+                  title="Cloud Storage (Coming Soon)"
+                >
+                  <input
+                    type="radio"
+                    name="analysisMode"
+                    value="cloud"
+                    checked={analysisMode === 'cloud'}
+                    onChange={(e) => setAnalysisMode(e.target.value)}
+                    disabled={true}
+                    style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
+                  />
+                  Cloud
+                  <span style={{ fontSize: '0.7rem', marginLeft: '0.5rem', color: '#666', fontStyle: 'italic' }}>(Coming Soon)</span>
                 </label>
               </div>
             </div>

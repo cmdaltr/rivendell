@@ -16,7 +16,6 @@ from rivendell.core.identify import identify_memory_image
 from rivendell.meta import extract_metadata
 from rivendell.mount import mount_images
 from rivendell.mount import unmount_images
-from rivendell.post.clam import run_clamscan
 from rivendell.post.clean import archive_artefacts
 from rivendell.post.clean import delete_artefacts
 from rivendell.post.clean import cleanup_small_files_and_empty_dirs
@@ -39,8 +38,6 @@ def main(
     gandalf,
     collectfiles,
     extractiocs,
-    imageinfo,
-    lotr,
     keywords,
     volatility,
     metacollected,
@@ -50,16 +47,11 @@ def main(
     hashall,
     hashcollected,
     process,
-    superquick,
-    quick,
-    reorganise,
     splunk,
     symlinks,
     timeline,
     memorytimeline,
     userprofiles,
-    unmount,
-    clamav,
     veryverbose,
     verbose,
     yara,
@@ -74,6 +66,9 @@ def main(
     system_artefacts,
     quotes,
     asciitext,
+    skip_unmount=False,  # Skip unmounting previous images (for multi-image phased processing)
+    phase=None,  # Phase control: "mount", "collect", "process", or None for full pipeline
+    mounted_imgs=None,  # Pre-populated imgs dict from mount phase (for collect/process phases)
 ):
     partitions = []
     hashing_enabled = hashall or hashcollected
@@ -81,39 +76,22 @@ def main(
     # Print startup message immediately
     print("Initializing Elrond DFIR Analysis...")
     print(f"Case: {case}")
-    print(f"Mode: {'Collect' if collect else 'Gandalf' if gandalf else 'Reorganise'}")
+    print(f"Mode: {'Collect' if collect else 'Gandalf'}")
     sys.stdout.flush()
 
     # Only clear screen in interactive mode
     if not is_noninteractive():
         subprocess.Popen(["clear"])
         time.sleep(2)
-        if lotr:
-            print(
-                "\n\n    \033[1;36m        .__                               .___\n      ____  |  |  _______   ____    ____    __| _/\n    _/ __ \\ |  |  \\_  __ \\ /  _ \\  /    \\  / __ |\n    \\  ___/ |  |__ |  | \\/(  <_> )|   |  \\/ /_/ |\n     \\___  >|____/ |__|    \\____/ |___|  /\\____ |\n         \\/                            \\/      \\/\n\n     {}\033[1;m\n\n".format(
-                    random.choice(quotes)
-                )
-            )
-        else:
-            print("\n\n    \033[1;36mElrond DFIR Analysis\033[1;m\n\n")
-    if not collect and not gandalf and not reorganise:
+        print("\n\n    \033[1;36mElrond DFIR Analysis\033[1;m\n\n")
+    if not collect and not gandalf:
         print(
-            "\n  You MUST use the collect switch (-C), gandalf switch (-G) or the reorganise switch (-O)\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C)\n   If you have previously collected artefacts having used gandalf, you must invoke the gandalf switch (-G)\n   If you have previously collected artefacts NOT having used gandalf, you must invoke the reorganise switch (-O)\n\n  Please try again.\n\n\n"
+            "\n  You MUST use the collect switch (-C) or gandalf switch (-G)\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C)\n   If you have previously collected artefacts having used gandalf, you must invoke the gandalf switch (-G)\n\n  Please try again.\n\n\n"
         )
         sys.exit()
     if collect and gandalf:
         print(
             "\n  You cannot use the collect switch (-C) and the collect gandalf (-G).\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C).\n   If you have previously collected artefacts using gandalf, you must invoke the gandalf switch (-G).\n\n  Please try again.\n\n\n"
-        )
-        sys.exit()
-    if collect and reorganise:
-        print(
-            "\n  You cannot use the collect switch (-C) and the reorganise switch (-O).\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C).\n   If you have previously collected artefacts NOT using gandalf, you must invoke the reorganise switch (-O).\n\n  Please try again.\n\n\n"
-        )
-        sys.exit()
-    if gandalf and reorganise:
-        print(
-            "\n  You cannot use the gandalf switch (-G) and the reorganise switch (-O).\n   If you have previously collected artefacts using gandalf, you must invoke the gandalf switch (-G).\n   If you have previously collected artefacts NOT using gandalf, you must invoke the reorganise switch (-O).\n\n  Please try again.\n\n\n"
         )
         sys.exit()
     if volatility and not process:
@@ -122,7 +100,7 @@ def main(
         )
         sys.exit()
     if (not collect or gandalf) and (
-        vss or collectfiles or imageinfo or symlinks or timeline or userprofiles
+        vss or collectfiles or symlinks or timeline or userprofiles
     ):
         if gandalf:
             gandalforcollect = "gandalf switch (-G)"
@@ -132,8 +110,6 @@ def main(
             collectand = "vss switch (-c)"
         elif (not collect or gandalf) and collectfiles:
             collectand = "collectfiles switch (-F)"
-        elif (not collect or gandalf) and imageinfo:
-            collectand = "imageinfo switch (-I)"
         elif (not collect or gandalf) and symlinks:
             collectand = "symlinks switch (-s)"
         elif (not collect or gandalf) and timeline:
@@ -151,14 +127,10 @@ def main(
             "\n\n  You cannot provide the memorytimeline switch (-t) without provided the Volatility switch (-M). Please try again.\n\n\n\n"
         )
         sys.exit()
-    if analysis and not process:
+    # Skip validation when in phased mode (mount/collect phases don't need process for analysis)
+    if analysis and not process and phase not in ("mount", "collect"):
         print(
             "\n\n  You cannot provide the Analysis switch (-A) without provided the Processing switch (-P). Please try again.\n\n\n\n"
-        )
-        sys.exit()
-    if not metacollected and nsrl and (superquick or quick):
-        print(
-            "\n\n  In order to use the NSRL switch (-H), you must either provide the metacollected switch (-o) - with or without the Superquick (-Q) and Quick Flags (-q).\n  Or, if not using the metacollected switch (-o), remove the Superquick (-Q) and Quick Flags (-q) altogether. Please try again.\n\n\n\n"
         )
         sys.exit()
     if nsrl and not hashing_enabled:
@@ -179,11 +151,6 @@ def main(
             "\n\n  You cannot provide the Navigator switch (-N) without providing the Splunk switch (-S). Please try again.\n\n\n\n"
         )
         sys.exit()
-    if lotr:
-        print(random.choice(asciitext))
-        safe_input("\n\n\n\n\n\n     Press Enter to continue... ", default="")
-        subprocess.Popen(["clear"])
-        time.sleep(2)
     starttime, ot, imgs, foundimgs, doneimgs, d, vssmem = (
         datetime.now().isoformat(),
         {},
@@ -229,7 +196,7 @@ def main(
     if os.path.exists("/opt/elrond/elrond/tools/.profiles"):
         os.remove("/opt/elrond/elrond/tools/.profiles")
     if len(directory) > 1:
-        od = directory[1]
+        od = directory[-1]  # Last element is always the destination
         if not od.endswith("/"):
             od = od + "/"
         if not os.path.isdir(od):
@@ -316,7 +283,8 @@ def main(
             )
         )
         sys.exit()
-    if not unmount:
+    # Unmount any previously mounted images (unless in multi-image phased mode)
+    if not skip_unmount:
         unmount_images(elrond_mount, ewf_mount)
     if volatility:
         # Always use Volatility3 (installed by default in Docker container)
@@ -328,14 +296,42 @@ def main(
     else:
         volchoice = ""
         memtimeline = ""
-    safe_print(
-        "\n  -> \033[1;36mCommencing Identification Phase...\033[1;m\n  ----------------------------------------"
-    )
-    print(" -> {} -> starting image mounting and identification...".format(
-        datetime.now().isoformat().replace("T", " ")
-    ))
-    time.sleep(1)
-    if collect:  # collect artefacts from disk/memory images
+    # PHASE CONTROL: Skip mounting if in collect/process/analyse/index phase (images already mounted)
+    if phase in ("collect", "process", "analyse", "index") and mounted_imgs:
+        print("  -> Using pre-mounted images from mount phase.")
+        allimgs = mounted_imgs.get("allimgs", {})
+        imgs = mounted_imgs.get("imgs", {})
+        output_directory = mounted_imgs.get("output_directory", output_directory)
+        partitions = mounted_imgs.get("partitions", [])
+        # Set f and path from the source (d parameter contains the image path)
+        if specific_image_file:
+            f = specific_image_file
+        else:
+            f = os.path.basename(d.rstrip('/'))
+        path = d
+        # Set appropriate stage for each phase
+        if phase == "collect":
+            stage = "collecting"
+        elif phase == "process":
+            stage = "processing"
+        elif phase == "analyse":
+            stage = "analysing"
+        elif phase == "index":
+            stage = "indexing"
+        else:
+            stage = "processing"
+        # Skip to collection/processing
+    else:
+        # Only print phase start in legacy (non-phased) mode - elrond.py handles phase announcements
+        if phase is None:
+            safe_print(
+                "\n  -> \033[1;36mCommencing Identification Phase...\033[1;m\n  ----------------------------------------"
+            )
+            print(" -> {} -> starting image mounting and identification...".format(
+                datetime.now().isoformat().replace("T", " ")
+            ))
+            time.sleep(1)
+    if collect and phase not in ("collect", "process", "analyse", "index"):  # collect artefacts from disk/memory images (mount phase)
         # If a specific image file was provided, only iterate top-level directory
         # and only process that file (skip subdirectories which may contain
         # artefacts from previous jobs)
@@ -457,7 +453,7 @@ def main(
                 else:
                     wish_to_mount = "y"
                 if wish_to_mount != "n":
-                    if hashing_enabled and not superquick and not quick:
+                    if hashing_enabled:
                         if not os.path.exists(output_directory + f + "/meta.audit"):
                             with open(
                                 output_directory + f + "/meta.audit", "w"
@@ -513,7 +509,6 @@ def main(
                         elrond_mount,
                         ewf_mount,
                         allimgs,
-                        imageinfo,
                         imgformat,
                         vss,
                         "mounting",
@@ -537,12 +532,23 @@ def main(
                             datetime.now().isoformat().replace("T", " "), f
                         )
                         write_audit_log_entry(verbosity, output_directory, entry, prnt)
+                        # Clean up the empty directory to avoid phantom directories
+                        phantom_dir = os.path.join(output_directory, f)
+                        if os.path.isdir(phantom_dir):
+                            try:
+                                # Only remove if empty or contains only audit files we created
+                                dir_contents = os.listdir(phantom_dir)
+                                if len(dir_contents) == 0 or dir_contents == ["meta.audit"] or dir_contents == ["rivendell_audit.log"] or set(dir_contents) == {"meta.audit", "rivendell_audit.log"}:
+                                    shutil.rmtree(phantom_dir)
+                                    print(f"   Removed empty directory for unmounted image '{f}'")
+                            except Exception as e:
+                                print(f"   Warning: Could not remove phantom directory: {e}")
                 else:
                     print("    OK. '{}' will not be mounted.\n".format(f))
                 allimgs = {**allimgs, **ot}
                 print()
             elif volatility and ("data" in imgformat or "crash dump" in imgformat):
-                if hashing_enabled and not superquick and not quick:
+                if hashing_enabled:
                     if not os.path.exists(output_directory + f + "/meta.audit"):
                         with open(
                             output_directory + f + "/meta.audit", "w"
@@ -583,8 +589,6 @@ def main(
                     output_directory,
                     flags,
                     auto,
-                    superquick,
-                    quick,
                     metacollected,
                     cwd,
                     sha256,
@@ -610,8 +614,6 @@ def main(
             nsrl,
             volatility,
             metacollected,
-            superquick,
-            quick,
             ot,
             d,
             cwd,
@@ -625,8 +627,6 @@ def main(
             vssmem,
             memtimeline,
         )
-    else:
-        f, path, stage = "", "", "reorganise"
     allimgs = OrderedDict(sorted(allimgs.items(), key=lambda x: x[1]))
     if len(allimgs) > 0:
         for (
@@ -636,14 +636,16 @@ def main(
             if "::" in image_name and "::memory_" not in image_name:
                 imgs[image_location] = image_name
         time.sleep(1)
-        if volatility:
-            print(
-                "  ----------------------------------------\n  -> Completed Identification & Extraction Phase.\n"
-            )
-        else:
-            print(
-                "  ----------------------------------------\n  -> Completed Identification Phase.\n"
-            )
+        # Don't print phase completion in mount phase - elrond.py will handle it after all images
+        if phase != "mount":
+            if volatility:
+                print(
+                    "  ----------------------------------------\n  -> Completed Identification & Extraction Phase.\n"
+                )
+            else:
+                print(
+                    "  ----------------------------------------\n  -> Completed Identification Phase.\n"
+                )
     else:
         if not auto:
             nodisks = safe_input(
@@ -655,48 +657,78 @@ def main(
                 )
                 sys.exit()
     time.sleep(1)
-    if (
-        collect or reorganise
-    ):  # Collection/Reorganisation, Processing, Keyword Searching, Analysis & Timelining
-        collect_process_keyword_analysis_timeline(
-            auto,
-            collect,
-            process,
-            analysis,
-            magicbytes,
-            extractiocs,
-            timeline,
-            vss,
-            collectfiles,
-            nsrl,
-            keywords,
-            volatility,
-            metacollected,
-            superquick,
-            quick,
-            reorganise,
-            symlinks,
-            userprofiles,
-            verbose,
-            d,
-            cwd,
-            sha256,
-            flags,
-            system_artefacts,
-            output_directory,
-            verbosity,
-            f,
-            allimgs,
-            imgs,
-            path,
-            volchoice,
-            vssmem,
-            memtimeline,
-            stage,
-        )
+
+    # PHASE CONTROL: If mount-only phase, return after mounting
+    if phase == "mount":
+        return allimgs, imgs, output_directory, partitions
+
+    if collect:  # Collection, Processing, Keyword Searching, Analysis & Timelining
+        # Determine collect/process phase for core function
+        core_phase = None
+        if phase == "collect":
+            core_phase = "collect"
+        elif phase == "process":
+            core_phase = "process"
+        elif phase == "analyse":
+            core_phase = "analyse"
+        elif phase == "index":
+            # Skip core function entirely for index phase - go straight to Splunk/Elastic
+            core_phase = None
+
+        # Skip core function for index phase - only run Splunk/Elastic/Navigator
+        if phase != "index":
+            collect_process_keyword_analysis_timeline(
+                auto,
+                collect,
+                process,
+                analysis,
+                magicbytes,
+                extractiocs,
+                timeline,
+                vss,
+                collectfiles,
+                nsrl,
+                keywords,
+                volatility,
+                metacollected,
+                symlinks,
+                userprofiles,
+                verbose,
+                d,
+                cwd,
+                sha256,
+                flags,
+                system_artefacts,
+                output_directory,
+                verbosity,
+                f,
+                allimgs,
+                imgs,
+                path,
+                volchoice,
+                vssmem,
+                memtimeline,
+                stage,
+                phase=core_phase,
+            )
+
+        # PHASE CONTROL: If collect-only phase, return after collection
+        if phase == "collect":
+            print("  -> Collect phase complete.")
+            return allimgs, imgs, output_directory, partitions
+
+        # PHASE CONTROL: If process-only phase, return after processing
+        if phase == "process":
+            print("  -> Process phase complete.")
+            return allimgs, imgs, output_directory, partitions
+
+        # PHASE CONTROL: Skip to indexing if in "index" phase (analysis already done)
+        if phase == "index":
+            pass  # Fall through to indexing section below
+
         # MITRE tagging now happens incrementally during artefact extraction in artemis.py
         # Here we just deduplicate the techniques file for Navigator layer generation
-        if navigator and process:
+        if navigator and process and phase != "index":
             for root, dirs, _ in os.walk(output_directory):
                 # Find the image directory containing mitre_techniques.txt
                 techniques_file = os.path.join(root, "mitre_techniques.txt")
@@ -746,7 +778,7 @@ def main(
     if (
         len(allimgs) > 0
     ):  # Post-processing metadata, YARA, Splunk, Elastic, Archive, Deletion
-        if hashing_enabled and (not superquick or metacollected):
+        if hashing_enabled:
             safe_print(
                 "\n\n  -> \033[1;36mCommencing Metadata phase for proccessed artefacts...\033[1;m\n  ----------------------------------------"
             )
@@ -835,25 +867,6 @@ def main(
                 "  ----------------------------------------\n  -> Completed Metadata phase for proccessed artefacts.\n"
             )
             time.sleep(1)
-        if clamav:
-            safe_print(
-                "\n\n  -> \033[1;36mCommencing ClamAV Phase...\033[1;m\n  ----------------------------------------"
-            )
-            time.sleep(1)
-            for loc, img in imgs.items():
-                if not auto:
-                    yes_clam = safe_input(
-                        "  Do you wish to conduct ClamAV scanning for '{}'? Y/n [Y] ".format(
-                            img.split("::")[0]
-                        )
-                    )
-                if auto or yes_clam != "n":
-                    run_clamscan(verbosity, output_directory, loc, img, collectfiles)
-            flags.append("06clam")
-            print(
-                "  ----------------------------------------\n  -> Completed ClamAV Phase.\n"
-            )
-            time.sleep(1)
         if yara:
             safe_print(
                 "\n\n  -> \033[1;36mCommencing Yara Phase...\033[1;m\n  ----------------------------------------"
@@ -883,6 +896,11 @@ def main(
 
         # Clean up small files (<10 bytes) and empty directories after processing
         cleanup_small_files_and_empty_dirs(output_directory)
+
+        # PHASE CONTROL: If analyse-only phase, return after analysis (before indexing)
+        if phase == "analyse":
+            print("  -> Analyse phase complete.")
+            return allimgs, imgs, output_directory, partitions
 
         # Initialize credentials to None (will be set if Splunk/Elastic configured)
         usercred, pswdcred = None, None
@@ -1197,6 +1215,4 @@ def main(
         print()
         print("  ----------------------------------------")
         print("\n")
-    if lotr:
-        print("\n\n     \033[1;36m{}\033[1;m".format(random.choice(quotes) + "\n\n\n"))
     os.chdir(cwd)

@@ -1,0 +1,69 @@
+# Docker ignore file for celery-worker build context
+# Excludes unnecessary files when copying src/analysis and src/web/backend
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation and config files
+*.md
+LICENSE
+*.yml
+*.yaml
+!docker-compose.yml
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info
+.eggs
+.mypy_cache
+.pytest_cache
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+._*
+
+# Node modules (frontend)
+node_modules
+src/web/frontend/node_modules
+src/analysis/web/frontend/node_modules
+
+# Build artifacts
+dist
+build
+
+# Test data and output (don't include large forensic images)
+*.E01
+*.raw
+*.vmdk
+*.dd
+test_data
+tests/fixtures
+
+# Logs
+*.log
+logs/
+
+# Docker files (except what we need)
+Dockerfile
+!src/web/backend/Dockerfile
+!src/web/backend/Dockerfile.forensics

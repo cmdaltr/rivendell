@@ -151,11 +151,13 @@ function JobDetails() {
       'userprofiles': 'User Profiles',
       'nsrl': 'NSRL',
       'extract_iocs': 'Extract IOCs',
-      'clamav': 'ClamAV',
       'splunk': 'Splunk',
       'elastic': 'Elastic',
       'navigator': 'Navigator'
     };
+
+    // SIEM options that get special treatment with logos and links
+    const siemOptions = ['splunk', 'elastic', 'navigator'];
 
     Object.entries(job.options).forEach(([key, value]) => {
       // Use case-insensitive comparison for internal options
@@ -163,10 +165,88 @@ function JobDetails() {
       if (value === true && !internalOptions.includes(keyLower)) {
         // Check if there's special formatting for this key (case-insensitive)
         const displayName = specialFormatting[keyLower] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-        enabled.push(displayName);
+        enabled.push({
+          name: displayName,
+          key: keyLower,
+          isSiem: siemOptions.includes(keyLower)
+        });
       }
     });
     return enabled;
+  };
+
+  const getSiemLink = (optionKey) => {
+    if (!job) return null;
+    switch (optionKey) {
+      case 'splunk':
+        return 'http://localhost:7755/en-GB/app/elrond/mitre';
+      case 'elastic':
+        return `http://localhost:5601/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-20y,to:now))&_a=(columns:!(),filters:!(),index:${job.case_number},interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))`;
+      case 'navigator':
+        const layerUrl = `http://localhost:5602/assets/${job.case_number}.json`;
+        return `http://localhost:5602/#layerURL=${encodeURIComponent(layerUrl)}`;
+      default:
+        return null;
+    }
+  };
+
+  const renderSiemIcon = (optionKey) => {
+    switch (optionKey) {
+      case 'splunk':
+        return (
+          <svg width="16" height="16" viewBox="0 0 100 100" fill="none" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+            <defs>
+              <radialGradient id="splunkGradientBadge" cx="30%" cy="30%">
+                <stop offset="0%" style={{ stopColor: '#FF6B9D', stopOpacity: 1 }} />
+                <stop offset="50%" style={{ stopColor: '#E91E8C', stopOpacity: 1 }} />
+                <stop offset="100%" style={{ stopColor: '#C4166C', stopOpacity: 1 }} />
+              </radialGradient>
+            </defs>
+            <circle cx="50" cy="50" r="48" fill="url(#splunkGradientBadge)"/>
+            <path d="M45 35 L60 50 L45 65" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+          </svg>
+        );
+      case 'elastic':
+        return (
+          <svg width="16" height="16" viewBox="0 0 100 100" fill="none" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+            <defs>
+              <linearGradient id="elasticYellowBadge" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style={{ stopColor: '#FED10A', stopOpacity: 1 }} />
+                <stop offset="100%" style={{ stopColor: '#FDB42F', stopOpacity: 1 }} />
+              </linearGradient>
+              <linearGradient id="elasticTealBadge" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style={{ stopColor: '#00BFB3', stopOpacity: 1 }} />
+                <stop offset="100%" style={{ stopColor: '#00A9A5', stopOpacity: 1 }} />
+              </linearGradient>
+              <linearGradient id="elasticBlueBadge" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style={{ stopColor: '#24BBB1', stopOpacity: 1 }} />
+                <stop offset="100%" style={{ stopColor: '#0077CC', stopOpacity: 1 }} />
+              </linearGradient>
+            </defs>
+            <rect x="10" y="20" width="70" height="12" rx="6" fill="url(#elasticYellowBadge)"/>
+            <rect x="15" y="44" width="70" height="12" rx="6" fill="url(#elasticTealBadge)"/>
+            <rect x="20" y="68" width="70" height="12" rx="6" fill="url(#elasticBlueBadge)"/>
+          </svg>
+        );
+      case 'navigator':
+        return (
+          <svg width="16" height="16" viewBox="0 0 100 100" fill="none" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+            <defs>
+              <linearGradient id="mitreGradientBadge" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style={{ stopColor: '#FFD700', stopOpacity: 1 }} />
+                <stop offset="50%" style={{ stopColor: '#FFC107', stopOpacity: 1 }} />
+                <stop offset="100%" style={{ stopColor: '#FF9800', stopOpacity: 1 }} />
+              </linearGradient>
+            </defs>
+            <path d="M50 10 L85 25 L85 50 Q85 75 50 90 Q15 75 15 50 L15 25 Z" fill="url(#mitreGradientBadge)"/>
+            <circle cx="50" cy="50" r="22" fill="none" stroke="white" strokeWidth="3"/>
+            <circle cx="50" cy="50" r="14" fill="none" stroke="white" strokeWidth="3"/>
+            <circle cx="50" cy="50" r="6" fill="white"/>
+          </svg>
+        );
+      default:
+        return null;
+    }
   };
 
   if (loading) {
@@ -449,7 +529,10 @@ function JobDetails() {
       <div className="card">
         <div className="job-header">
           <div>
-            <h2>Job Details</h2>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              Job Details
+              <span style={{ fontSize: '0.9rem', fontWeight: 'normal', color: '#8a9ba8' }}>{formatDate(job.started_at)}</span>
+            </h2>
             <div className="job-id">ID: {job.id}</div>
           </div>
           <div className="job-actions">
@@ -492,44 +575,30 @@ function JobDetails() {
 
         {error && <div className="error">{error}</div>}
 
-        {/* Row 1: Case # | Destination | Progress */}
-        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.525fr 0.66fr 1.5fr', gap: '1rem', marginBottom: '1rem' }}>
+        {/* Row 1: Case # | Duration | Destination */}
+        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.5fr 0.5fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
           <div className="info-item">
             <strong>Case #:</strong>
             <span>{job.case_number}</span>
-          </div>
-          <div className="info-item">
-            <strong>Destination:</strong>
-            <span>{job.destination_path ? job.destination_path.replace(/\/[^/]+$/, '') : 'Default location'}</span>
-          </div>
-          <div className="info-item">
-            <div className="progress-bar" style={{ marginRight: 'auto', width: '80%' }}>
-              <div
-                className="progress-fill"
-                style={{ width: `${job.progress}%` }}
-              >
-              </div>
-              {job.progress > 0 && <span className="progress-text">{job.progress}%</span>}
-            </div>
-          </div>
-        </div>
-        {/* Row 2: Status | Duration | Started | Completed */}
-        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.72fr 0.9fr 1fr 1fr', gap: '1rem', marginBottom: '0.5rem' }}>
-          <div className="info-item">
-            <strong>Status:</strong>
-            <span className={getStatusClass(job.status)} style={{ display: 'inline-block', width: '50%', textAlign: 'center' }}>{job.status}</span>
           </div>
           <div className="info-item">
             <strong>Duration:</strong>
             <span>{formatDuration(job.started_at, job.completed_at)}</span>
           </div>
           <div className="info-item">
-            <strong>Started:</strong>
-            <span>{formatDate(job.started_at)}</span>
+            <strong>Destination:</strong>
+            <span>{job.destination_path ? job.destination_path.replace(/\/[^/]+$/, '') : 'Default location'}</span>
           </div>
-          <div className="info-item">
-            <strong>Completed:</strong>
-            <span>{formatDate(job.completed_at)}</span>
+        </div>
+        {/* Row 3: Progress bar */}
+        <div className="job-info-grid" style={{ marginBottom: '0.5rem' }}>
+          <div className="progress-bar" style={{ width: '100%' }}>
+            <div
+              className="progress-fill"
+              style={{ width: `${job.progress}%` }}
+            >
+            </div>
+            {job.progress > 0 && <span className="progress-text">{job.progress}%</span>}
           </div>
         </div>
 
@@ -554,9 +623,29 @@ function JobDetails() {
             <h3>Enabled Options</h3>
             {getEnabledOptions().length > 0 ? (
               <div className="options-tags">
-                {getEnabledOptions().map((option, index) => (
-                  <span key={index} className="option-tag">{option}</span>
-                ))}
+                {getEnabledOptions().map((option, index) => {
+                  // For SIEM options (when job is completed), render as clickable links with icons
+                  if (option.isSiem && job.status === 'completed') {
+                    const link = getSiemLink(option.key);
+                    return (
+                      <a
+                        key={index}
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`option-tag option-tag-siem option-tag-${option.key}`}
+                        title={`Open ${option.name}`}
+                      >
+                        {renderSiemIcon(option.key)}
+                        {option.name}
+                      </a>
+                    );
+                  }
+                  // Regular options
+                  return (
+                    <span key={index} className="option-tag">{option.name}</span>
+                  );
+                })}
               </div>
             ) : (
               <p>No options enabled (default configuration)</p>
@@ -564,120 +653,40 @@ function JobDetails() {
           </div>
         </div>
 
-        {job.result && job.status === 'completed' && (
-          <div className="result-section">
-            <h3>Results</h3>
-
-            {/* SIEM Quick Access Links */}
-            {(job.options?.splunk || job.options?.elastic || job.options?.navigator) && (
-              <div style={{ marginTop: '1.5rem' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1rem' }}>
-                  {/* Splunk */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.splunk ? 'rgba(255, 107, 157, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.splunk ? 'rgba(255, 107, 157, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.splunk ? 1 : 0.4, cursor: job.options?.splunk ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={() => job.options?.splunk && window.open('http://localhost:7755/en-GB/app/elrond/mitre', '_blank')}>
-                    <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>
-                      <defs>
-                        <radialGradient id="splunkGradient" cx="30%" cy="30%">
-                          <stop offset="0%" style={{ stopColor: '#FF6B9D', stopOpacity: 1 }} />
-                          <stop offset="50%" style={{ stopColor: '#E91E8C', stopOpacity: 1 }} />
-                          <stop offset="100%" style={{ stopColor: '#C4166C', stopOpacity: 1 }} />
-                        </radialGradient>
-                      </defs>
-                      <circle cx="50" cy="50" r="48" fill="url(#splunkGradient)"/>
-                      <path d="M45 35 L60 50 L45 65" stroke="white" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                    </svg>
-                    <span style={{ color: job.options?.splunk ? '#f0dba5' : '#666', fontSize: '0.95rem', fontWeight: '500' }}>Splunk</span>
-                  </div>
-
-                  {/* Elastic/Kibana */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.elastic ? 'rgba(0, 191, 179, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.elastic ? 'rgba(0, 191, 179, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.elastic ? 1 : 0.4, cursor: job.options?.elastic ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={() => job.options?.elastic && window.open(`http://localhost:5601/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-20y,to:now))&_a=(columns:!(),filters:!(),index:${job.case_number},interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))`, '_blank')}>
-                    <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>
-                      <defs>
-                        <linearGradient id="elasticYellow" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" style={{ stopColor: '#FED10A', stopOpacity: 1 }} />
-                          <stop offset="100%" style={{ stopColor: '#FDB42F', stopOpacity: 1 }} />
-                        </linearGradient>
-                        <linearGradient id="elasticTeal" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" style={{ stopColor: '#00BFB3', stopOpacity: 1 }} />
-                          <stop offset="100%" style={{ stopColor: '#00A9A5', stopOpacity: 1 }} />
-                        </linearGradient>
-                        <linearGradient id="elasticBlue" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" style={{ stopColor: '#24BBB1', stopOpacity: 1 }} />
-                          <stop offset="100%" style={{ stopColor: '#0077CC', stopOpacity: 1 }} />
-                        </linearGradient>
-                      </defs>
-                      <rect x="10" y="20" width="70" height="12" rx="6" fill="url(#elasticYellow)"/>
-                      <rect x="15" y="44" width="70" height="12" rx="6" fill="url(#elasticTeal)"/>
-                      <rect x="20" y="68" width="70" height="12" rx="6" fill="url(#elasticBlue)"/>
-                    </svg>
-                    <span style={{ color: job.options?.elastic ? '#f0dba5' : '#666', fontSize: '0.95rem', fontWeight: '500' }}>Elastic</span>
-                  </div>
-
-                  {/* Navigator */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: job.options?.navigator ? 'rgba(254, 209, 10, 0.1)' : 'rgba(60, 60, 80, 0.3)', border: `1px solid ${job.options?.navigator ? 'rgba(254, 209, 10, 0.3)' : 'rgba(80, 80, 100, 0.3)'}`, borderRadius: '4px', opacity: job.options?.navigator ? 1 : 0.4, cursor: job.options?.navigator ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
-                       onClick={async () => {
-                         if (job.options?.navigator) {
-                           // Open ATT&CK Navigator with the job's layer file
-                           // Navigator uses URL fragment to load layers: /#layerURL=<encoded-url>
-                           const layerUrl = `http://localhost:5602/assets/${job.case_number}.json`;
-                           const encodedLayerUrl = encodeURIComponent(layerUrl);
-                           window.open(`http://localhost:5602/#layerURL=${encodedLayerUrl}`, '_blank');
-                         }
-                       }}>
-                    <svg width="32" height="32" viewBox="0 0 100 100" fill="none" style={{ marginBottom: '0.5rem' }}>
-                      <defs>
-                        <linearGradient id="mitreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                          <stop offset="0%" style={{ stopColor: '#FFD700', stopOpacity: 1 }} />
-                          <stop offset="50%" style={{ stopColor: '#FFC107', stopOpacity: 1 }} />
-                          <stop offset="100%" style={{ stopColor: '#FF9800', stopOpacity: 1 }} />
-                        </linearGradient>
-                      </defs>
-                      <path d="M50 10 L85 25 L85 50 Q85 75 50 90 Q15 75 15 50 L15 25 Z" fill="url(#mitreGradient)"/>
-                      <circle cx="50" cy="50" r="22" fill="none" stroke="white" strokeWidth="3"/>
-                      <circle cx="50" cy="50" r="14" fill="none" stroke="white" strokeWidth="3"/>
-                      <circle cx="50" cy="50" r="6" fill="white"/>
-                      <line x1="50" y1="28" x2="50" y2="38" stroke="white" strokeWidth="2"/>
-                      <line x1="50" y1="62" x2="50" y2="72" stroke="white" strokeWidth="2"/>
-                      <line x1="28" y1="50" x2="38" y2="50" stroke="white" strokeWidth="2"/>
-                      <line x1="62" y1="50" x2="72" y2="50" stroke="white" strokeWidth="2"/>
-                    </svg>
-                    <span style={{ color: job.options?.navigator ? '#f0dba5' : '#666', fontSize: '0.95rem', fontWeight: '500' }}>Navigator</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         <div className="log-section">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0 }}>Job Log ({job.log.length} entries)</h3>
-            {job.log.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <button
-                onClick={downloadLog}
+                onClick={job.log.length > 0 ? downloadLog : undefined}
+                disabled={job.log.length === 0}
                 style={{
                   padding: '0.5rem 1rem',
-                  background: 'rgba(107, 142, 63, 0.3)',
-                  border: '1px solid rgba(107, 142, 63, 0.5)',
+                  background: job.log.length > 0 ? 'rgba(107, 142, 63, 0.3)' : 'rgba(80, 80, 80, 0.3)',
+                  border: job.log.length > 0 ? '1px solid rgba(107, 142, 63, 0.5)' : '1px solid rgba(80, 80, 80, 0.5)',
                   borderRadius: '4px',
-                  color: '#a7db6c',
-                  cursor: 'pointer',
+                  color: job.log.length > 0 ? '#a7db6c' : '#666',
+                  cursor: job.log.length > 0 ? 'pointer' : 'not-allowed',
                   fontFamily: "'Cinzel', 'Times New Roman', serif",
                   fontSize: '0.9rem',
                   fontWeight: 600,
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  opacity: job.log.length > 0 ? 1 : 0.5
                 }}
                 onMouseOver={(e) => {
-                  e.target.style.background = 'rgba(107, 142, 63, 0.4)';
+                  if (job.log.length > 0) e.target.style.background = 'rgba(107, 142, 63, 0.4)';
                 }}
                 onMouseOut={(e) => {
-                  e.target.style.background = 'rgba(107, 142, 63, 0.3)';
+                  if (job.log.length > 0) e.target.style.background = 'rgba(107, 142, 63, 0.3)';
                 }}
               >
                 Download Log
               </button>
-            )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <strong style={{ color: '#a7db6c', fontFamily: "'Cinzel', 'Times New Roman', serif", fontSize: '0.9rem' }}>Status:</strong>
+                <span className={getStatusClass(job.status)} style={{ textAlign: 'center' }}>{job.status}</span>
+              </div>
+            </div>
+            <h3 style={{ margin: 0 }}>Job Log ({job.log.length} entries)</h3>
           </div>
           <div className="log-viewer" ref={logEndRef}>
             <pre>

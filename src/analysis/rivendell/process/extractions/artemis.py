@@ -154,21 +154,23 @@ def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
     """
     import re
 
-    # Determine techniques file path
-    # Need to go up to the image directory (parent of 'cooked')
-    # json_path example: /output/case/image/cooked/browsers/file.json
-    # We need: /output/case/image/mitre_techniques.txt
+    # Determine techniques file path at CASE level
+    # json_path example: /output/case/image.E01/artefacts/cooked/browsers/file.json
+    # We need: /output/case/mitre_techniques.txt (alongside rivendell_audit.log)
     current_dir = os.path.dirname(json_path)
-    # Walk up until we find 'cooked' directory or reach a reasonable limit
-    image_dir = current_dir
-    for _ in range(5):  # Max 5 levels up
-        parent = os.path.dirname(image_dir)
-        if os.path.basename(image_dir) == "cooked":
-            image_dir = parent  # Found cooked, go one more level up to image dir
+    # Walk up until we find 'cooked' directory, then go up to case level
+    case_dir = current_dir
+    for _ in range(6):  # Max 6 levels up to reach case from deep cooked paths
+        parent = os.path.dirname(case_dir)
+        if os.path.basename(case_dir) == "cooked":
+            # Found cooked, go up THREE levels: cooked -> artefacts -> image -> case
+            artefacts_dir = os.path.dirname(case_dir)  # artefacts
+            image_dir = os.path.dirname(artefacts_dir)  # image.E01
+            case_dir = os.path.dirname(image_dir)  # case
             break
-        image_dir = parent
-    techniques_file_path = os.path.join(image_dir, "mitre_techniques.txt")
-    os.makedirs(os.path.dirname(techniques_file_path), exist_ok=True)
+        case_dir = parent
+    techniques_file_path = os.path.join(case_dir, "mitre_techniques.txt")
+    os.makedirs(case_dir, exist_ok=True)
 
     # Base technique for artifact type
     base_technique = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower(), {}).get("technique_id")
@@ -509,18 +511,21 @@ def enrich_json_with_mitre(json_path: str, artifact_type: str, techniques_file_p
 
         # Determine techniques file path if not provided
         if not techniques_file_path:
-            # Go up from cooked dir to image dir, write mitre_techniques.txt there
-            # json_path example: /output/case/image/cooked/browsers/file.json
-            # We need: /output/case/image/mitre_techniques.txt
+            # Go up from cooked dir to CASE level, write mitre_techniques.txt there
+            # json_path example: /output/case/image.E01/artefacts/cooked/browsers/file.json
+            # We need: /output/case/mitre_techniques.txt (alongside rivendell_audit.log)
             current_dir = os.path.dirname(json_path)
-            image_dir = current_dir
-            for _ in range(5):  # Max 5 levels up
-                parent = os.path.dirname(image_dir)
-                if os.path.basename(image_dir) == "cooked":
-                    image_dir = parent  # Found cooked, go one more level up to image dir
+            case_dir = current_dir
+            for _ in range(6):  # Max 6 levels up to reach case from deep cooked paths
+                parent = os.path.dirname(case_dir)
+                if os.path.basename(case_dir) == "cooked":
+                    # Found cooked, go up THREE levels: cooked -> artefacts -> image -> case
+                    artefacts_dir = os.path.dirname(case_dir)  # artefacts
+                    image_dir = os.path.dirname(artefacts_dir)  # image.E01
+                    case_dir = os.path.dirname(image_dir)  # case
                     break
-                image_dir = parent
-            techniques_file_path = os.path.join(image_dir, "mitre_techniques.txt")
+                case_dir = parent
+            techniques_file_path = os.path.join(case_dir, "mitre_techniques.txt")
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(techniques_file_path), exist_ok=True)

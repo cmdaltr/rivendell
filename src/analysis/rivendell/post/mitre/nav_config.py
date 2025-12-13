@@ -300,34 +300,21 @@ def configure_navigator(verbosity, case, splunk, elastic, usercred, pswdcred, ou
 
     foundtechniques = []
 
-    # Read techniques from mitre_techniques.txt file (created during enrichment)
+    # Read techniques from CASE-level mitre_techniques.txt file
+    # (All modules now write to a single consolidated file at case level)
     if output_directory:
-        # First, try to find mitre_techniques.txt directly in output_directory or its immediate subdirs
-        # The techniques file is written at the image level (parent of 'cooked' folder)
-        techniques_file = None
+        all_techniques = set()
 
-        # Check output_directory itself first
-        direct_path = os.path.join(output_directory, TECHNIQUES_FILE)
-        if os.path.exists(direct_path):
-            techniques_file = direct_path
-        else:
-            # Check one level deep (e.g., output_directory/image_name/mitre_techniques.txt)
-            for item in os.listdir(output_directory):
-                item_path = os.path.join(output_directory, item)
-                if os.path.isdir(item_path):
-                    candidate = os.path.join(item_path, TECHNIQUES_FILE)
-                    if os.path.exists(candidate):
-                        techniques_file = candidate
-                        break
-
-        if techniques_file:
-            print(f"     Reading techniques from {techniques_file}...")
+        # Check for case-level techniques file (alongside rivendell_audit.log)
+        case_level_path = os.path.join(output_directory, TECHNIQUES_FILE)
+        if os.path.exists(case_level_path):
             try:
-                with open(techniques_file, 'r') as f:
-                    file_techniques = set(line.strip() for line in f if line.strip())
+                with open(case_level_path, 'r') as f:
+                    all_techniques = set(line.strip() for line in f if line.strip())
+                if all_techniques:
+                    print(f"     Read {len(all_techniques)} techniques from case-level file")
             except Exception as e:
-                print(f"     Warning: Error reading techniques file: {e}")
-                file_techniques = set()
+                print(f"     Warning: Error reading {case_level_path}: {e}")
         else:
             # Fallback: Find artefacts/cooked directory and look for techniques file nearby
             artefacts_dirs = []
@@ -339,12 +326,10 @@ def configure_navigator(verbosity, case, splunk, elastic, usercred, pswdcred, ou
 
             if artefacts_dirs:
                 print("     Reading techniques from enrichment output...")
-                file_techniques = collect_techniques_from_file(artefacts_dirs[0])
-            else:
-                file_techniques = set()
+                all_techniques = collect_techniques_from_file(artefacts_dirs[0])
 
-        if file_techniques:
-            foundtechniques = list(file_techniques)
+        if all_techniques:
+            foundtechniques = list(all_techniques)
 
     # Process found techniques
     if not foundtechniques:

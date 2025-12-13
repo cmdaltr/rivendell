@@ -3,10 +3,12 @@ import { browsePath } from '../api';
 
 function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
   const [currentPath, setCurrentPath] = useState(null);
+  const [rootPath, setRootPath] = useState(null);  // Separate state for dropdown selection
   const [allowedPaths, setAllowedPaths] = useState([]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [permissionWarning, setPermissionWarning] = useState(null);
 
   // Fetch allowed paths on mount
   useEffect(() => {
@@ -18,6 +20,12 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
       loadPath(currentPath);
     }
   }, [currentPath]);
+
+  // Handle root path changes from dropdown
+  const handleRootChange = (newRoot) => {
+    setRootPath(newRoot);
+    setCurrentPath(newRoot);
+  };
 
   const fetchAllowedPaths = async () => {
     try {
@@ -40,6 +48,7 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
 
       // Set first available path as default
       if (paths.length > 0) {
+        setRootPath(paths[0]);
         setCurrentPath(paths[0]);
       }
     } catch (err) {
@@ -50,14 +59,22 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
   const loadPath = async (path) => {
     setLoading(true);
     setError(null);
+    setPermissionWarning(null);
 
     try {
       const data = await browsePath(path);
+      // Handle new response format (object with items) or old format (array)
+      const responseItems = Array.isArray(data) ? data : data.items || [];
       // Filter out hidden files (starting with .) except for ".." navigation
-      const filteredData = data.filter(item =>
+      const filteredData = responseItems.filter(item =>
         item.name === '..' || !item.name.startsWith('.')
       );
       setItems(filteredData);
+
+      // Set permission warning if present
+      if (data.permission_warning) {
+        setPermissionWarning(data.permission_warning);
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load directory');
     } finally {
@@ -119,8 +136,8 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
           <label htmlFor="pathSelect">Select Root Directory:</label>
           <select
             id="pathSelect"
-            value={currentPath || ''}
-            onChange={(e) => setCurrentPath(e.target.value)}
+            value={rootPath || ''}
+            onChange={(e) => handleRootChange(e.target.value)}
             disabled={disabled}
           >
             {allowedPaths.map((path) => (
@@ -158,6 +175,20 @@ function FileBrowser({ onSelectFiles, selectedFiles = [], disabled = false }) {
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      {permissionWarning && (
+        <div className="permission-warning" style={{
+          backgroundColor: 'rgba(255, 193, 7, 0.15)',
+          border: '1px solid rgba(255, 193, 7, 0.5)',
+          borderRadius: '4px',
+          padding: '0.75rem 1rem',
+          marginBottom: '1rem',
+          color: '#ffc107',
+          fontSize: '0.9rem'
+        }}>
+          ⚠️ {permissionWarning}
+        </div>
+      )}
 
       {loading ? (
         <div className="loading">Loading...</div>

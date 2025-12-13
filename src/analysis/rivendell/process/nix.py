@@ -8,6 +8,7 @@ from rivendell.audit import write_audit_log_entry
 from rivendell.process.extractions.mail import (
     extract_email_artefacts,
 )
+from rivendell.process.extractions.mitre_tagger import tag_mitre_technique
 
 
 def repair_malformed_service(service_json):
@@ -157,7 +158,7 @@ def process_bash_history(
             "a",
         ) as bashcsv:
             bashcsv.write("Command\n")
-    with open(artefact) as bashcontent:
+    with open(artefact, encoding="utf-8", errors="ignore") as bashcontent:
         with open(
             output_directory
             + img.split("::")[0]
@@ -169,6 +170,8 @@ def process_bash_history(
         ) as bashcsv:
             for bashline in bashcontent:
                 bashcsv.write(bashline)
+    # Tag MITRE technique for bash_history
+    tag_mitre_technique(output_directory, img, "bash_history")
 
 
 def process_email(
@@ -399,6 +402,8 @@ def process_email(
                 .replace("\\' >", "")
             )
         mailjsonlist.clear()
+    # Tag MITRE technique for email
+    tag_mitre_technique(output_directory, img, "email")
 
 
 def process_group(
@@ -430,7 +435,7 @@ def process_group(
             "a",
         ) as groupcsv:
             groupcsv.write("group_name,password,groupID,group_list\n")
-    with open(artefact) as groupcontent:
+    with open(artefact, encoding="utf-8", errors="ignore") as groupcontent:
         with open(
             output_directory
             + img.split("::")[0]
@@ -442,6 +447,8 @@ def process_group(
             for groupline in groupcontent:
                 if ":*:" or ":x:" in groupline:
                     groupcsv.write(groupline.replace(":", ","))
+    # Tag MITRE technique for group file
+    tag_mitre_technique(output_directory, img, "group")
 
 
 def process_logs(
@@ -532,7 +539,7 @@ def process_logs(
                     "auth" in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                     or "syslog" in artefact.split("/")[-1].split("+")[-1]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         for eachinfo in logfile:
                             for eachkv in re.findall(
                                 r"(?P<LastWriteTime>[A-Z][a-z]{2}\s+\d+\s+\d+\:\d+\:\d+)\s+(?P<Device>[^\ ]+)\s+(?:(?P<Profile>[^\ ]+)\:\s+)?(?P<Account>[^\ ]+)\s?\:\s+(?P<Message>.*)",
@@ -563,7 +570,7 @@ def process_logs(
                                 jsonlist.append(json.dumps(jsondict))
                             jsondict.clear()
                 elif "kern" in artefact.split("/")[-1].split("+")[-1].split(".log")[0]:
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         for eachinfo in logfile:
                             for eachkv in re.findall(
                                 r"(?P<LastWriteTime>[A-Z][a-z]{2}\s+\d+\s+\d+\:\d+\:\d+)\s+(?P<Device>[^\ ]+)\s+(?P<Service>[^\[]+)(?:\[(?P<PID>\d+)\]\:\s+\<(?P<LogLevel>[^\>]+)\>)?\s+\[\s?\d+\.\d+\]\s+(?P<Message>.*)",
@@ -606,7 +613,7 @@ def process_logs(
                     "corecaptured"
                     in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         for eachinfo in logfile:
                             for eachkv in re.findall(
                                 r"(?P<LastWriteTime>[A-Za-z]{3}\s+\d+\s+\d{2}\:\d{2}\:\d{2})\s(?P<Service>\w+)\:\:(?P<Message>.*)",
@@ -629,7 +636,7 @@ def process_logs(
                     or "vmware-vmtoolsd-root"
                     in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         for eachinfo in logfile:
                             for eachkv in re.findall(
                                 r"\[(?P<LastWriteTime>[^\]]+)\]\s+\[\s*(?P<Action>[^\]]+)\]\s+\[(?P<Service>[^\]]+)\]\s*(?P<Message>.*)",
@@ -648,7 +655,7 @@ def process_logs(
                     "LKDC-setup"
                     in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         for eachinfo in str(logfile.readlines()).split(
                             "...creating certificate..."
                         )[1:]:
@@ -680,7 +687,7 @@ def process_logs(
                     or "fsck_hfs"
                     in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         for eachinfo in str(logfile.readlines()).split(
                             ", '\\n', '\\n', "
                         ):
@@ -709,7 +716,7 @@ def process_logs(
                     "hfs_convert"
                     in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         logdata = str(logfile.readlines())
                     for eachinfo in str(
                         re.sub(
@@ -765,7 +772,7 @@ def process_logs(
                 elif (
                     "install" in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
                 ):
-                    with open(artefact) as logfile:
+                    with open(artefact, encoding="utf-8", errors="ignore") as logfile:
                         logdata = str(logfile.readlines())
                     for eachinfo in str(
                         re.sub(
@@ -847,6 +854,8 @@ def process_logs(
                     logjson.write(log_json)
                 logjsonlist.clear()
                 jsonlist.clear()
+                # Tag MITRE technique for log file
+                tag_mitre_technique(output_directory, img, "logs")
 
 
 def process_service(
@@ -907,7 +916,7 @@ def process_service(
                 vssimage,
             )
             write_audit_log_entry(verbosity, output_directory, entry, prnt)
-            with open(artefact) as service:
+            with open(artefact, encoding="utf-8", errors="ignore") as service:
                 servicedata = str(service.readlines())
                 for eachinfo in servicedata.split("\\n', '"):
                     if "=" in eachinfo:
@@ -942,3 +951,5 @@ def process_service(
                 )
                 service_json = repair_malformed_service(service_json)
                 servicejson.write(service_json)
+            # Tag MITRE technique for systemd service
+            tag_mitre_technique(output_directory, img, "service")

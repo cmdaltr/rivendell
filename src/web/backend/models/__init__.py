@@ -12,6 +12,7 @@ from .job import (
     JobUpdate,
     AnalysisOptions,
     FileSystemItem,
+    FileSystemBrowseResponse,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "JobUpdate",
     "AnalysisOptions",
     "FileSystemItem",
+    "FileSystemBrowseResponse",
 ]

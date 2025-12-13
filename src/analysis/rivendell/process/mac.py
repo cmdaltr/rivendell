@@ -9,6 +9,7 @@ from rivendell.audit import write_audit_log_entry
 from rivendell.process.extractions.plist import (
     format_plist_extractions,
 )
+from rivendell.process.extractions.mitre_tagger import tag_mitre_technique
 
 
 def repair_malformed_plist(plist_out):
@@ -265,6 +266,8 @@ def process_plist(
                 )
                 plist_out = repair_malformed_plist(plist_out)
                 plistjson.write("[{}]".format(plist_out))
+                # Tag MITRE technique for plist processing
+                tag_mitre_technique(output_directory, img, "plist")
 
             except:
                 pass

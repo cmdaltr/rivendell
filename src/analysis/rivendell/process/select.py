@@ -212,6 +212,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         # below sections are for multi-paritied drives
         for each in artefacts_list:
@@ -234,6 +235,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -255,6 +257,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -276,6 +279,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -297,6 +301,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -318,6 +323,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -339,6 +345,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -360,6 +367,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -381,6 +389,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         for each in artefacts_list:
             ia = re.findall(r"(?P<i>[^\:]+)\:\ (?P<a>[^\:]+)", each)
@@ -402,6 +411,7 @@ def select_pre_process_artefacts(
                     volchoice,
                     vss,
                     memtimeline,
+                    collectfiles,
                 )
         if collectfiles:
             process_list.clear()
@@ -438,6 +448,7 @@ def select_pre_process_artefacts(
                         volchoice,
                         vss,
                         memtimeline,
+                        collectfiles,
                     )
                 print(
                     "       \033[1;33mProcessed carved files for {}\n\033[1;m".format(

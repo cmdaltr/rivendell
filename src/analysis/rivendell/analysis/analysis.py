@@ -437,28 +437,32 @@ def analyse_artefacts(
         print()
 
     stage = "analysing"
-    atftd = output_directory + img.split("::")[0] + "/artefacts/cooked/"
-    anysd = output_directory + img.split("::")[0] + "/analysis/"
+    # Safe parsing of img - handle both "image::type" and plain "image" formats
+    img_parts = img.split("::")
+    img_name = img_parts[0]
+    img_type = img_parts[1] if len(img_parts) > 1 else ""
+
+    atftd = output_directory + img_name + "/artefacts/cooked/"
+    anysd = output_directory + img_name + "/analysis/"
     strpformat = "%Y-%m-%d %H:%M:%S"
     if analysis:
-        if "vss" in img.split("::")[1]:
+        if "vss" in img_type:
+            vss_part = img_type.split("_")[1] if "_" in img_type else img_type
             atftd, vssimage = (
                 output_directory
-                + img.split("::")[0]
+                + img_name
                 + "/artefacts/cooked/"
-                + img.split("::")[1].split("_")[1],
+                + vss_part,
                 "'"
-                + img.split("::")[0]
+                + img_name
                 + "' ("
-                + img.split("::")[1]
-                .split("_")[1]
-                .replace("vss", "volume shadow copy #")
+                + vss_part.replace("vss", "volume shadow copy #")
                 + ")",
             )
         else:
             atftd, vssimage = (
-                output_directory + img.split("::")[0] + "/artefacts/cooked/",
-                "'" + img.split("::")[0] + "'",
+                output_directory + img_name + "/artefacts/cooked/",
+                "'" + img_name + "'",
             )
         print("    Analsying artefacts for {}...".format(vssimage))
         entry, prnt = "{},{},{},commenced\n".format(
@@ -477,8 +481,15 @@ def analyse_artefacts(
             print(
                 "     Analysing files for file-signature (magic-byte) discrepencies for {}...".format(
                     vssimage
-                )
+                ), flush=True
             )
+            # Check if mount point exists and warn if not
+            if not os.path.exists(mnt) or not os.path.isdir(mnt):
+                print(
+                    " -> {} -> WARNING: Mount point '{}' not available for magic-byte analysis".format(
+                        datetime.now().isoformat().replace("T", " "), mnt
+                    ), flush=True
+                )
             for root, _, files in os.walk(mnt):
                 for f in files:
                     try:
@@ -702,7 +713,7 @@ def analyse_artefacts(
                         pass
         # Analyze MFT data for Extended Attributes, Alternate Data Streams, and Timestomping
         print(" -> {} -> scanning for MFT data to analyse for '{}'...".format(
-            datetime.now().isoformat().replace("T", " "), img.split("::")[0]
+            datetime.now().isoformat().replace("T", " "), img_name
         ))
         mft_files_found = False
         for ar, _, af in os.walk(atftd):
@@ -760,27 +771,34 @@ def analyse_artefacts(
 
         if not mft_files_found:
             print(" -> {} -> no Extended Attributes found for '{}'".format(
-                datetime.now().isoformat().replace("T", " "), img.split("::")[0]
+                datetime.now().isoformat().replace("T", " "), img_name
             ))
             print(" -> {} -> no Alternate Data Streams found for '{}'".format(
-                datetime.now().isoformat().replace("T", " "), img.split("::")[0]
+                datetime.now().isoformat().replace("T", " "), img_name
             ))
             print(" -> {} -> no evidence of Timestomping found for '{}'".format(
-                datetime.now().isoformat().replace("T", " "), img.split("::")[0]
+                datetime.now().isoformat().replace("T", " "), img_name
             ))
     if extractiocs:
         iocfilelist, lineno, previous = [], 0, 0.0
         if verbosity != "":
             print(
                 "\n    \033[1;33mUndertaking IOC extraction for '{}'...\033[1;m".format(
-                    img.split("::")[0]
+                    img_name
                 )
             )
         print(
             "     Assessing readable files to extract IOCs from, for '{}'...".format(
-                img.split("::")[0]
-            )
+                img_name
+            ), flush=True
         )
+        # Check if mount point exists and warn if not
+        if not os.path.exists(mnt) or not os.path.isdir(mnt):
+            print(
+                " -> {} -> WARNING: Mount point '{}' not available for IOC extraction from disk".format(
+                    datetime.now().isoformat().replace("T", " "), mnt
+                ), flush=True
+            )
         for root, _, files in os.walk(mnt):
             for f in files:
                 try:
@@ -794,10 +812,10 @@ def analyse_artefacts(
                 except:
                     pass
         if os.path.exists(
-            os.path.join(output_directory, img.split("::")[0], "artefacts")
+            os.path.join(output_directory, img_name, "artefacts")
         ):
             for root, _, files in os.walk(
-                os.path.join(output_directory, img.split("::")[0], "artefacts")
+                os.path.join(output_directory, img_name, "artefacts")
             ):
                 for f in files:
                     try:
@@ -815,10 +833,10 @@ def analyse_artefacts(
         if not os.path.exists(anysd):
             os.mkdir(anysd)
         if not os.path.exists(
-            output_directory + img.split("::")[0] + "/analysis/iocs.csv"
+            output_directory + img_name + "/analysis/iocs.csv"
         ):
             with open(
-                output_directory + img.split("::")[0] + "/analysis/iocs.csv",
+                output_directory + img_name + "/analysis/iocs.csv",
                 "w",
             ) as ioccsv:
                 ioccsv.write(
@@ -840,5 +858,5 @@ def analyse_artefacts(
         datetime.now().isoformat().replace("T", " "), vssimage
     )
     write_audit_log_entry(verbosity, output_directory, entry, prnt)
-    print(" -> Completed Analysis Phase for {}".format(vssimage))
-    print()
+    print(" -> Completed Analysis Phase for {}".format(vssimage), flush=True)
+    print(flush=True)

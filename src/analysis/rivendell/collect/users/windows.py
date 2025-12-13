@@ -5,6 +5,85 @@ from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
 
+# Directories to exclude from user profile copies when RIVENDELL_EXCLUDE_PROFILE_CACHE is set
+PROFILE_CACHE_EXCLUSIONS = [
+    'AppData/Local/Temp',
+    'AppData/Local/Packages',
+    'AppData/Local/Microsoft/Windows/INetCache',
+    'AppData/Local/Microsoft/Windows/Temporary Internet Files',
+    'AppData/Local/Google/Chrome/User Data/Default/Cache',
+    'AppData/Local/Google/Chrome/User Data/Default/Code Cache',
+    'AppData/Local/Mozilla/Firefox/Profiles',  # Will exclude cache subdirs
+    'AppData/Local/Microsoft/Edge/User Data/Default/Cache',
+    'AppData/Local/CrashDumps',
+    'AppData/Local/Spotify/Storage',
+    'AppData/Local/Discord/Cache',
+    'AppData/Local/Microsoft/Teams/Cache',
+]
+
+
+def _profile_ignore_patterns(exclude_cache):
+    """Return an ignore function for shutil.copytree that excludes cache directories."""
+    def _ignore(directory, files):
+        if not exclude_cache:
+            return []
+        ignored = []
+        for f in files:
+            full_path = os.path.join(directory, f)
+            # Check if this path matches any exclusion pattern
+            for exclusion in PROFILE_CACHE_EXCLUSIONS:
+                # Normalize path separators
+                norm_path = full_path.replace('\\', '/')
+                norm_exclusion = exclusion.replace('\\', '/')
+                if norm_exclusion in norm_path:
+                    ignored.append(f)
+                    break
+        return ignored
+    return _ignore
+
+
+def _copy_with_progress(src, dst, profile_name, vssimage, symlinks=False, exclude_cache=False):
+    """Copy a directory tree with progress logging and optional cache exclusion."""
+    # Check if debug logging is enabled
+    debug_enabled = os.environ.get('RIVENDELL_DEBUG_PROFILE_COPY', '').lower() in ('true', '1', 'yes')
+
+    if debug_enabled:
+        file_count = 0
+        last_report = datetime.now()
+        report_interval = 60  # Report progress every 60 seconds
+
+        def copy_with_count(src_file, dst_file):
+            nonlocal file_count, last_report
+            shutil.copy2(src_file, dst_file)
+            file_count += 1
+
+            # Report progress periodically
+            now = datetime.now()
+            if (now - last_report).total_seconds() >= report_interval:
+                print(
+                    " -> {} -> ... copied {} files for profile '{}' for '{}'".format(
+                        now.isoformat().replace("T", " "),
+                        file_count,
+                        profile_name,
+                        vssimage,
+                    )
+                )
+                last_report = now
+
+        copy_func = copy_with_count
+    else:
+        copy_func = shutil.copy2
+
+    ignore_func = _profile_ignore_patterns(exclude_cache) if exclude_cache else None
+
+    shutil.copytree(
+        src,
+        dst,
+        symlinks=symlinks,
+        copy_function=copy_func,
+        ignore=ignore_func,
+    )
+
 
 def windows_users(
     dest,
@@ -39,9 +118,9 @@ def windows_users(
     )
     for each in item_list:
         if os.path.isdir(item + each):
-            # Log user profile collection at the start
+            # Log artefact collection at the start (not full profile copy)
             print(
-                " -> {} -> collecting user profile '{}' for '{}'".format(
+                " -> {} -> collecting artefacts for profile '{}' for '{}'".format(
                     datetime.now().isoformat().replace("T", " "),
                     each,
                     vssimage,
@@ -698,12 +777,24 @@ def windows_users(
                         except:
                             pass
     if userprofiles:
+        # Check environment variable for cache exclusion
+        exclude_cache = os.environ.get('RIVENDELL_EXCLUDE_PROFILE_CACHE', '').lower() in ('true', '1', 'yes')
         for each in item_list:
             try:
                 os.stat(userdest)
             except:
                 os.makedirs(userdest)
             if os.path.isdir(item + each):
+                # Print initiation message BEFORE the copy starts
+                cache_msg = " (excluding caches)" if exclude_cache else ""
+                print(
+                    " -> {} -> copying full user profile '{}' for '{}'{}...".format(
+                        datetime.now().isoformat().replace("T", " "),
+                        each,
+                        vssimage,
+                        cache_msg,
+                    )
+                )
                 (
                     entry,
                     prnt,
@@ -728,10 +819,32 @@ def windows_users(
                     prnt,
                 )
                 try:
-                    shutil.copytree(
+                    _copy_with_progress(
                         item + each,
                         userdest + "/" + each,
+                        each,
+                        vssimage,
                         symlinks=symlinkvalue,
+                        exclude_cache=exclude_cache,
                     )
-                except:
-                    pass
+                    print(
+                        " -> {} -> completed copying profile '{}'".format(
+                            datetime.now().isoformat().replace("T", " "),
+                            each,
+                        )
+                    )
+                except Exception as e:
+                    # Extract just source file paths from shutil.Error
+                    if hasattr(e, 'args') and e.args and isinstance(e.args[0], list):
+                        failed_files = [err[0] for err in e.args[0] if isinstance(err, tuple) and len(err) >= 1]
+                        error_msg = str(failed_files)
+                    else:
+                        error_msg = str(e)[:100]
+                    print(
+                        " -> {} -> error during copying user profile '{}' for '{}': {}".format(
+                            datetime.now().isoformat().replace("T", " "),
+                            each,
+                            vssimage,
+                            error_msg,
+                        )
+                    )

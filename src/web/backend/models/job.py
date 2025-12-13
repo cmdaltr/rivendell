@@ -6,7 +6,7 @@ Database models for analysis jobs and results.
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 
 
@@ -32,7 +32,6 @@ class AnalysisOptions(BaseModel):
     analysis: bool = False
     extract_iocs: bool = False
     timeline: bool = False
-    clamav: bool = False
     memory: bool = False
     memory_timeline: bool = False
 
@@ -46,8 +45,6 @@ class AnalysisOptions(BaseModel):
 
     # Speed/Quality modes (merged into analysis)
     brisk: bool = False
-    quick: bool = False
-    super_quick: bool = False
 
     # Collection options
     vss: bool = False
@@ -58,7 +55,6 @@ class AnalysisOptions(BaseModel):
     nsrl: bool = False
     hash_collected: bool = False
     hash_all: bool = False
-    imageinfo: bool = False
 
     # Output options
     splunk: bool = False
@@ -71,6 +67,9 @@ class AnalysisOptions(BaseModel):
 
     # Internal options
     force_overwrite: bool = False
+
+    # Logging options
+    debug: bool = False  # Enable verbose debug messages in job log
 
 
 class JobCreate(BaseModel):
@@ -132,3 +131,11 @@ class FileSystemItem(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+
+
+class FileSystemBrowseResponse(BaseModel):
+    """Response for file system browse endpoint."""
+    items: List[FileSystemItem]
+    current_path: str
+    permission_warning: Optional[str] = None
+    skipped_count: int = 0

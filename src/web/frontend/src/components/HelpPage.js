@@ -14,25 +14,26 @@ const HelpPage = () => {
           <p>
             Rivendell is a comprehensive Digital Forensics and Incident Response (DFIR) suite designed to accelerate
             forensic investigations through automation, AI-powered analysis, and integrated threat intelligence.
-          </p>
+          </p><br />
 
           <h4>Architecture</h4>
           <pre className="code-block">
-{`┌───────────────────────────────────────────────────────┐
-│                     Rivendell Suite                    │
-├───────────────────────────────────────────────────────┤
-│                                                        │
-│  ┌──────────────┐   ┌──────────────┐   ┌───────────┐  │
-│  │   Gandalf    │   │    Elrond    │   │    Eru    │  │
-│  │ Acquisition  │ → │   Analysis   │ → │ AI Agent  │  │
-│  └──────────────┘   └──────────────┘   └───────────┘  │
-│         ↓                  ↓                 ↓         │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │      MITRE ATT&CK • Cloud • SIEM • Reports      │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘`}
+{`        ┌──────────────────────────────────────────────────────────────┐
+        │                       Rivendell Suite                        │
+        ├──────────────────────────────────────────────────────────────┤
+        │                                                              │
+        │    ┌──────────────┐   ┌──────────────┐   ┌──────────────┐    │
+        │    │   Gandalf    │   │    Elrond    │   │     Eru      │    │
+        │    │ Acquisition  │ → │   Analysis   │ → │   AI Agent   |    │
+        │    └──────────────┘   └──────────────┘   └──────────────┘    │
+        │           ↓                  ↓                  ↓            │
+        │     ┌─────────────────────────────────────────────────┐      │
+        │     │      MITRE ATT&CK • Cloud • SIEM • Reports      │      │
+        │     └─────────────────────────────────────────────────┘      │
+        │                                                              │
+        └──────────────────────────────────────────────────────────────┘`}
           </pre>
-
+          <br />
           <h4>Key Capabilities</h4>
           <ul>
             <li><strong>Remote Acquisition (Gandalf):</strong> Collect forensic artifacts from Windows, Linux, and macOS systems</li>
@@ -53,6 +54,7 @@ const HelpPage = () => {
         <>
           <h3>Quick Installation</h3>
 
+          <br />
           <h4>Linux</h4>
           <pre className="code-block">
 {`git clone https://github.com/cmdaltr/rivendell.git
@@ -61,6 +63,7 @@ chmod +x scripts/install_linux.sh
 sudo ./scripts/install_linux.sh`}
           </pre>
 
+          <br />
           <h4>macOS</h4>
           <pre className="code-block">
 {`git clone https://github.com/cmdaltr/rivendell.git
@@ -69,6 +72,7 @@ chmod +x scripts/install_macos.sh
 ./scripts/install_macos.sh`}
           </pre>
 
+          <br />
           <h4>Windows (WSL2)</h4>
           <pre className="code-block">
 {`git clone https://github.com/cmdaltr/rivendell.git
@@ -76,13 +80,17 @@ cd rivendell
 .\\scripts\\install_windows_wsl.ps1`}
           </pre>
 
+          <br />
           <h4>Docker Deployment</h4>
           <pre className="code-block">
 {`docker-compose up -d
 # Access web interface at http://localhost:5687`}
           </pre>
 
+          <br />
+          <br />
           <h4>Dependencies</h4>
+          <br />
           <p><strong>Core Requirements:</strong></p>
           <ul>
             <li>Python 3.8+</li>
@@ -91,6 +99,7 @@ cd rivendell
             <li>30+ forensic tools (automatically installed)</li>
           </ul>
 
+          <br />
           <p><strong>Optional:</strong></p>
           <ul>
             <li>Docker (for containerized deployment)</li>
@@ -98,6 +107,7 @@ cd rivendell
             <li>Splunk/Elasticsearch (for SIEM integration)</li>
           </ul>
 
+          <br />
           <h4>Verification</h4>
           <pre className="code-block">
 {`elrond --check-dependencies`}

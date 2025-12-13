@@ -795,8 +795,6 @@ def build_elrond_command(job):
         cmd.append("--Memory")
     if opts.memory_timeline:
         cmd.append("--memorytimeline")
-    if opts.imageinfo:
-        cmd.append("--imageinfo")
 
     # Output options
     if opts.splunk:
@@ -809,14 +807,6 @@ def build_elrond_command(job):
     # Speed/Quality modes
     if opts.brisk:
         cmd.append("--Brisk")
-    if opts.quick:
-        cmd.append("--quick")
-    if opts.super_quick:
-        cmd.append("--superQuick")
-
-    # Security scanning
-    if opts.clamav:
-        cmd.append("--clamaV")
 
     # Hash options
     if opts.nsrl:

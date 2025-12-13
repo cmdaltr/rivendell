@@ -211,33 +211,28 @@ def collect_windows_artefacts(
             except:
                 os.makedirs(dest)
             if len(item_list) > 0:
-                if verbosity != "":
-                    print(
-                        "     Collecting Windows Event logs for {}...".format(vssimage)
-                    )
+                # Log start of event log collection (batched - no per-file logging)
+                entry, prnt = "{},{},{},{} event logs\n".format(
+                    datetime.now().isoformat(),
+                    img.split("::")[0],
+                    stage,
+                    len(item_list),
+                ), " -> {} -> {} {} event logs{} from '{}'...".format(
+                    datetime.now().isoformat().replace("T", " "),
+                    stage,
+                    len(item_list),
+                    vsstext.replace("vss", "volume shadow copy #"),
+                    img.split("::")[0],
+                )
+                write_audit_log_entry(
+                    verbosity,
+                    output_directory,
+                    entry,
+                    prnt,
+                )
+                collected_count = 0
                 for each in item_list:
                     try:
-                        (
-                            entry,
-                            prnt,
-                        ) = "{},{},{},'{}' event log\n".format(
-                            datetime.now().isoformat(),
-                            img.split("::")[0],
-                            stage,
-                            each,
-                        ), " -> {} -> {} event log '{}'{} from '{}'".format(
-                            datetime.now().isoformat().replace("T", " "),
-                            stage,
-                            each,
-                            vsstext.replace("vss", "volume shadow copy #"),
-                            img.split("::")[0],
-                        )
-                        write_audit_log_entry(
-                            verbosity,
-                            output_directory,
-                            entry,
-                            prnt,
-                        )
                         if os.path.exists(
                             os.path.join(dest, item.split("/")[-1], each)
                         ):
@@ -245,8 +240,19 @@ def collect_windows_artefacts(
                                 os.path.join(item.split("/")[-1], each), dest, 1
                             )
                         shutil.copy2(item + each, dest)
+                        collected_count += 1
                     except:
                         pass
+                # Log completion
+                if verbosity != "":
+                    print(
+                        " -> {} -> collected {} event logs{} from '{}'".format(
+                            datetime.now().isoformat().replace("T", " "),
+                            collected_count,
+                            vsstext.replace("vss", "volume shadow copy #"),
+                            img.split("::")[0],
+                        )
+                    )
         if (
             item == mnt + "/Windows/System32/wbem/Repository/"
             or item == mnt + "/Windows/System32/wbem/Logs/"

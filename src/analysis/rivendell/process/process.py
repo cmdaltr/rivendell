@@ -47,12 +47,18 @@ def process_artefacts(
     volchoice,
     vss,
     memtimeline,
+    collectfiles=True,
 ):
     from datetime import datetime
     jsondict = {}
     jsonlist = []
     img_name = img.split("::")[0]
     if img_name in artefact:
+        # Skip macOS resource fork files (AppleDouble files starting with ._)
+        # unless explicitly included via collect_file.txt (collectfiles != True)
+        artefact_basename = os.path.basename(artefact)
+        if artefact_basename.startswith("._") and collectfiles == True:
+            return
         if artefact.endswith("setupapi.dev.log"):
             process_usb(
                 verbosity,
@@ -371,7 +377,7 @@ def process_artefacts(
                 verbosity, vssimage, output_directory, img, vss_path_insert, artefact
             )
         elif artefact.endswith("LastAccessTimes.txt"):
-            with open(artefact) as last_access_times:
+            with open(artefact, encoding="utf-8", errors="ignore") as last_access_times:
                 access_times = last_access_times.read()
             with open(
                 output_directory
@@ -462,6 +468,7 @@ def determine_vss_image(
     volchoice,
     vss,
     memtimeline,
+    collectfiles=True,
 ):
     from datetime import datetime
     if (
@@ -486,6 +493,7 @@ def determine_vss_image(
             volchoice,
             vss,
             memtimeline,
+            collectfiles,
         )
     elif (
         "_vss" not in img
@@ -507,5 +515,6 @@ def determine_vss_image(
             volchoice,
             vss,
             memtimeline,
+            collectfiles,
         )
     return vssmem

@@ -41,6 +41,7 @@ except ImportError:
         JobStatus,
         JobUpdate,
         FileSystemItem,
+        FileSystemBrowseResponse,
     )
     from storage import JobStorage
     from tasks_docker import start_analysis
@@ -133,7 +134,7 @@ async def health_check():
 
 
 # File System API
-@app.get("/api/fs/browse", response_model=List[FileSystemItem])
+@app.get("/api/fs/browse", response_model=FileSystemBrowseResponse)
 async def browse_filesystem(path: str = Query("/", description="Path to browse")):
     """
     Browse filesystem to select disk/memory images.
@@ -142,7 +143,7 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
         path: Directory path to browse
 
     Returns:
-        List of files and directories
+        FileSystemBrowseResponse with items, current path, and any permission warnings
     """
     try:
         # Security: Only allow browsing specific paths
@@ -165,6 +166,8 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
             raise HTTPException(status_code=400, detail="Path is not a directory")
 
         items = []
+        skipped_count = 0
+        permission_warning = None
 
         # Add parent directory link if not at root
         if path != "/" and str(path_obj.parent) != str(path_obj):
@@ -176,14 +179,37 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
                 )
             )
 
-        # List directory contents
-        for item in sorted(path_obj.iterdir(), key=lambda x: (not x.is_dir(), x.name)):
+        # List directory contents - collect readable items first
+        readable_items = []
+        for item in path_obj.iterdir():
+            try:
+                # Skip macOS metadata files (._* files) and hidden files
+                if item.name.startswith("._") or item.name == ".DS_Store":
+                    continue
+                # Test if we can access this item
+                is_dir = item.is_dir()
+                readable_items.append((item, is_dir))
+            except (PermissionError, OSError) as e:
+                # Track permission errors for external volumes
+                skipped_count += 1
+                if "Operation not permitted" in str(e) and not permission_warning:
+                    permission_warning = (
+                        "Some files could not be accessed. On macOS, Docker may need "
+                        "Full Disk Access permission. Go to System Settings > Privacy & Security > "
+                        "Full Disk Access and add Docker Desktop."
+                    )
+                continue
+
+        # Sort: directories first, then by name
+        readable_items.sort(key=lambda x: (not x[1], x[0].name))
+
+        for item, is_dir in readable_items:
             try:
                 stat = item.stat()
 
                 # Check if file is a disk/memory image
                 is_image = False
-                if item.is_file():
+                if not is_dir:
                     ext = item.suffix.lower()
                     is_image = ext in [
                         ".e01", ".ex01", ".raw", ".dd", ".img", ".bin",
@@ -194,17 +220,28 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
                     FileSystemItem(
                         name=item.name,
                         path=str(item),
-                        is_directory=item.is_dir(),
-                        size=stat.st_size if item.is_file() else None,
+                        is_directory=is_dir,
+                        size=stat.st_size if not is_dir else None,
                         modified=datetime.fromtimestamp(stat.st_mtime),
                         is_image=is_image,
                     )
                 )
-            except (PermissionError, OSError):
-                # Skip items we can't access
+            except (PermissionError, OSError) as e:
+                skipped_count += 1
+                if "Operation not permitted" in str(e) and not permission_warning:
+                    permission_warning = (
+                        "Some files could not be accessed. On macOS, Docker may need "
+                        "Full Disk Access permission. Go to System Settings > Privacy & Security > "
+                        "Full Disk Access and add Docker Desktop."
+                    )
                 continue
 
-        return items
+        return FileSystemBrowseResponse(
+            items=items,
+            current_path=str(path_obj),
+            permission_warning=permission_warning,
+            skipped_count=skipped_count,
+        )
 
     except HTTPException:
         raise
@@ -919,6 +956,100 @@ async def get_navigator_json(job_id: str):
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# File requirements for advanced processing options
+FILE_REQUIREMENTS = {
+    'keywords': 'keywords.txt',
+    'yara': 'yara.yar',
+    'collectFiles': 'files.txt',
+}
+
+# Default directory for required files (OS-aware)
+import platform
+if platform.system() == 'Darwin' or platform.system() == 'Linux':
+    REQUIRED_FILES_DIR = '/tmp/rivendell'
+else:
+    REQUIRED_FILES_DIR = os.path.join(os.environ.get('TEMP', 'C:\\Temp'), 'rivendell')
+
+
+@app.post("/api/check-required-files")
+async def check_required_files(request: dict):
+    """
+    Check if required files exist in the default location.
+
+    Args:
+        request: {"options": ["keywords", "yara", "collectFiles"]}
+
+    Returns:
+        {"missing": ["keywords", "yara"], "found": ["collectFiles"]}
+    """
+    try:
+        options = request.get('options', [])
+        missing = []
+        found = []
+
+        # Ensure directory exists
+        os.makedirs(REQUIRED_FILES_DIR, exist_ok=True)
+
+        for opt in options:
+            if opt in FILE_REQUIREMENTS:
+                filename = FILE_REQUIREMENTS[opt]
+                filepath = os.path.join(REQUIRED_FILES_DIR, filename)
+
+                if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+                    found.append(opt)
+                else:
+                    missing.append(opt)
+
+        return {"missing": missing, "found": found, "directory": REQUIRED_FILES_DIR}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+from fastapi import File, UploadFile
+
+@app.post("/api/upload-required-files")
+async def upload_required_files_impl(
+    keywords: Optional[UploadFile] = File(None),
+    yara: Optional[UploadFile] = File(None),
+    collectFiles: Optional[UploadFile] = File(None),
+):
+    """
+    Upload required files for advanced processing options.
+    """
+    try:
+        # Ensure directory exists
+        os.makedirs(REQUIRED_FILES_DIR, exist_ok=True)
+
+        uploaded = []
+
+        file_mapping = {
+            'keywords': (keywords, 'keywords.txt'),
+            'yara': (yara, 'yara.yar'),
+            'collectFiles': (collectFiles, 'files.txt'),
+        }
+
+        for key, (upload_file, target_filename) in file_mapping.items():
+            if upload_file and upload_file.filename:
+                content = await upload_file.read()
+                target_path = os.path.join(REQUIRED_FILES_DIR, target_filename)
+
+                with open(target_path, 'wb') as f:
+                    f.write(content)
+
+                uploaded.append({
+                    'option': key,
+                    'filename': target_filename,
+                    'path': target_path,
+                    'size': len(content)
+                })
+
+        return {"success": True, "uploaded": uploaded, "directory": REQUIRED_FILES_DIR}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

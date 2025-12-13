@@ -497,6 +497,35 @@ celery:
   command: celery -A tasks worker --concurrency=4 --loglevel=info
 ```
 
+### User Profile Collection
+
+Control how user profiles are collected during forensic analysis:
+
+| Environment Variable | Values | Default | Description |
+|---------------------|--------|---------|-------------|
+| `RIVENDELL_EXCLUDE_PROFILE_CACHE` | `true`/`false` | `true` | Skip cache directories when copying full user profiles |
+| `RIVENDELL_DEBUG_PROFILE_COPY` | `true`/`false` | `false` | Show progress updates during profile copies (every 60s) |
+
+When enabled, the following directories are excluded from user profile collection:
+- `AppData/Local/Temp` - Temporary files
+- `AppData/Local/Packages` - UWP/Windows Store app data
+- `AppData/Local/Microsoft/Windows/INetCache` - Browser cache
+- `AppData/Local/Google/Chrome/User Data/*/Cache` - Chrome cache
+- `AppData/Local/Mozilla/Firefox/Profiles` - Firefox cache
+- `AppData/Local/Microsoft/Edge/User Data/*/Cache` - Edge cache
+- `AppData/Local/CrashDumps` - Windows crash dumps
+- `AppData/Local/Spotify/Storage` - Spotify cache
+- `AppData/Local/Discord/Cache` - Discord cache
+- `AppData/Local/Microsoft/Teams/Cache` - Teams cache
+
+**To disable exclusions** (copy everything including caches):
+```yaml
+# In docker-compose.yml under celery-worker environment:
+- RIVENDELL_EXCLUDE_PROFILE_CACHE=false
+```
+
+Then restart: `docker compose up -d --force-recreate celery-worker`
+
 ### File System
 
 ```bash

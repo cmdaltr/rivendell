@@ -100,15 +100,13 @@ def start_analysis(self, job_id: str):
         # Update job status
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now()
-        job.log.append(f"[{datetime.now().isoformat()}] -> Starting rivendell...")
+        job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Starting rivendell...")
         job_storage.save_job(job)
 
         # Build elrond command
         cmd = build_elrond_command(job)
 
         logger.info(f"Running command: {' '.join(cmd)}")
-        job.log.append(f"[{datetime.now().isoformat()}] -> Command: {' '.join(cmd)}")
-        job_storage.save_job(job)
 
         # Set destination directory - must translate to worker perspective
         dest_dir_backend = _resolve_destination(job)
@@ -123,7 +121,7 @@ def start_analysis(self, job_id: str):
                 logger.info(f"Force overwrite enabled, removing existing directory: {dest_dir_str}")
 
                 job.log.append(
-                    f"[{datetime.now().isoformat()}] -> Removing existing directory: {dest_dir_str} - stand by..."
+                    f"[{datetime.now().isoformat().replace('T', ' ')}] -> Removing existing directory: {dest_dir_str} - stand by..."
                 )
                 job_storage.save_job(job)
 
@@ -148,7 +146,7 @@ def start_analysis(self, job_id: str):
                         # Update every 10 seconds
                         if (datetime.now() - last_update).total_seconds() >= 10:
                             job.log.append(
-                                f"[{datetime.now().isoformat()}] -> Still removing directory... ({int(elapsed)}s elapsed)"
+                                f"[{datetime.now().isoformat().replace('T', ' ')}] -> Still removing directory... ({int(elapsed)}s elapsed)"
                             )
                             job_storage.save_job(job)
                             last_update = datetime.now()
@@ -169,20 +167,20 @@ def start_analysis(self, job_id: str):
                     elapsed = (datetime.now() - start_time).total_seconds()
                     logger.info(f"Successfully removed directory: {dest_dir_str} in {elapsed:.1f}s")
                     job.log.append(
-                        f"[{datetime.now().isoformat()}] -> Successfully removed directory in {elapsed:.1f}s"
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Successfully removed directory in {elapsed:.1f}s"
                     )
                 except subprocess.TimeoutExpired:
                     logger.error(f"Timeout removing directory: {dest_dir_str}")
                     job.log.append(
-                        f"[{datetime.now().isoformat()}] -> Timeout removing directory (took more than 5 minutes)"
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Timeout removing directory (took more than 5 minutes)"
                     )
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Error removing directory (exit code {e.returncode})")
-                    job.log.append(f"[{datetime.now().isoformat()}] -> Error removing directory")
+                    job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error removing directory")
                 except Exception as e:
                     logger.error(f"Error removing directory: {e}")
                     job.log.append(
-                        f"[{datetime.now().isoformat()}] -> Error removing directory: {e}"
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error removing directory: {e}"
                     )
                 job_storage.save_job(job)
 
@@ -230,37 +228,76 @@ def start_analysis(self, job_id: str):
         last_log_message = None  # Track last message for deduplication
         seen_phases = set()  # Track seen phase transitions to prevent duplicates
         seen_filepaths = set()  # Track seen filepaths to prevent duplicates
+
+        # Phase-based progress tracking
+        # Rivendell processes ALL images through each phase before moving to the next:
+        # 1. Identification (mount all): 0-15%
+        # 2. Collection (all images): 15-35%
+        # 3. Processing (all artefacts): 35-70%
+        # 4. Analysis: 70-95%
+        total_images = max(1, len(job.source_paths))
+        current_phase = "identification"  # Track current phase
+        images_collected = 0  # Track how many images have completed collection
+        images_processed = 0  # Track how many images have completed processing
+
+        # Counter for repeated patterns (like IE index.dat)
+        ie_indexdat_count = 0
+        ie_indexdat_logged = False
+
+        # Track phase completion for validation
+        phases_completed = {
+            "collection": False,
+            "processing": False,
+            "analysis": False,
+        }
+        analysis_phase_started = False
+
         for line in iter(process.stdout.readline, ""):
             line = line.strip()
             if line:
                 # Strip ANSI color codes
                 line = re.sub(r"\x1b\[[0-9;]*m", "", line)
 
-                # Filter: Only log lines containing ' -> ' or important keywords (audit log format)
-                # This filters out verbose output and only shows important messages
-                important_keywords = [
-                    "skipping",
-                    "warning",
-                    "error",
-                    "failed",
-                    "completed",
-                    "commencing",
-                    "processing",
-                    "still processing",
-                ]
-                # Exclude verbose MITRE enrichment messages
-                excluded_keywords = ["mitre", "extracting mitre", "mitre enrichment"]
-                has_excluded = any(kw in line.lower() for kw in excluded_keywords)
-                if has_excluded:
-                    continue
+                # Exclude verbose messages (MITRE enrichment, verbose command output) unless debug is enabled
+                debug_enabled = getattr(job.options, "debug", False)
+                if not debug_enabled:
+                    excluded_keywords = ["mitre", "extracting mitre", "mitre enrichment"]
+                    excluded_patterns = [
+                        r"-> Command:",  # Exclude verbose command line output
+                    ]
+                    has_excluded = any(kw in line.lower() for kw in excluded_keywords)
+                    # Check excluded patterns
+                    if not has_excluded:
+                        for pattern in excluded_patterns:
+                            if re.search(pattern, line, re.IGNORECASE):
+                                has_excluded = True
+                                break
+                    if has_excluded:
+                        continue
 
-                has_arrow = " -> " in line
-                has_important_keyword = any(
-                    keyword in line.lower() for keyword in important_keywords
-                )
+                # Special handling for IE index.dat messages - aggregate into count
+                if re.search(r"processing (small|large) IE index\.dat", line, re.IGNORECASE):
+                    ie_indexdat_count += 1
+                    if not ie_indexdat_logged:
+                        # Log the first one with a placeholder for count
+                        ie_indexdat_logged = True
+                        line = f"[{datetime.now().isoformat().replace('T', ' ')}] -> processing IE index.dat files..."
+                        job.log.append(line)
+                        job_storage.save_job(job)
+                    continue  # Skip individual IE index.dat entries
 
-                if not has_arrow and not has_important_keyword:
-                    continue
+                # Only include lines with ' -> ' (audit log format) OR phase messages OR errors/tracebacks
+                # When debug is enabled, show ALL lines
+                if not debug_enabled:
+                    has_arrow = " -> " in line
+                    is_phase_line = ("commencing" in line.lower() and "phase" in line.lower()) or \
+                                    ("completed" in line.lower() and "phase" in line.lower())
+                    # Also show Python tracebacks, errors, and DEBUG output
+                    is_error_line = line.startswith("Traceback") or line.startswith("  File ") or \
+                                   "Error:" in line or "Exception:" in line or \
+                                   "DEBUG" in line or line.startswith("    ")  # Indented traceback lines
+                    if not has_arrow and not is_phase_line and not is_error_line:
+                        continue
 
                 # Clean up duplicate slashes in file paths (e.g., //$ -> /$)
                 line = re.sub(r"/+", "/", line)
@@ -289,6 +326,9 @@ def start_analysis(self, job_id: str):
                         phase_key = f"commencing_{phase_name.lower()}"
                         line = f"========== Commencing {phase_name} Phase =========="
                         is_phase_message = True
+                        # Track analysis phase start
+                        if "analysis" in phase_name.lower():
+                            analysis_phase_started = True
                 elif "completed" in line.lower() and "phase" in line.lower():
                     # Extract just the phase name, ignoring "for 'image'" suffixes
                     # Match: "Completed X Phase" or "Completed X Phase for 'image'"
@@ -297,9 +337,28 @@ def start_analysis(self, job_id: str):
                         phase_name = phase_match.group(1).strip().title()
                         # Simplify "Att&Ck® Navigator" to just "Navigator"
                         phase_name = re.sub(r"Att&Ck®\s*", "", phase_name, flags=re.IGNORECASE)
-                        phase_key = f"completed_{phase_name.lower()}"
-                        line = f"========== Completed {phase_name} Phase =========="
-                        is_phase_message = True
+
+                        # Check if this is a per-image completion ("for 'image'") or overall completion
+                        # Per-image completions should NOT be formatted as major phase transitions
+                        is_per_image = " for " in line.lower() or "for '" in line.lower()
+
+                        if is_per_image:
+                            # Per-image completion - don't format as major phase transition
+                            # Just skip these entirely since they're redundant with overall phase completion
+                            continue
+                        else:
+                            # Overall phase completion - format as major separator
+                            phase_key = f"completed_{phase_name.lower()}"
+                            line = f"========== Completed {phase_name} Phase =========="
+                            is_phase_message = True
+                            # Track phase completions for validation
+                            phase_name_lower = phase_name.lower()
+                            if "collection" in phase_name_lower:
+                                phases_completed["collection"] = True
+                            elif "processing" in phase_name_lower:
+                                phases_completed["processing"] = True
+                            elif "analysis" in phase_name_lower:
+                                phases_completed["analysis"] = True
 
                 # Deduplicate phase messages: only show each phase transition once
                 if is_phase_message and phase_key:
@@ -331,6 +390,9 @@ def start_analysis(self, job_id: str):
 
                 last_log_message = original_line
 
+                # Fix double single quotes (e.g., ''image_name'' -> 'image_name')
+                line = re.sub(r"'{2,}", "'", line)
+
                 # Update log - only add timestamp if line doesn't already have one
                 # Check if line starts with a timestamp (YYYY-MM-DD format or contains ' -> ')
                 if re.match(r"^\d{4}-\d{2}-\d{2}", line) or " -> " in line:
@@ -338,57 +400,103 @@ def start_analysis(self, job_id: str):
                     job.log.append(line)
                 else:
                     # No timestamp, add one
-                    log_entry = f"[{datetime.now().isoformat()}] {line}"
+                    log_entry = f"[{datetime.now().isoformat().replace('T', ' ')}] {line}"
                     job.log.append(log_entry)
 
                 # Update progress based on phase transitions (more accurate than counting)
                 progress_count += 1
                 line_lower = line.lower()
+                # Use original_line for phase detection since 'line' may have been reformatted
+                original_lower = original_line.lower()
 
-                # Phase-based progress: use phase transitions for accurate progress
+                # Phase-based progress calculation
+                # Rivendell phases: Identification (0-15%) -> Collection (15-35%) -> Processing (35-70%) -> Analysis (70-95%)
                 new_progress = job.progress  # Start with current progress
 
-                if "commencing collection phase" in line_lower:
-                    new_progress = 10
-                elif "completed collection phase" in line_lower:
-                    new_progress = 35
-                elif "scanning for artefacts" in line_lower:
-                    new_progress = 40
-                elif "commencing processing phase" in line_lower:
-                    new_progress = 45
-                elif "completed processing phase" in line_lower:
-                    new_progress = 70
-                elif "commencing analysis phase" in line_lower:
-                    new_progress = 75
-                elif "completed analysis phase" in line_lower:
-                    new_progress = 90
-                elif any(
-                    keyword in line_lower
-                    for keyword in ["splunk phase", "elastic phase", "navigator phase"]
-                ):
-                    new_progress = 92
-                elif "rivendell completed" in line_lower or "analysis finished" in line_lower:
-                    new_progress = 95
-                # Fallback: keyword-based progress for intermediate steps
-                elif "identification phase" in line_lower:
-                    new_progress = max(new_progress, 5)
-                elif "scanning for forensic images" in line_lower:
-                    new_progress = max(new_progress, 7)
-                elif "found forensic image" in line_lower:
-                    new_progress = max(new_progress, 8)
-                elif "identifying operating system" in line_lower:
-                    new_progress = max(new_progress, 12)
-                elif "identified platform" in line_lower:
+                # Detect phase transitions
+                # Note: Rivendell outputs "Completed X Phase for 'image'" for EACH image
+                # We only want to advance major progress on OVERALL phase completion (no "for" suffix)
+                # Use original_lower since the reformatting strips " for 'image'" from messages
+                if "commencing identification phase" in original_lower and " for " not in original_lower:
+                    current_phase = "identification"
+                    new_progress = max(new_progress, 2)
+                elif "commencing collection phase" in original_lower and " for " not in original_lower:
+                    current_phase = "collection"
                     new_progress = max(new_progress, 15)
-                elif any(keyword in line_lower for keyword in ["collecting", "mounting"]):
-                    new_progress = max(new_progress, min(10 + progress_count // 5, 30))
-                elif any(keyword in line_lower for keyword in ["processing", "parsing"]):
-                    new_progress = max(new_progress, min(45 + progress_count // 10, 65))
-                elif any(keyword in line_lower for keyword in ["analyzing"]):
-                    new_progress = max(new_progress, min(75 + progress_count // 10, 88))
+                elif "commencing processing phase" in original_lower and " for " not in original_lower:
+                    current_phase = "processing"
+                    new_progress = max(new_progress, 35)
+                elif "commencing analysis phase" in original_lower and " for " not in original_lower:
+                    current_phase = "analysis"
+                    new_progress = max(new_progress, 70)
+                # Only trigger phase completion for OVERALL completion (no "for 'image'" suffix)
+                elif "completed identification phase" in original_lower and " for " not in original_lower:
+                    new_progress = max(new_progress, 15)
+                elif "completed collection phase" in original_lower and " for " not in original_lower:
+                    new_progress = max(new_progress, 35)
+                elif "completed processing phase" in original_lower and " for " not in original_lower:
+                    # Add IE index.dat summary BEFORE the processing phase completion message
+                    if ie_indexdat_count > 0:
+                        job.log.append(
+                            f"[{datetime.now().isoformat().replace('T', ' ')}] -> processed {ie_indexdat_count} IE index.dat files"
+                        )
+                    new_progress = max(new_progress, 70)
+                elif "completed analysis phase" in original_lower and " for " not in original_lower:
+                    new_progress = max(new_progress, 95)
+                elif any(keyword in original_lower for keyword in ["splunk phase", "elastic phase", "navigator phase"]):
+                    new_progress = max(new_progress, 92)
+                elif "rivendell completed" in original_lower or "analysis finished" in original_lower:
+                    new_progress = 95
+
+                # Sub-progress within each phase
+                # Scale progress increments by number of images (more images = more work = slower increment per line)
+                scale_factor = max(1, total_images)
+
+                # Separate if-chain for sub-progress within phases
+                if current_phase == "identification":
+                    # Identification: 0-15%
+                    if "scanning for forensic images" in line_lower:
+                        new_progress = max(new_progress, 3)
+                    elif "found forensic image" in line_lower:
+                        new_progress = max(new_progress, 5)
+                    elif "mounting" in line_lower:
+                        # Scale mounting progress by number of images
+                        new_progress = max(new_progress, 7 + min(progress_count // (5 * scale_factor), 5))
+                    elif "identified platform" in line_lower:
+                        new_progress = max(new_progress, 12 + min(progress_count // (10 * scale_factor), 3))
+                    elif "not mounted" in line_lower:
+                        pass  # Don't advance progress for failed mounts
+
+                elif current_phase == "collection":
+                    # Collection: 15-35% (20% range)
+                    # Track per-image collection completion
+                    if "collection completed for" in line_lower:
+                        images_collected += 1
+                        # Each image completion advances within collection phase
+                        per_image_progress = min(18, 18 * images_collected // scale_factor)
+                        new_progress = max(new_progress, 15 + per_image_progress)
+                    elif "collecting artefacts for" in line_lower:
+                        # Scale by number of images
+                        new_progress = max(new_progress, 16 + min(progress_count // (50 * scale_factor), 15))
+                    elif any(kw in line_lower for kw in ["collecting", "copying", "configuration file", "crontab", "bash", "plist", "keyring"]):
+                        new_progress = max(new_progress, 17 + min(progress_count // (30 * scale_factor), 16))
+
+                elif current_phase == "processing":
+                    # Processing: 35-70% (35% range)
+                    if "processing completed for" in line_lower:
+                        images_processed += 1
+                        per_image_progress = min(30, 30 * images_processed // scale_factor)
+                        new_progress = max(new_progress, 35 + per_image_progress)
+                    elif any(kw in line_lower for kw in ["processing", "parsing", "extracting"]):
+                        new_progress = max(new_progress, 36 + min(progress_count // (20 * scale_factor), 30))
+
+                elif current_phase == "analysis":
+                    # Analysis: 70-95% (25% range)
+                    if any(kw in line_lower for kw in ["analyzing", "scanning", "tagging"]):
+                        new_progress = max(new_progress, 71 + min(progress_count // (15 * scale_factor), 20))
 
                 # Only update if progress increases (never go backwards)
-                job.progress = max(job.progress, new_progress)
+                job.progress = max(job.progress, min(new_progress, 95))
 
                 # Save periodically (every 10 lines)
                 if progress_count % 10 == 0:
@@ -399,42 +507,85 @@ def start_analysis(self, job_id: str):
         # Wait for completion
         return_code = process.wait()
 
-        if return_code == 0:
-            # Success
+        # Validate that required phases completed
+        # If analysis was requested (started), it must also complete
+        analysis_requested = getattr(job.options, "analysis", False)
+        phases_ok = True
+        incomplete_reason = None
+
+        # Check if analysis was started but not completed
+        if analysis_phase_started and not phases_completed["analysis"]:
+            phases_ok = False
+            incomplete_reason = "Analysis phase started but did not complete"
+        # If analysis was explicitly requested but never even started
+        elif analysis_requested and not analysis_phase_started:
+            phases_ok = False
+            incomplete_reason = "Analysis was requested but phase never started"
+
+        if return_code == 0 and phases_ok:
+            # Success - process completed AND all phases finished
             job.status = JobStatus.COMPLETED
             job.progress = 100
+
             job.log.append(
                 f"[{datetime.now().isoformat().replace('T', ' ')}] -> rivendell completed successfully"
             )
+        elif return_code == 0 and not phases_ok:
+            # Process exited cleanly but required phases didn't complete - this is a FAILURE
+            job.status = JobStatus.FAILED
+            job.error = incomplete_reason
+            job.log.append(
+                f"[{datetime.now().isoformat().replace('T', ' ')}] -> Analysis incomplete: {incomplete_reason}"
+            )
+            # Log which phases were seen
+            completed_phases = [k for k, v in phases_completed.items() if v]
+            if completed_phases:
+                job.log.append(
+                    f"[{datetime.now().isoformat().replace('T', ' ')}] -> Completed phases: {', '.join(completed_phases)}"
+                )
+            else:
+                job.log.append(
+                    f"[{datetime.now().isoformat().replace('T', ' ')}] -> No phases completed successfully"
+                )
 
-            # Collect results information
+        # Collect results information for success/incomplete cases
+        if return_code == 0:
             result_info = {
                 "output_directory": dest_dir_str,
                 "return_code": return_code,
                 "analysis_duration": str(datetime.now() - job.started_at),
+                "phases_completed": phases_completed,
             }
 
             # Check for generated files
             output_path = dest_dir
             if output_path.exists():
-                result_info["output_files"] = len(list(output_path.rglob("*")))
-                result_info["output_size"] = sum(
-                    f.stat().st_size for f in output_path.rglob("*") if f.is_file()
-                )
+                try:
+                    # Skip macOS resource fork files (._*) which can cause permission errors
+                    all_files = [f for f in output_path.rglob("*") if not f.name.startswith('._')]
+                    result_info["output_files"] = len(all_files)
+                    result_info["output_size"] = sum(
+                        f.stat().st_size for f in all_files if f.is_file()
+                    )
+                except (FileNotFoundError, PermissionError, OSError) as e:
+                    # Handle cases where paths don't exist or are inaccessible
+                    logger.warning(f"Error calculating output stats: {e}")
+                    result_info["output_files"] = 0
+                    result_info["output_size"] = 0
 
             job.result = result_info
 
-        else:
+        if return_code != 0:
             # Failed
             job.status = JobStatus.FAILED
             job.error = f"Process exited with code {return_code}"
-            job.log.append(f"[{datetime.now().isoformat()}] -> Analysis failed: {job.error}")
+            job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Analysis failed: {job.error}")
 
     except Exception as e:
         logger.exception(f"Error running analysis for job {job_id}")
         job.status = JobStatus.FAILED
         job.error = str(e)
-        job.log.append(f"[{datetime.now().isoformat()}] -> Error: {str(e)}")
+        job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error: {str(e)}")
 
     finally:
         job.completed_at = datetime.now()
@@ -514,8 +665,6 @@ def build_elrond_command(job):
         cmd.append("--Memory")
     if opts.memory_timeline:
         cmd.append("--memorytimeline")
-    if opts.imageinfo:
-        cmd.append("--imageinfo")
 
     # Output options
     if opts.splunk:
@@ -528,14 +677,6 @@ def build_elrond_command(job):
     # Speed/Quality modes
     if opts.brisk:
         cmd.append("--Brisk")
-    if opts.quick:
-        cmd.append("--quick")
-    if opts.super_quick:
-        cmd.append("--superQuick")
-
-    # Security scanning
-    if opts.clamav:
-        cmd.append("--clamaV")
 
     # Hash comparison
     if opts.nsrl:
@@ -548,5 +689,9 @@ def build_elrond_command(job):
         cmd.append("--Delete")
     if opts.archive:
         cmd.append("--Ziparchive")
+
+    # Logging options
+    if getattr(opts, "debug", False):
+        cmd.append("--Verbosity")
 
     return cmd

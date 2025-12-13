@@ -28,7 +28,7 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
         { key: 'collect_files', label: 'Collect Files', description: 'Collect files (binaries, documents, scripts)', time: 5 },
         { key: 'userprofiles', label: 'User Profiles', description: 'Collect user profiles\n(if available)', time: 5 },
         { key: 'vss', label: 'Volume Shadow Copies', description: 'Process VSS images\n(if available)', time: 20, slow: true },
-        { key: 'symlinks', label: 'Follow Symlinks', description: 'Follow shortcuts/aliases/\nsymbolic links', time: 10 },
+        { key: 'symlinks', label: 'Follow Symlinks', description: 'Follow shortcuts/aliases/\nsymbolic links', time: 10, slow: true },
       ],
     },
     {
@@ -37,11 +37,9 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       description: 'File metadata and verification options',
       type: 'multi',
       options: [
-        { key: 'hash_collected', label: 'Hash Collected Artefacts', description: 'Hash only collected artifacts', time: 10 },
-        { key: 'hash_all', label: 'Hash All Artefacts', description: 'Hash all files on mounted image', time: 60, slow: true },
-        { key: 'nsrl', label: 'NSRL', description: 'Compare hashes against NSRL database', time: 20 },
         { key: 'last_access_times', label: 'Last Access Times', description: 'Obtain last access times of all files', time: 5 },
-        { key: 'imageinfo', label: 'Image Info', description: 'Extract E01 metadata information', time: 2, disabledForGandalf: true },
+        { key: 'hash_collected', label: 'Hash Collected Artefacts', description: 'Hash only collected artifacts', time: 10 },
+        { key: 'nsrl', label: 'NSRL', description: 'Compare hashes against NSRL database', time: 20 },
       ],
     },
     {
@@ -52,10 +50,9 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
       options: [
         { key: 'analysis', label: 'Automated Analysis', description: 'Conduct automated forensic analysis (includes magic-byte checks)', time: 30 },
         { key: 'extract_iocs', label: 'Extract IOCs', description: 'Extract Indicators of Compromise', time: 20 },
-        { key: 'clamav', label: 'ClamAV', description: 'Run ClamAV against mounted image', time: 90, slow: true },
         { key: 'memory', label: 'Memory Collection & Analysis', description: 'Analyze memory using Volatility', time: 45, slow: true },
-        { key: 'memory_timeline', label: 'Memory Timeline', description: 'Create memory timeline\nusing timeliner', time: 60, slow: true },
         { key: 'timeline', label: 'Disk Image Timeline', description: 'Create timeline using plaso', time: 180, slow: true, disabledForGandalf: true },
+        { key: 'memory_timeline', label: 'Memory Timeline', description: 'Create memory timeline using timeliner', time: 60, slow: true },
       ],
     },
     {
@@ -83,11 +80,12 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
     {
       key: 'postprocess',
       title: 'Post-Processing',
-      description: 'Cleanup and archiving options',
+      description: 'Cleanup, archiving, and logging options',
       type: 'multi',
       options: [
         { key: 'archive', label: 'Archive', description: 'Create ZIP archive after processing', time: 20 },
         { key: 'delete', label: 'Delete Raw Data', description: 'Delete raw data after processing', time: 1 },
+        { key: 'debug', label: 'Debug Logging', description: 'Enable verbose debug messages in job log', time: 0 },
       ],
     },
     {
@@ -498,8 +496,8 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
               const isAnalysisStep = currentStepData.key === 'analysis';
               const filteredOptions = getFilteredOptions();
 
-              const verificationOrder = ['hash_collected', 'hash_all', 'nsrl', 'last_access_times', 'imageinfo'];
-              const analysisOrder = ['analysis', 'extract_iocs', 'clamav', 'memory', 'memory_timeline', 'timeline'];
+              const verificationOrder = ['last_access_times', 'hash_collected', 'nsrl'];
+              const analysisOrder = ['analysis', 'extract_iocs', 'memory', 'timeline', 'memory_timeline'];
 
               const orderedOptions = (isVerificationStep ? verificationOrder : isAnalysisStep ? analysisOrder : [])
                 .map(key => filteredOptions.find(opt => opt.key === key))
@@ -524,26 +522,16 @@ function OptionsPanel({ options, onChange, disabled = false, hasImages = false, 
                   {finalOptions.map(option => {
                     const layoutStyle = {};
                     if (isVerificationStep) {
-                      const spans = {
-                        hash_collected: 2,
-                        hash_all: 2,
-                        nsrl: 2,
-                        last_access_times: 3,
-                        imageinfo: 3,
-                      };
-                      if (spans[option.key]) {
-                        layoutStyle.gridColumn = `span ${spans[option.key]}`;
-                      }
+                      // 4 equal options in a row - no spans needed, CSS handles it
                     }
 
                     if (isAnalysisStep) {
                       // 2 rows x 3 columns layout using 6-column grid
-                      // Row 1: Automated Analysis | Extract IOCs | ClamAV
-                      // Row 2: Memory Collection | Memory Timeline | Disk Image Timeline
+                      // Row 1: Automated Analysis | Extract IOCs | Memory Collection
+                      // Row 2: Memory Timeline | Disk Image Timeline | (empty)
                       const spans = {
                         analysis: 2,
                         extract_iocs: 2,
-                        clamav: 2,
                         memory: 2,
                         memory_timeline: 2,
                         timeline: 2,
