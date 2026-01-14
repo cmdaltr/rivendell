@@ -67,7 +67,7 @@ const LoginPage = () => {
         </p>
       </header>
 
-      <div className="card" style={{ maxWidth: '3000px', margin: '0 auto' }}>
+      <div className="card" style={{ width: '800px', maxWidth: '90%', margin: '0 auto' }}>
         <h3>Sign In</h3>
 
         {error && (

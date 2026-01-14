@@ -1,4 +1,31 @@
 services:
+  # PostgreSQL for job state storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: rivendell-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=rivendell
+      - POSTGRES_USER=rivendell
+      - POSTGRES_PASSWORD=rivendell
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rivendell-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rivendell"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
   # Redis for Celery task queue
   redis:
     image: redis:7-alpine
@@ -28,16 +55,21 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://rivendell:rivendell@postgres:5432/rivendell
     volumes:
       - ./src/web/backend:/app
-      # - /mnt:/mnt:ro  # Mount host /mnt for read-only access to images (Linux only)
-      # - /media:/media:ro  # Mount host /media for read-only access (Linux only)
+      # Platform-specific mounts - uncomment for your OS:
+      # - /mnt:/mnt:ro              # Linux: Mount points (read-only)
+      # - /media:/media:ro          # Linux: Ubuntu/Debian mounts (read-only)
+      - /Volumes:/Volumes:ro      # macOS: External drives (read-only)
+      # - D:/:/mnt/d:ro             # Windows: Mount D: drive (example, adjust as needed)
       - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
+      - /tmp/rivendell:/tmp/rivendell:ro  # Mount for test images in /tmp/rivendell
       - /tmp/rivendell:/host/tmp/rivendell  # Also mount at /host/tmp/rivendell for frontend compatibility
-      - /Volumes:/Volumes:ro  # Mount macOS /Volumes for external drives (macOS only)
       - rivendell_uploads:/tmp/elrond/uploads  # Upload directory
     depends_on:
       - redis
+      - postgres
     networks:
       - rivendell-network
     restart: unless-stopped
@@ -63,6 +95,7 @@ services:
       - REDIS_PORT=6379
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DATABASE_URL=postgresql://rivendell:rivendell@postgres:5432/rivendell
       - SPLUNK_HOST=splunk
       - SPLUNK_PORT=8089
       - SPLUNK_USERNAME=admin
@@ -77,16 +110,21 @@ services:
       - ./src/web/backend:/app
       # NOTE: elrond source is now copied into the image during build (see Dockerfile.forensics)
       # to avoid OneDrive file locking conflicts with Docker VirtioFS on macOS
-      # - /mnt:/mnt:ro  # Linux only
-      # - /media:/media:ro  # Linux only
-      - /Volumes:/Volumes  # Mount macOS /Volumes for external drives - needs write for output
+      # Platform-specific mounts - uncomment for your OS:
+      # - /mnt:/mnt                 # Linux: Mount points (read-write for output)
+      # - /media:/media             # Linux: Ubuntu/Debian mounts (read-write for output)
+      - /Volumes:/Volumes           # macOS: External drives (read-write for output) - COMMENT OUT ON LINUX/WINDOWS
+      # - D:/:/mnt/d                # Windows: Mount D: drive (example, adjust as needed)
       - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
+      - /tmp/rivendell:/tmp/rivendell  # Mount for test images in /tmp/rivendell
+      - ./fixtures:/tmp/rivendell/fixtures:ro  # Keywords, YARA rules, IOC watchlists for analysis
       - rivendell_uploads:/tmp/elrond/uploads  # For uploaded forensic images
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var
       - navigator_data:/navigator  # Shared with navigator for ATT&CK Navigator JSON output
     depends_on:
       - redis
+      - postgres
       - backend
       - splunk
       - elastic
@@ -98,7 +136,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 6G
+          memory: 8G
         reservations:
           memory: 2G
 
@@ -336,6 +374,7 @@ services:
           memory: 4G
 
 volumes:
+  postgres_data:
   redis_data:
   rivendell_output:
   rivendell_uploads:

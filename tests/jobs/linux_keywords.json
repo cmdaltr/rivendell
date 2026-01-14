@@ -1,0 +1,40 @@
+{
+  "case_number": "TEST_linux_keywords",
+  "source_paths": [
+    "/Volumes/Media5TB/rivendell_imgs/Linux_mail.vmdk.raw"
+  ],
+  "destination_path": "/Volumes/Media5TB/rivendell_imgs/tests/linux_keywords",
+  "options": {
+    "local": true,
+    "gandalf": false,
+    "analysis": false,
+    "extract_iocs": false,
+    "timeline": false,
+    "memory": false,
+    "memory_timeline": false,
+    "keywords": true,
+    "keywords_file": "/path/to/keywords.txt",
+    "yara": false,
+    "collectFiles": false,
+    "brisk": false,
+    "vss": false,
+    "symlinks": false,
+    "userprofiles": false,
+    "nsrl": false,
+    "hash_collected": false,
+    "hash_all": false,
+    "splunk": false,
+    "elastic": false,
+    "navigator": false
+  },
+  "metadata": {
+    "test_name": "linux_keywords",
+    "description": "Linux disk image with Keywords search",
+    "tags": [
+      "linux",
+      "keywords"
+    ],
+    "estimated_duration_minutes": 45,
+    "generated_at": "2025-12-17T20:29:59.035035"
+  }
+}

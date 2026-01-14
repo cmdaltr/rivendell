@@ -60,12 +60,6 @@ def process_browser_index(
     for indexuser in os.listdir(browsers_raw_dir):
         index_dat_path = os.path.join(browsers_raw_dir, indexuser, "ie/History.IE5/index.dat")
         if os.path.exists(index_dat_path):
-            if verbosity != "":
-                print(
-                    "     Processing Internet Explorer artefact '{}' ({}) for {}...".format(
-                        artefact.split("/")[-1], indexuser, vssimage
-                    )
-                )
             entry, prnt = "{},{},{},({}) '{}' browser artefact\n".format(
                 datetime.now().isoformat(),
                 vssimage.replace("'", ""),
@@ -190,10 +184,10 @@ def process_browser_index(
             with open(output_file, "w") as f:
                 json.dump(history_entries, f, indent=2)
 
-            # Write technique ID to techniques file for Navigator
+            # Write technique ID to techniques file for Navigator at CASE level
             if history_entries:
                 techniques_file_path = os.path.join(
-                    os.path.dirname(os.path.dirname(browsers_output_dir)),
+                    output_directory,
                     "mitre_techniques.txt"
                 )
                 try:
@@ -233,15 +227,6 @@ def process_browser(
         browser_name = "Unknown"
         browser_type = "unknown"
 
-    if verbosity != "":
-        print(
-            "     Processing {} browser artefact '{}' ({}) for {}...".format(
-                browser_name,
-                artefact.split("/")[-1],
-                artefact.split("/")[-3],
-                vssimage,
-            )
-        )
 
     entry, prnt = "{},{},{},'{}' ({}) {} browser artefact\n".format(
         datetime.now().isoformat(),
@@ -488,9 +473,9 @@ def process_browser(
     with open(history_output, "w") as f:
         json.dump(history_entries, f, indent=2)
 
-    # Write technique IDs to techniques file for Navigator
+    # Write technique IDs to techniques file for Navigator at CASE level
     techniques_file_path = os.path.join(
-        os.path.dirname(os.path.dirname(browser_output_dir)),
+        output_directory,
         "mitre_techniques.txt"
     )
     try:

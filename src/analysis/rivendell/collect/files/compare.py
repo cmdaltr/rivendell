@@ -56,7 +56,7 @@ def compare_include_exclude(
     if os.path.exists(
         output_directory + img.split("::")[0] + recpath + recovered_file
     ):  # multiple files with the same name
-        if collectfiles != True:
+        if isinstance(collectfiles, str) and (collectfiles.startswith("include:") or collectfiles.startswith("exclude:")):
             with open(collectfiles.split(":")[1]) as include_or_exclude_selection_file:
                 for inc_ex_line in include_or_exclude_selection_file:
                     if collectfiles.split(":")[0] == "include" and (
@@ -106,7 +106,7 @@ def compare_include_exclude(
                 increment,
             )
     else:  # files with unique name
-        if collectfiles != True:
+        if isinstance(collectfiles, str) and (collectfiles.startswith("include:") or collectfiles.startswith("exclude:")):
             with open(collectfiles.split(":")[1]) as include_or_exclude_selection_file:
                 for inc_ex_line in include_or_exclude_selection_file:
                     if collectfiles.split(":")[0] == "include" and (

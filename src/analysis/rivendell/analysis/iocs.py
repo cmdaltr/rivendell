@@ -7,6 +7,27 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 
 
+def load_ioc_watchlist(watchlist_file):
+    """Load IOCs from a watchlist file (one IOC per line).
+
+    Returns a set of lowercase IOCs for fast lookup.
+    """
+    watchlist = set()
+    if watchlist_file and os.path.exists(watchlist_file):
+        try:
+            with open(watchlist_file, "r") as f:
+                for line in f:
+                    ioc = line.strip().lower()
+                    # Skip empty lines and comments
+                    if ioc and not ioc.startswith("#"):
+                        watchlist.add(ioc)
+            if watchlist:
+                print(f"      Loaded {len(watchlist)} IOCs from watchlist: {watchlist_file}")
+        except Exception as e:
+            print(f"      WARNING: Could not load IOC watchlist: {e}")
+    return watchlist
+
+
 def compare_iocs(
     output_directory,
     verbosity,
@@ -16,7 +37,11 @@ def compare_iocs(
     iocfiles,
     lineno,
     previous_state,
+    watchlist_file=None,
 ):
+    # Load IOC watchlist if provided
+    watchlist = load_ioc_watchlist(watchlist_file)
+
     print("      Commencing IOC extraction for '{}'...\n".format(img.split("::")[0]))
     for iocfile in iocfiles:
         if os.path.exists(iocfile.split(": ")[0]):
@@ -120,7 +145,7 @@ def compare_iocs(
                                     )
                                 ):
                                     with open(
-                                        "/opt/elrond/elrond/rivendell/analysis/ioc_exclusions"
+                                        os.path.join(os.path.dirname(__file__), "ioc_exclusions")
                                     ) as ioc_exclusions:
                                         match = []
                                         for each_exclusion in ioc_exclusions:
@@ -255,6 +280,9 @@ def compare_iocs(
                                             else:
                                                 ioctype = ""
                                             if ioctype != "":
+                                                # Check if IOC matches watchlist
+                                                ioc_value = eachioc.split("@")[-1]
+                                                watchlist_match = "YES" if ioc_value.lower() in watchlist else ""
                                                 with open(
                                                     output_directory
                                                     + img.split("::")[0]
@@ -262,15 +290,16 @@ def compare_iocs(
                                                     "a",
                                                 ) as ioccsv:
                                                     ioccsv.write(
-                                                        "{},{},{},{},{},{}\n".format(
+                                                        "{},{},{},{},{},{},{}\n".format(
                                                             iocfiletimes,
                                                             iocfile.split(": ")[0]
                                                             .replace(",", "%2C")
                                                             .strip(),
-                                                            eachioc.split("@")[-1],
+                                                            ioc_value,
                                                             ioctype.replace("_", " "),
                                                             str(line.split(":±§±:")[0]),
                                                             resolve,
+                                                            watchlist_match,
                                                         )
                                                     )
                                         match.clear()

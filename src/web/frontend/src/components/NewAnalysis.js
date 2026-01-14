@@ -16,7 +16,7 @@ const FILE_REQUIREMENTS = {
 function NewAnalysis() {
   const navigate = useNavigate();
   const [caseNumber, setCaseNumber] = useState('');
-  const [analysisMode, setAnalysisMode] = useState('local'); // 'local', 'gandalf', or 'cloud'
+  const [analysisMode, setAnalysisMode] = useState('local'); // 'local', 'gandalf', 'cloud', 'mordor', or 'json'
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [destinationPath, setDestinationPath] = useState('');
   const [options, setOptions] = useState({});
@@ -31,6 +31,8 @@ function NewAnalysis() {
   const [missingFiles, setMissingFiles] = useState([]);
   const [uploadedFiles, setUploadedFiles] = useState({});
   const fileInputRefs = useRef({});
+  const jsonFileInputRef = useRef(null);
+  const [loadedConfigName, setLoadedConfigName] = useState(null);
 
   // Clear error when options change
   const handleOptionsChange = (newOptions) => {
@@ -62,6 +64,23 @@ function NewAnalysis() {
     return () => clearTimeout(timeoutId);
   }, [caseNumber]);
 
+  // Auto-enable mordor options when Mordor mode is selected
+  useEffect(() => {
+    if (analysisMode === 'mordor') {
+      setOptions(prev => ({
+        ...prev,
+        mordor: true,
+        analysis: true,
+        extract_iocs: true,
+        memory: true,
+        userprofiles: true,
+        navigator: true,
+        splunk: true,
+        elastic: true,
+      }));
+    }
+  }, [analysisMode]);
+
   // Validate case number and get validation message
   const getCaseNumberValidation = (value) => {
     if (value.length === 0) {
@@ -72,8 +91,8 @@ function NewAnalysis() {
       return { valid: false, message: `Case number must be at least 6 characters (currently ${value.length})` };
     }
 
-    if (value.length > 20) {
-      return { valid: false, message: `Case number must be no longer than 20 characters (currently ${value.length})` };
+    if (value.length > 30) {
+      return { valid: false, message: `Case number must be no longer than 30 characters (currently ${value.length})` };
     }
 
     const startsValid = /^[a-zA-Z0-9]/.test(value);
@@ -121,8 +140,8 @@ function NewAnalysis() {
       return;
     }
 
-    // Check operation mode is selected
-    if (!options.collect && !options.gandalf) {
+    // Check operation mode is selected (JSON mode bypasses this check as it's pre-configured)
+    if (analysisMode !== 'json' && !options.collect && !options.gandalf) {
       setError('Please select an operation mode (Collect or Gandalf)');
       return;
     }
@@ -228,6 +247,106 @@ function NewAnalysis() {
     await startJobCreation(false);
   };
 
+  const handleJsonFileLoad = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      setAnalysisMode('local');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const config = JSON.parse(e.target.result);
+
+        // Validate required fields
+        if (!config.case_number && !config.caseNumber) {
+          setError('JSON file missing required field: case_number');
+          setAnalysisMode('local');
+          return;
+        }
+
+        // Set case number
+        setCaseNumber(config.case_number || config.caseNumber || '');
+
+        // Set source paths/files
+        if (config.source_paths && Array.isArray(config.source_paths)) {
+          setSelectedFiles(config.source_paths);
+        } else if (config.sourcePaths && Array.isArray(config.sourcePaths)) {
+          setSelectedFiles(config.sourcePaths);
+        }
+
+        // Set destination path
+        if (config.destination_path || config.destinationPath) {
+          setDestinationPath(config.destination_path || config.destinationPath);
+        }
+
+        // Set options
+        if (config.options && typeof config.options === 'object') {
+          // Map the options from the JSON to the format expected by the UI
+          const opts = config.options;
+          setOptions({
+            collect: opts.local !== false,  // Default to true unless explicitly false
+            analysis: opts.analysis || false,
+            extractiocs: opts.extract_iocs || opts.extractiocs || false,
+            timeline: opts.timeline || false,
+            memory: opts.memory || false,
+            memory_timeline: opts.memory_timeline || false,
+            keywords: opts.keywords || false,
+            keywords_file: opts.keywords_file || '',
+            yara: opts.yara || false,
+            yara_dir: opts.yara_dir || '',
+            collectFiles: opts.collectFiles || opts.collect_files || false,
+            collectFiles_filter: opts.collectFiles_filter || opts.collect_files_filter || '',
+            brisk: opts.brisk || false,
+            vss: opts.vss || false,
+            symlinks: opts.symlinks || false,
+            userprofiles: opts.userprofiles || false,
+            nsrl: opts.nsrl || false,
+            hash_collected: opts.hash_collected || false,
+            hash_all: opts.hash_all || false,
+            splunk: opts.splunk || false,
+            elastic: opts.elastic || false,
+            navigator: opts.navigator || false,
+            gandalf: opts.gandalf || false,
+          });
+
+          // Set analysis mode based on options
+          if (opts.gandalf) {
+            setAnalysisMode('gandalf');
+          } else {
+            setAnalysisMode('local');
+          }
+        } else {
+          setAnalysisMode('local');
+        }
+
+        // Set loaded config name for display
+        setLoadedConfigName(file.name);
+        setError(null);
+
+        // Show success message briefly
+        console.log('Loaded configuration from:', file.name);
+
+      } catch (err) {
+        setError(`Failed to parse JSON file: ${err.message}`);
+        setAnalysisMode('local');
+        setLoadedConfigName(null);
+      }
+    };
+
+    reader.onerror = () => {
+      setError('Failed to read JSON file');
+      setAnalysisMode('local');
+      setLoadedConfigName(null);
+    };
+
+    reader.readAsText(file);
+
+    // Reset the file input so the same file can be selected again
+    event.target.value = '';
+  };
+
   const handleOverwriteConfirm = async () => {
     setShowOverwriteModal(false);
     setError(null);
@@ -244,14 +363,19 @@ function NewAnalysis() {
     setLoading(true);
     setError(null);
     try {
+      // Determine the actual mode - 'json' mode uses whatever was loaded from the file
+      // 'mordor' mode is treated like 'local' for file selection but enables mordor processing
+      const effectiveMode = analysisMode === 'json' ? (options.gandalf ? 'gandalf' : 'local') : analysisMode;
+
       const jobData = {
         case_number: caseNumber,
         source_paths: selectedFiles,
         destination_path: destinationPath || null,
         options: {
           ...options,
-          local: analysisMode === 'local',
-          gandalf: analysisMode === 'gandalf',
+          local: effectiveMode === 'local' || effectiveMode === 'cloud' || effectiveMode === 'mordor',
+          gandalf: effectiveMode === 'gandalf',
+          mordor: effectiveMode === 'mordor',
           force_overwrite: forceOverwrite,
         },
       };
@@ -331,7 +455,7 @@ function NewAnalysis() {
               fontSize: '1rem',
               fontWeight: 'bold'
             }}>
-              Consider temporarily disabling antivirus protection or adding exclusions for the analysis output directory before proceeding.
+              Consider temporarily disabling antivirus protection or adding exclusions for the output directory before proceeding.
             </p>
             <div style={{
               display: 'flex',
@@ -386,7 +510,7 @@ function NewAnalysis() {
                   e.target.style.background = 'rgba(102, 217, 239, 0.3)';
                 }}
               >
-                Continue with Analysis
+                Continue with Processing
               </button>
             </div>
           </div>
@@ -756,13 +880,13 @@ function NewAnalysis() {
             </div>
 
             <div className="form-group">
-              <label>Analysis Mode *</label>
+              <label>Evidence Source *</label>
               {!isCaseNumberValid && (
                 <div className="info-message">
-                  Please enter a valid case number to select analysis mode.
+                  Please enter a valid case number to select evidence source.
                 </div>
               )}
-              <div style={{ display: 'flex', gap: '3rem', marginTop: '1.0rem' }}>
+              <div style={{ display: 'flex', gap: '2rem', marginTop: '1.0rem', flexWrap: 'wrap' }}>
                 <label
                   style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
                   title="Disk/Memory Images"
@@ -776,7 +900,7 @@ function NewAnalysis() {
                     disabled={!isCaseNumberValid}
                     style={{ marginLeft: '1rem', marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
-                  Local Analysis
+                  Local
                 </label>
                 <label
                   style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
@@ -791,11 +915,11 @@ function NewAnalysis() {
                     disabled={!isCaseNumberValid}
                     style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
-                  Gandalf Acquisition
+                  Gandalf
                 </label>
                 <label
-                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 0.5 : 0.3, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
-                  title="Cloud Storage (Coming Soon)"
+                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
+                  title="Cloud Storage"
                 >
                   <input
                     type="radio"
@@ -803,35 +927,79 @@ function NewAnalysis() {
                     value="cloud"
                     checked={analysisMode === 'cloud'}
                     onChange={(e) => setAnalysisMode(e.target.value)}
-                    disabled={true}
+                    disabled={!isCaseNumberValid}
                     style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
                   />
                   Cloud
-                  <span style={{ fontSize: '0.7rem', marginLeft: '0.5rem', color: '#666', fontStyle: 'italic' }}>(Coming Soon)</span>
                 </label>
+                <label
+                  style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
+                  title="Aggressive threat-hunting with full SIEM integration"
+                >
+                  <input
+                    type="radio"
+                    name="analysisMode"
+                    value="mordor"
+                    checked={analysisMode === 'mordor'}
+                    onChange={(e) => setAnalysisMode(e.target.value)}
+                    disabled={!isCaseNumberValid}
+                    style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
+                  />
+                  Mordor
+                </label>
+                <label
+                  style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', opacity: 1, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
+                  title="Load configuration from JSON file"
+                >
+                  <input
+                    type="radio"
+                    name="analysisMode"
+                    value="json"
+                    checked={analysisMode === 'json'}
+                    onChange={(e) => {
+                      setAnalysisMode(e.target.value);
+                      // Trigger file input when JSON is selected
+                      setTimeout(() => jsonFileInputRef.current?.click(), 100);
+                    }}
+                    style={{ marginRight: '0.5rem', width: '16px', height: '16px' }}
+                  />
+                  JSON
+                </label>
+                <input
+                  type="file"
+                  ref={jsonFileInputRef}
+                  accept=".json"
+                  style={{ display: 'none' }}
+                  onChange={handleJsonFileLoad}
+                />
               </div>
+              {loadedConfigName && (
+                <div style={{ marginTop: '0.5rem', color: '#a7db6c', fontSize: '0.9rem' }}>
+                  ✓ Loaded: {loadedConfigName}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="form-group">
             <label>
-              {analysisMode === 'local' ? 'Select Disk/Memory Images *' : 'Select Gandalf Acquisitions *'}
+              {analysisMode === 'gandalf' ? 'Select Gandalf Acquisitions *' : 'Select Disk/Memory Images *'}
             </label>
             {!isCaseNumberValid && (
               <div className="info-message">
                 Please enter a valid case number to continue.
               </div>
             )}
-            {analysisMode === 'local' ? (
-              <FileBrowser
-                onSelectFiles={setSelectedFiles}
-                selectedFiles={selectedFiles}
-                disabled={!isCaseNumberValid}
-              />
-            ) : (
+            {analysisMode === 'gandalf' ? (
               <GandalfJobBrowser
                 onSelectJobs={setSelectedFiles}
                 selectedJobs={selectedFiles}
+                disabled={!isCaseNumberValid}
+              />
+            ) : (
+              <FileBrowser
+                onSelectFiles={setSelectedFiles}
+                selectedFiles={selectedFiles}
                 disabled={!isCaseNumberValid}
               />
             )}

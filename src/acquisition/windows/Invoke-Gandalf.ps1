@@ -276,7 +276,7 @@ function Invoke-RemoteArchiveCollection {
     $RemoteComputer = Invoke-Command -Session $Session -ScriptBlock { $env:COMPUTERNAME }
     New-Item -Path $OutputDirectory\$RemoteComputer -ItemType Directory > $null
 
-    $LogSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "log.audit"); $LogDestination = [IO.Path]::Combine($FilePath, "log.audit"); $MetaSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "meta.audit"); $MetaDestination = [IO.Path]::Combine($FilePath, "meta.audit"); $ZipSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "$RemoteComputer.zip"); $ZipDestination = [IO.Path]::Combine($FilePath, "$RemoteComputer.zip"); $7ZSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "$RemoteComputer.7z"); $7ZDestination = [IO.Path]::Combine($FilePath, "$RemoteComputer.7z")
+    $LogSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "log_audit.log"); $LogDestination = [IO.Path]::Combine($FilePath, "log_audit.log"); $MetaSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "meta_audit.log"); $MetaDestination = [IO.Path]::Combine($FilePath, "meta_audit.log"); $ZipSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "$RemoteComputer.zip"); $ZipDestination = [IO.Path]::Combine($FilePath, "$RemoteComputer.zip"); $7ZSource = [IO.Path]::Combine($OutputDirectory, $RemoteComputer, "$RemoteComputer.7z"); $7ZDestination = [IO.Path]::Combine($FilePath, "$RemoteComputer.7z")
     Copy-Item -FromSession $Session -Path $LogSource -Destination $LogDestination -Force > $null 2>&1
     Copy-Item -FromSession $Session -Path $MetaSource -Destination $MetaDestination -Force > $null 2>&1
     Copy-Item -FromSession $Session -Path $ZipSource -Destination $ZipDestination -Force > $null 2>&1

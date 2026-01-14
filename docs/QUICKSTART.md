@@ -102,6 +102,51 @@ cd acquisition\windows
 .\Invoke-Gandalf.ps1 Password HOSTNAME -Memory -OutputDirectory D:\evidence
 ```
 
+## 📁 Analysis Files (Keywords, YARA & IOC Watchlists)
+
+To use keyword searching, YARA signature scanning, and IOC watchlist matching, place your files in the `files/` directory:
+
+```
+files/
+├── keywords.txt           # One keyword per line
+├── iocs.txt               # IOC watchlist (IPs, domains, hashes)
+└── yara_rules/            # YARA rule files
+    ├── malware.yar
+    ├── suspicious.yara
+    └── custom_rules.yar
+```
+
+This directory is automatically mounted into the Docker container at `/tmp/rivendell/files/`.
+
+**Keywords File Format** (`keywords.txt`):
+```
+password
+secret
+api_key
+credentials
+```
+
+**IOC Watchlist Format** (`iocs.txt`):
+```
+# Known malicious IPs
+192.168.1.100
+10.0.0.50
+
+# Malicious domains
+evil-domain.com
+malware-c2.net
+
+# File hashes (MD5, SHA1, SHA256)
+d41d8cd98f00b204e9800998ecf8427e
+```
+
+**YARA Rules**: Place `.yar` or `.yara` files in the `yara_rules/` subdirectory.
+
+When creating analysis jobs, reference these paths:
+- Keywords: `/tmp/rivendell/files/keywords.txt`
+- YARA: `/tmp/rivendell/files/yara_rules/`
+- IOCs: `/tmp/rivendell/files/iocs.txt`
+
 ## 🔍 Analyze Evidence
 
 ### Quick Analysis
@@ -422,6 +467,6 @@ tail -f /var/log/rivendell/web.log
 
 ---
 
-**Need Help?** Check the [full documentation](README.md) or open an [issue](https://github.com/yourusername/rivendell/issues).
+**Need Help?** Check the [full documentation](README.md) or open an [issue](https://github.com/cmdaltr/rivendell/issues).
 
 Happy Investigating! 🔍🧙‍♂️

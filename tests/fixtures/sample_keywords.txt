@@ -1,0 +1,19 @@
+password
+secret
+confidential
+malware
+hack
+exploit
+backdoor
+credential
+ransomware
+trojan
+virus
+rootkit
+keylogger
+bitcoin
+wallet
+private key
+admin
+administrator
+sudo

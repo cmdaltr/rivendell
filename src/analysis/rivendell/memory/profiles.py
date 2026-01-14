@@ -399,14 +399,17 @@ def check_profile(
     profile,
     artefact,
 ):
+    # Handle case where img doesn't contain "::" (standalone memory image processing)
+    img_name = img.split("::")[0] if "::" in img else img
+
     if state == "notvss":  # not vss image
         with open("/opt/elrond/elrond/tools/.profiles", "a") as temp_profiles:
-            temp_profiles.write(img.split("::")[0] + ">>" + profile + "\n")
+            temp_profiles.write(img_name + ">>" + profile + "\n")
     else:  # vss image
         with open("/opt/elrond/elrond/tools/.profiles", "r") as temp_profiles:
             savedprofiles = str(temp_profiles.readlines())[2:-4]
             if (
-                img.split("::")[0] in savedprofiles
+                img_name in savedprofiles
             ):  # hiberfil exists in original and vss
                 orig_and_vss = "orig_and_vss"
                 for img_profile in savedprofiles.split("\\n', '"):
@@ -433,8 +436,8 @@ def check_profile(
                 )
         if orig_and_vss == "only_vss":
             with open("/opt/elrond/elrond/tools/.profiles", "a") as temp_profiles:
-                if img.split("::")[0] not in temp_profiles.readlines():
-                    temp_profiles.write(img.split("::")[0] + ">>" + profile + "\n")
+                if img_name not in temp_profiles.readlines():
+                    temp_profiles.write(img_name + ">>" + profile + "\n")
     return profile
 
 

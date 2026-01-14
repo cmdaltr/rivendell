@@ -41,12 +41,6 @@ def mac_users(
                 or os.path.exists(item + "/" + each + "/.bashrc")
                 or os.path.exists(item + "/" + each + "/.bash_session")
             ):
-                if verbosity != "":
-                    print(
-                        "     Collecting bash files for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 for eachbash in bashfiles:
                     try:
                         shutil.copy2(
@@ -78,10 +72,6 @@ def mac_users(
                     except:
                         pass
             if os.path.exists(item + "/" + each + "/Library/keychains/"):
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' keychain for {}...".format(each, vssimage)
-                    )
                 (
                     entry,
                     prnt,
@@ -116,12 +106,6 @@ def mac_users(
             ) or os.path.exists(item + "/" + each + "/Library/Safari/"):
                 if not os.path.exists(dest + "plists"):
                     os.makedirs(dest + "plists")
-                if verbosity != "":
-                    print(
-                        "     Collecting plists for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 for eachplist in os.listdir(item + each + "/Library/Preferences/"):
                     try:
                         (
@@ -184,12 +168,6 @@ def mac_users(
                         except:
                             pass
             if os.path.exists(item + "/" + each + "/.ssh/"):
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' ssh files for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -224,12 +202,6 @@ def mac_users(
             if os.path.exists(item + "/" + each + "/.Trash/"):
                 if not os.path.exists(dest + "/deleted/"):
                     os.makedirs(dest + "/deleted/")
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' deleted files for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -264,12 +236,6 @@ def mac_users(
             if os.path.exists(item + "/" + each + "/Library/Mail"):
                 if not os.path.exists(dest + "/mail/"):
                     os.makedirs(dest + "/mail/")
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' mail artefacts for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -438,12 +404,6 @@ def mac_users(
                     os.stat(bwsrdest + each + "/safari/")
                 except:
                     os.makedirs(bwsrdest + each + "/safari/")
-                if verbosity != "":
-                    print(
-                        "     Collecting Safari browser artefacts for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 try:
                     (
                         entry,
@@ -488,12 +448,6 @@ def mac_users(
                     )
                     > 0
                 ):
-                    if verbosity != "":
-                        print(
-                            "     Collecting Google Chrome browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     (
                         entry,
                         prnt,
@@ -560,12 +514,6 @@ def mac_users(
                         os.stat(bwsrdest + each + "/firefox/")
                     except:
                         os.makedirs(bwsrdest + each + "/firefox/")
-                    if verbosity != "":
-                        print(
-                            "     Collecting Mozilla Firefox browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     try:
                         (
                             entry,

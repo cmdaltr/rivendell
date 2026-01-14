@@ -19,9 +19,11 @@ def write_audit_log_entry(verbosity, output_directory, entry, prnt):
 
 
 def manage_error(output_directory, verbosity, error, state, img, item, vsstext):
+    # Handle case where img doesn't contain "::" (standalone memory image processing)
+    img_name = img.split("::")[0] if "::" in img else img
     entry, prnt = "{},{},{} failed ({}),'{}'\n".format(
         datetime.now().isoformat(),
-        img.split("::")[0],
+        img_name,
         state,
         str(error).split("] ")[-1],
         item.strip("/").split("/")[-1],
@@ -32,6 +34,6 @@ def manage_error(output_directory, verbosity, error, state, img, item, vsstext):
         state,
         item.strip("/").split("/")[-1],
         vsstext.replace("vss", "volume shadow copy #"),
-        img.split("::")[0],
+        img_name,
     )
     write_audit_log_entry(verbosity, output_directory, entry, prnt)

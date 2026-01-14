@@ -46,6 +46,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow-y: scroll;
+  zoom: 0.95; /* Default zoom level - further out */
 }
 
 .App-header {
@@ -500,7 +501,7 @@ small {
   border: 1px solid #2a2a5a;
   border-radius: 4px;
   padding: 1rem;
-  max-height: 400px;
+  max-height: 440px;
   overflow-y: auto;
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
@@ -511,6 +512,7 @@ small {
   margin: 0;
   white-space: pre-wrap;
   word-wrap: break-word;
+  color: #e5e0d0;
 }
 
 .file-browser {
@@ -997,8 +999,9 @@ table input[type="checkbox"] {
 }
 
 .option-tag {
-  background: rgba(102, 217, 239, 0.2);
-  color: #66d9ef;
+  background: rgba(107, 142, 63, 0.3);
+  border: 1px solid rgba(107, 142, 63, 0.5);
+  color: #a7db6c;
   padding: 0.3rem 0.9rem;
   border-radius: 14px;
   font-size: 1.05rem;
@@ -1519,6 +1522,12 @@ table input[type="checkbox"] {
   opacity: 0.8;
 }
 
+.indicator-keys {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
 .slow-indicator-key {
   display: inline-flex;
   align-items: center;
@@ -1531,6 +1540,28 @@ table input[type="checkbox"] {
   font-size: 0.85rem;
   font-weight: bold;
   margin-right: 0.5rem;
+}
+
+.input-indicator-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-right: 0.5rem;
+}
+
+.input-key {
+  font-size: 0.85rem;
+  color: #e5e0d0;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  letter-spacing: 0.03em;
+  opacity: 0.8;
 }
 
 .wizard-actions-top {
@@ -1597,28 +1628,76 @@ table input[type="checkbox"] {
   grid-column: span 2;
 }
 
+/* 7-9 options: 3 columns (3x3 grid for 9) */
+.wizard-options.checkbox-group[data-option-count="7"],
+.wizard-options.checkbox-group[data-option-count="8"],
+.wizard-options.checkbox-group[data-option-count="9"] {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .wizard-options.verification-grid,
 .wizard-options.verification-grid[data-option-count] {
   grid-template-columns: repeat(3, 1fr);
 }
 
 .wizard-options.analysis-grid,
-.wizard-options.analysis-grid[data-option-count],
-.wizard-options.analysis-grid.checkbox-group[data-option-count="5"],
-.wizard-options.analysis-grid.checkbox-group[data-option-count="6"] {
+.wizard-options.analysis-grid[data-option-count] {
   grid-template-columns: repeat(6, 1fr) !important;
 }
 
-/* Analysis grid: first 3 items span 2 columns each (row 1) */
+/* Analysis grid layout (8 items):
+   Row 1: Automated Analysis | Extract IOCs | Memory Collection (span 2 each)
+   Row 2: Disk Image Timeline | Memory Timeline (span 3 each)
+   Row 3: Keywords Search | YARA Rules | Collect Specific Files (span 2 each) */
 .wizard-options.analysis-grid .wizard-option-item:nth-child(1),
 .wizard-options.analysis-grid .wizard-option-item:nth-child(2),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(3) {
+.wizard-options.analysis-grid .wizard-option-item:nth-child(3),
+.wizard-options.analysis-grid .wizard-option-item:nth-child(6),
+.wizard-options.analysis-grid .wizard-option-item:nth-child(7),
+.wizard-options.analysis-grid .wizard-option-item:nth-child(8) {
   grid-column: span 2 !important;
 }
 
-/* Analysis grid: last 2 items span 3 columns each (50% width, row 2) */
+/* Analysis grid: items 4-5 span 3 columns each (50% width, row 2) */
 .wizard-options.analysis-grid .wizard-option-item:nth-child(4),
 .wizard-options.analysis-grid .wizard-option-item:nth-child(5) {
+  grid-column: span 3 !important;
+}
+
+/* Collection grid layout (18 items):
+   Row 1: Full User Profiles | Volume Shadow Copies | Hash Collected (3 items, span 4 each)
+   Row 2: Last Access Times | Archive Output | DEBUG Logging (3 items, span 4 each)
+   Row 3: Collect All Files | Collect Archives | Collect Binaries | Collect Hidden (4 items, span 3 each)
+   Row 4: Collect Shortcuts | Collect Mail | Collect Masquerading | Collect Misplaced (4 items, span 3 each)
+   Row 5: Collect Scripts | Collect Unallocated | Collect Virtual | Collect Web (4 items, span 3 each) */
+.wizard-options.collection-grid,
+.wizard-options.collection-grid[data-option-count] {
+  grid-template-columns: repeat(12, 1fr) !important;
+}
+
+/* Collection grid: items 1-6 span 4 columns each (1/3 width, rows 1-2) */
+.wizard-options.collection-grid .wizard-option-item:nth-child(1),
+.wizard-options.collection-grid .wizard-option-item:nth-child(2),
+.wizard-options.collection-grid .wizard-option-item:nth-child(3),
+.wizard-options.collection-grid .wizard-option-item:nth-child(4),
+.wizard-options.collection-grid .wizard-option-item:nth-child(5),
+.wizard-options.collection-grid .wizard-option-item:nth-child(6) {
+  grid-column: span 4 !important;
+}
+
+/* Collection grid: items 7-18 span 3 columns each (1/4 width, rows 3-5) */
+.wizard-options.collection-grid .wizard-option-item:nth-child(7),
+.wizard-options.collection-grid .wizard-option-item:nth-child(8),
+.wizard-options.collection-grid .wizard-option-item:nth-child(9),
+.wizard-options.collection-grid .wizard-option-item:nth-child(10),
+.wizard-options.collection-grid .wizard-option-item:nth-child(11),
+.wizard-options.collection-grid .wizard-option-item:nth-child(12),
+.wizard-options.collection-grid .wizard-option-item:nth-child(13),
+.wizard-options.collection-grid .wizard-option-item:nth-child(14),
+.wizard-options.collection-grid .wizard-option-item:nth-child(15),
+.wizard-options.collection-grid .wizard-option-item:nth-child(16),
+.wizard-options.collection-grid .wizard-option-item:nth-child(17),
+.wizard-options.collection-grid .wizard-option-item:nth-child(18) {
   grid-column: span 3 !important;
 }
 
@@ -1755,6 +1834,22 @@ table input[type="checkbox"] {
   cursor: help;
 }
 
+/* Input required indicator (blue badge) */
+.input-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #3b82f6;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: bold;
+  margin-left: 0.5rem;
+  cursor: help;
+}
+
 /* Disabled options (greyed out for Gandalf) */
 .wizard-option-item.option-disabled {
   opacity: 0.5;
@@ -1777,11 +1872,13 @@ table input[type="checkbox"] {
 .wizard-navigation {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   margin-bottom: 1.5rem;
   padding-bottom: 1rem;
   border-bottom: 1px solid #3f4b2a;
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
 .wizard-actions-left {
@@ -1802,9 +1899,32 @@ table input[type="checkbox"] {
 
 .wizard-actions-right {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 0.75rem;
   margin-left: auto;
+}
+
+.wizard-top-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.wizard-top-row > * {
+  flex-shrink: 0;
+  width: auto;
+}
+
+.wizard-buttons-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
 }
 
 .wizard-actions-right button {
@@ -1817,18 +1937,69 @@ table input[type="checkbox"] {
   justify-content: center;
 }
 
+.wizard-top-controls {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem;
+  z-index: 10;
+}
+
+.wizard-top-controls .save-template-checkbox {
+  display: flex;
+  align-items: stretch;
+}
+
+.wizard-top-controls .eta-display {
+  position: static !important;
+  padding: 0.75rem 1.35rem !important;
+  font-size: 1rem !important;
+  min-width: 90px;
+  height: 48px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 32, 17, 0.6) !important;
+  border: 1px solid #3f4b2a !important;
+  border-radius: 4px !important;
+  color: #c3e88d !important;
+}
+
+.wizard-top-controls .save-template-checkbox label {
+  padding: 0.75rem 0.8rem !important;
+  font-size: 1rem !important;
+  height: 48px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 32, 17, 0.6) !important;
+  border: 1px solid #3f4b2a !important;
+  border-radius: 4px !important;
+  color: #c3e88d !important;
+}
+
+.wizard-top-controls .save-template-checkbox label:hover {
+  background: rgba(38, 46, 25, 0.8) !important;
+  border-color: #8abf4d !important;
+}
+
 .wizard-actions-right .eta-display {
+  position: static !important;
   padding: 0.75rem 1.5rem;
   font-size: 1rem;
   min-width: 140px;
   height: 48px;
-  display: flex;
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
   background: rgba(26, 32, 17, 0.6);
   border: 1px solid #3f4b2a;
   border-radius: 4px;
   color: #c3e88d;
+  flex-shrink: 0;
 }
 
 .wizard-navigation .button-start {
@@ -1924,6 +2095,167 @@ table input[type="checkbox"] {
   font-size: 1.2rem;
   font-family: 'Cinzel', 'Times New Roman', serif;
 }
+
+/* Template Selector Styles */
+.template-selector {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: rgba(26, 26, 46, 0.8);
+  border: 1px solid #3f4b2a;
+  border-radius: 8px;
+}
+
+.template-selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.template-selector h4 {
+  color: #c3e88d;
+  margin: 0;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  letter-spacing: 0.04em;
+}
+
+.import-template-btn {
+  padding: 0.5rem 1rem;
+  background: rgba(138, 191, 77, 0.15);
+  border: 1px solid #8abf4d;
+  border-radius: 6px;
+  color: #8abf4d;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-template-btn:hover {
+  background: rgba(138, 191, 77, 0.25);
+}
+
+.no-templates {
+  color: #888;
+  font-style: italic;
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: rgba(42, 42, 90, 0.4);
+  border: 1px solid #3f4b2a;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.template-item:hover {
+  background: rgba(138, 191, 77, 0.15);
+  border-color: #8abf4d;
+}
+
+.template-info {
+  flex: 1;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.template-name {
+  color: #e5e0d0;
+  font-weight: 500;
+}
+
+.template-date {
+  color: #888;
+  font-size: 0.85rem;
+}
+
+.template-delete {
+  background: transparent;
+  border: none;
+  color: #ff6b6b;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 0.5rem;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.template-delete:hover {
+  opacity: 1;
+}
+
+/* Save Template Checkbox */
+.save-template-checkbox {
+  display: inline-flex !important;
+  flex-shrink: 0;
+}
+
+.save-template-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  background: rgba(42, 42, 90, 0.4);
+  border: 1px solid #3f4b2a;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-size: 0.95rem;
+}
+
+.save-template-checkbox label:hover {
+  background: rgba(138, 191, 77, 0.15);
+  border-color: #8abf4d;
+}
+
+.save-template-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #8abf4d;
+  cursor: pointer;
+}
+
+.save-template-checkbox span {
+  color: #e5e0d0;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.using-template {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+/* Template Save Indicator */
+.template-save-indicator {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.template-saved {
+  color: #8abf4d;
+}
+
+.template-pending {
+  color: #f0dba5;
+}
+
+.using-template strong {
+  color: #c3e88d;
+}
+
 
 @media (max-width: 768px) {
   .App-main {

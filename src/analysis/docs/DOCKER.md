@@ -30,7 +30,7 @@ Elrond's Docker setup includes:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/elrond.git
+git clone https://github.com/cmdaltr/elrond.git
 cd elrond
 
 # 2. Copy environment file

@@ -12,6 +12,63 @@ from rivendell.core.identify import identify_disk_image
 from rivendell.utils import safe_input
 
 
+def cleanup_stale_mounts(elrond_mount, ewf_mount):
+    """
+    Unmount any stale mounts without removing directories.
+    Use this at the start of a job to ensure clean state.
+    """
+    def unmount_location(each):
+        subprocess.Popen(
+            ["umount", each], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        ).communicate()
+        time.sleep(0.1)
+
+    # Unmount shadow mounts
+    if os.path.exists("/mnt/shadow_mount/"):
+        for shadowimg in os.listdir("/mnt/shadow_mount/"):
+            for everyshadow in os.listdir("/mnt/shadow_mount/" + shadowimg):
+                unmount_location("/mnt/shadow_mount/" + shadowimg + "/" + everyshadow)
+
+    # Unmount VSS mounts
+    if os.path.exists("/mnt/vss/"):
+        for eachimg in os.listdir("/mnt/vss/"):
+            for eachvss in os.listdir("/mnt/vss/" + eachimg):
+                if os.path.exists("/mnt/vss/" + eachimg + "/" + eachvss):
+                    unmount_location("/mnt/vss/" + eachimg + "/" + eachvss)
+            if os.path.exists("/mnt/vss/" + eachimg):
+                unmount_location("/mnt/vss/" + eachimg)
+
+    # Disconnect NBD devices
+    for devnbd in range(1, 15):
+        if os.path.exists("/dev/nbd" + str(devnbd)):
+            unmount_location("/dev/nbd" + str(devnbd))
+            subprocess.Popen(
+                ["qemu-nbd", "--disconnect", "/dev/nbd" + str(devnbd)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ).communicate()
+
+    # Unmount elrond mounts (but don't remove directories)
+    for eachelrond in elrond_mount:
+        if os.path.exists(eachelrond):
+            unmount_location(eachelrond)
+
+    # Unmount EWF mounts (but don't remove directories)
+    for eachewf in ewf_mount:
+        if os.path.exists(eachewf):
+            unmount_location(eachewf + "/")
+
+    # Clean up loop devices
+    try:
+        subprocess.Popen(
+            ["losetup", "-D"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).communicate()
+    except Exception:
+        pass
+
+
 def unmount_images(elrond_mount, ewf_mount):
     def unmount_locations(each):
         subprocess.Popen(
@@ -850,8 +907,6 @@ def mount_images(
                 )
                 if mounterr == "b''":
                     mounted_fs_type = fs_type
-                    if verbosity != "":
-                        print(f"    Mounted E01 as {fs_type} filesystem")
                     break
                 # Unmount if partial mount happened
                 subprocess.Popen(["umount", destination_mount],
@@ -874,8 +929,6 @@ def mount_images(
                     if ntfs3g_result.returncode == 0:
                         mounterr = "b''"
                         mounted_fs_type = "ntfs-3g"
-                        if verbosity != "":
-                            print(f"    Mounted E01 as NTFS filesystem (via ntfs-3g FUSE)")
                 except (FileNotFoundError, subprocess.TimeoutExpired):
                     pass
 
@@ -917,8 +970,6 @@ def mount_images(
                     if apfs_result.returncode == 0:
                         mounterr = "b''"
                         mounted_fs_type = "apfs"
-                        if verbosity != "":
-                            print(f"    Mounted E01 as APFS filesystem (via apfs-fuse)")
                 except (FileNotFoundError, subprocess.TimeoutExpired):
                     # apfs-fuse not installed or timed out
                     pass
@@ -967,12 +1018,6 @@ def mount_images(
                 )
             )
             if vss:
-                if verbosity != "":
-                    print(
-                        "    Attempting to mount Volume Shadow Copies for '{}'...".format(
-                            disk_file
-                        )
-                    )
                 # Ensure parent directory exists
                 if not os.path.exists("/mnt/vss/"):
                     os.makedirs("/mnt/vss/")
@@ -1049,12 +1094,6 @@ def mount_images(
                             time.sleep(0.1)
                         except:
                             pass
-                if verbosity != "":
-                    print(
-                        "    All valid Volume Shadow Copies for '{}' have been successfully mounted.".format(
-                            disk_file
-                        )
-                    )
                 os.chdir(cwd)
             elif (
                 "unknown filesystem type 'apfs'" in mounterr

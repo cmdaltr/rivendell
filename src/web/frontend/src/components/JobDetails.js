@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getJob, cancelJob, deleteJob, restartJob, exportSiem } from '../api';
+import { getJob, cancelJob, deleteJob, restartJob, exportSiem, confirmSudo, cancelSudo } from '../api';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 
@@ -14,6 +14,16 @@ function JobDetails() {
   const logEndRef = useRef(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showSudoModal, setShowSudoModal] = useState(false);
+
+  // Auto-show sudo modal when job is awaiting confirmation
+  useEffect(() => {
+    if (job?.status === 'awaiting_confirmation' && job?.pending_action) {
+      setShowSudoModal(true);
+    } else {
+      setShowSudoModal(false);
+    }
+  }, [job?.status, job?.pending_action]);
 
   useEffect(() => {
     loadJob();
@@ -86,6 +96,32 @@ function JobDetails() {
     }
   };
 
+  const handleSudoConfirm = async () => {
+    setShowSudoModal(false);
+    setActionLoading(true);
+    try {
+      await confirmSudo(jobId);
+      await loadJob();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to confirm sudo action');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSudoCancel = async () => {
+    setShowSudoModal(false);
+    setActionLoading(true);
+    try {
+      await cancelSudo(jobId);
+      await loadJob();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to cancel sudo action');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleExportSiem = async () => {
     setActionLoading(true);
     try {
@@ -143,7 +179,7 @@ function JobDetails() {
     if (!job) return [];
     const enabled = [];
     // Internal options to exclude from display
-    const internalOptions = ['collect', 'process', 'local', 'gandalf', 'brisk', 'force_overwrite'];
+    const internalOptions = ['collect', 'process', 'local', 'gandalf', 'brisk', 'force_overwrite', 'save_template'];
 
     // Special formatting for specific options
     const specialFormatting = {
@@ -509,6 +545,130 @@ function JobDetails() {
         </div>
       )}
 
+      {/* Sudo Confirmation Modal */}
+      {showSudoModal && job?.pending_action && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(15, 15, 35, 0.98) 0%, rgba(25, 25, 45, 0.98) 100%)',
+            border: '2px solid rgba(255, 152, 0, 0.7)',
+            borderRadius: '8px',
+            padding: '2rem',
+            maxWidth: '600px',
+            boxShadow: '0 20px 60px rgba(0, 0, 0, 0.7)'
+          }}>
+            <h3 style={{
+              color: '#ff9800',
+              marginBottom: '1rem',
+              fontFamily: "'Cinzel', 'Times New Roman', serif",
+              fontSize: '1.5rem',
+              textAlign: 'center'
+            }}>
+              🔐 Elevated Permissions Required
+            </h3>
+            <p style={{
+              color: '#f0dba5',
+              lineHeight: '1.8',
+              marginBottom: '1rem',
+              fontSize: '1rem',
+              textAlign: 'center'
+            }}>
+              {job.pending_action.message}
+            </p>
+            <p style={{
+              color: '#ff9800',
+              lineHeight: '1.6',
+              marginBottom: '1rem',
+              fontSize: '0.9rem',
+              textAlign: 'center',
+              fontFamily: 'monospace',
+              background: 'rgba(0,0,0,0.3)',
+              padding: '0.5rem',
+              borderRadius: '4px',
+              wordBreak: 'break-all'
+            }}>
+              {job.pending_action.target_path}
+            </p>
+            <p style={{
+              color: '#f44336',
+              lineHeight: '1.6',
+              marginBottom: '2rem',
+              fontSize: '0.85rem',
+              textAlign: 'center',
+              fontWeight: 'bold'
+            }}>
+              ⚠️ This will run: sudo rm -rf on the above path
+            </p>
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={handleSudoCancel}
+                disabled={actionLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(107, 142, 63, 0.3)',
+                  border: '1px solid rgba(107, 142, 63, 0.5)',
+                  borderRadius: '4px',
+                  color: '#a7db6c',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease',
+                  opacity: actionLoading ? 0.5 : 1
+                }}
+                onMouseOver={(e) => {
+                  if (!actionLoading) e.target.style.background = 'rgba(107, 142, 63, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(107, 142, 63, 0.3)';
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSudoConfirm}
+                disabled={actionLoading}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'rgba(255, 152, 0, 0.3)',
+                  border: '1px solid rgba(255, 152, 0, 0.5)',
+                  borderRadius: '4px',
+                  color: '#ff9800',
+                  cursor: actionLoading ? 'not-allowed' : 'pointer',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  transition: 'all 0.3s ease',
+                  opacity: actionLoading ? 0.5 : 1
+                }}
+                onMouseOver={(e) => {
+                  if (!actionLoading) e.target.style.background = 'rgba(255, 152, 0, 0.4)';
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = 'rgba(255, 152, 0, 0.3)';
+                }}
+              >
+                {actionLoading ? 'Processing...' : 'Confirm Sudo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="hero-section">
         <img
           src={heroImage}
@@ -650,6 +810,15 @@ function JobDetails() {
             ) : (
               <p>No options enabled (default configuration)</p>
             )}
+            {job.options?.save_template && (
+              <div className="template-save-indicator">
+                {job.status === 'completed' ? (
+                  <span className="template-saved">Template saved to output directory</span>
+                ) : (
+                  <span className="template-pending">Template will be saved on completion</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -681,10 +850,19 @@ function JobDetails() {
               >
                 Download Log
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <strong style={{ color: '#a7db6c', fontFamily: "'Cinzel', 'Times New Roman', serif", fontSize: '0.9rem' }}>Status:</strong>
-                <span className={getStatusClass(job.status)} style={{ textAlign: 'center' }}>{job.status}</span>
-              </div>
+              <span
+                className={getStatusClass(job.status)}
+                style={{
+                  textAlign: 'center',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '4px',
+                  fontFamily: "'Cinzel', 'Times New Roman', serif",
+                  fontSize: '0.9rem',
+                  fontWeight: 600
+                }}
+              >
+                {job.status}
+              </span>
             </div>
             <h3 style={{ margin: 0 }}>Job Log ({job.log.length} entries)</h3>
           </div>

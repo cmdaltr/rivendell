@@ -1483,8 +1483,6 @@ def extract_registry_system(
 
     if not regripper_available:
         # RegRipper not available - skip registry extraction
-        if verbosity != "":
-            print(f"     Warning: RegRipper not found, skipping registry extraction for {artefact.split('/')[-1]}")
         return
 
     with open(

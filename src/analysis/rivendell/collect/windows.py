@@ -40,12 +40,6 @@ def collect_windows_artefacts(
             or "$ObjId" in item
             or "$Reparse" in item
         ):
-            if verbosity != "":
-                print(
-                    "     Collecting '{}' for {}...".format(
-                        item.split("/")[-1], vssimage
-                    )
-                )
             entry, prnt = "{},{},{},'{}'\n".format(
                 datetime.now().isoformat(),
                 img.split("::")[0],
@@ -66,17 +60,15 @@ def collect_windows_artefacts(
                 # Verify the file was copied successfully for $MFT and similar critical files
                 dest_file = os.path.join(dest, item.split("/")[-1])
                 if not os.path.exists(dest_file):
-                    if verbosity != "":
-                        print(f"     Warning: Failed to copy {item.split('/')[-1]} - file not found after copy")
+                    # ALWAYS print warnings (not just in verbose mode) - see BUG3_DEEP_INVESTIGATION.md
+                    print(f"     Warning: Failed to copy {item.split('/')[-1]} - file not found after copy")
                 elif os.path.getsize(dest_file) == 0:
-                    if verbosity != "":
-                        print(f"     Warning: {item.split('/')[-1]} copied but is empty (0 bytes)")
+                    # ALWAYS print warnings (not just in verbose mode) - see BUG3_DEEP_INVESTIGATION.md
+                    print(f"     Warning: {item.split('/')[-1]} copied but is empty (0 bytes)")
             except Exception as e:
-                if verbosity != "":
-                    print(f"     Warning: Failed to copy {item.split('/')[-1]}: {e}")
+                # ALWAYS print warnings (not just in verbose mode) - see BUG3_DEEP_INVESTIGATION.md
+                print(f"     Warning: Failed to copy {item.split('/')[-1]}: {e}")
         if item == mnt + "/Windows/inf/setupapi.dev.log":
-            if verbosity != "":
-                print("     Collecting 'setupapi.dev.log' for {}...".format(vssimage))
             (
                 entry,
                 prnt,
@@ -101,12 +93,6 @@ def collect_windows_artefacts(
             item == mnt + "/Windows/AppCompat/Programs/RecentFileCache.bcf"
             or item == mnt + "/Windows/AppCompat/Programs/Amcache.hve"
         ):
-            if verbosity != "":
-                print(
-                    "     Collecting '{}' for {}...".format(
-                        item.split("/")[-1], vssimage
-                    )
-                )
             entry, prnt = "{},{},{},'{}'\n".format(
                 datetime.now().isoformat(),
                 img.split("::")[0],
@@ -143,10 +129,6 @@ def collect_windows_artefacts(
                 os.stat(dest)
             except:
                 os.makedirs(dest)
-            if verbosity != "":
-                print(
-                    "     Collecting system registry hives for {}...".format(vssimage)
-                )
             item_list = os.listdir(item)
             for each in item_list:
                 if (
@@ -244,15 +226,6 @@ def collect_windows_artefacts(
                     except:
                         pass
                 # Log completion
-                if verbosity != "":
-                    print(
-                        " -> {} -> collected {} event logs{} from '{}'".format(
-                            datetime.now().isoformat().replace("T", " "),
-                            collected_count,
-                            vsstext.replace("vss", "volume shadow copy #"),
-                            img.split("::")[0],
-                        )
-                    )
         if (
             item == mnt + "/Windows/System32/wbem/Repository/"
             or item == mnt + "/Windows/System32/wbem/Logs/"
@@ -266,12 +239,6 @@ def collect_windows_artefacts(
             except:
                 os.makedirs(dest)
             if len(item_list) > 0:
-                if verbosity != "":
-                    print(
-                        "     Collecting Web-Based Enterprise Management (WBEM) evidence for {}...".format(
-                            vssimage
-                        )
-                    )
                 for each in item_list:
                     try:
                         (
@@ -314,12 +281,6 @@ def collect_windows_artefacts(
             except:
                 os.makedirs(dest)
             if len(item_list) > 0:
-                if verbosity != "":
-                    print(
-                        "     Collecting Windows Management Instrumentation (WMI) artefacts for {}...".format(
-                            vssimage
-                        )
-                    )
                 for each in item_list:
                     try:
                         (
@@ -444,12 +405,6 @@ def collect_windows_artefacts(
             except:
                 os.makedirs(dest)
             if len(item_list) > 0 and ".mdb" in str(os.listdir(item)):
-                if verbosity != "":
-                    print(
-                        "     Collecting User Access Logging (UAL) evidence for {}...".format(
-                            vssimage
-                        )
-                    )
                 for each in item_list:
                     if each.endswith(".mdb"):
                         try:
@@ -493,12 +448,6 @@ def collect_windows_artefacts(
             except:
                 os.makedirs(dest)
             if len(item_list) > 0 and "SRUDB.dat" in str(os.listdir(item)):
-                if verbosity != "":
-                    print(
-                        "     Collecting System Resource Utilization (SRU) evidence for {}...".format(
-                            vssimage
-                        )
-                    )
                 for each in item_list:
                     if each.endswith("SRUDB.dat"):
                         try:
@@ -537,8 +486,6 @@ def collect_windows_artefacts(
                 os.listdir(item),
                 dest + "deleted/",
             )
-            if verbosity != "":
-                print("     Collecting deleted files for {}...".format(vssimage))
             try:
                 os.makedirs(dest)
             except:
@@ -575,8 +522,6 @@ def collect_windows_artefacts(
             except:
                 pass
             if len(item_list) > 0:
-                if verbosity != "":
-                    print("     Collecting prefetch files for {}...".format(vssimage))
                 for each in item_list:
                     try:
                         (

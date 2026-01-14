@@ -510,6 +510,11 @@ def start_analysis(self, job_id: str):
                     r"^attempting to mount .*\.\.\.$",  # "Attempting to mount 'win7-64-nfury-c-drive.E01'..."
                     r"^-> processing completed for .*$",  # "-> processing completed for 'image.E01'"
                     r"^-> (analysis completed|elrond completed) for .*$",  # "-> analysis completed for 'image.E01'" - we add our own completion message
+                    r"^\[.*\] -> elrond completed for .*$",  # "[timestamp] -> elrond completed for 'xxx'" - redundant when phased orchestration used
+                    r"-> indexing artefacts for '/.*/$",  # Skip indexing messages that contain output directory paths
+                    r"-> splunk configured successfully for case .* for '/.*/$",  # Skip splunk messages that contain output directory paths
+                    r"-> cleaning up small files and empty directories",  # Internal cleanup message
+                    r"^=+ Commencing Index(ing)? Phase =+$",  # "========== Commencing Indexing Phase ==========" - only skip Indexing, keep others
                 ]
 
                 # Check if this line should be skipped
@@ -776,15 +781,27 @@ def build_elrond_command(job):
         cmd.extend(["--Yara", opts.yara_dir])
 
     # Collection options
-    if opts.collectFiles:
+    # Build collect_files filter from preset options
+    collect_filters = []
+    if opts.collect_files_sys:
+        collect_filters.extend(["exe", "dll", "sys", "drv", "ocx", "scr", "cpl", "msi"])
+    if opts.collect_files_docs:
+        collect_filters.extend(["doc", "docx", "xls", "xlsx", "pdf", "ppt", "pptx", "rtf", "odt", "ods", "odp"])
+    if opts.collect_files_scripts:
+        collect_filters.extend(["ps1", "bat", "cmd", "vbs", "js", "py", "sh", "bash", "pl", "rb", "lua"])
+
+    if collect_filters:
+        # Enable userprofiles collection (collect_files_* are user profile focused)
+        cmd.append("--Userprofiles")
+        cmd.extend(["--collectFiles", ",".join(collect_filters)])
+    elif opts.collectFiles:
         if opts.collectFiles_filter:
             cmd.extend(["--collectFiles", opts.collectFiles_filter])
         else:
             cmd.append("--collectFiles")
+
     if opts.vss:
         cmd.append("--vss")
-    if opts.symlinks:
-        cmd.append("--symlinks")
     if opts.userprofiles:
         cmd.append("--Userprofiles")
 
@@ -807,6 +824,8 @@ def build_elrond_command(job):
     # Speed/Quality modes
     if opts.brisk:
         cmd.append("--Brisk")
+    if opts.mordor:
+        cmd.append("--Mordor")
 
     # Hash options
     if opts.nsrl:

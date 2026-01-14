@@ -1,0 +1,36 @@
+# Rivendell Sample Keywords File
+# One keyword or phrase per line
+# Lines starting with # are comments
+
+# Common suspicious terms
+password
+secret
+confidential
+private key
+api_key
+access_token
+
+# Network indicators
+192.168.
+10.0.0.
+172.16.
+
+# File extensions of interest
+.exe
+.dll
+.ps1
+.bat
+.vbs
+
+# Common malware strings
+mimikatz
+powershell -enc
+cmd.exe /c
+wget http
+curl http
+
+# Credential patterns
+username
+login
+credential
+auth_token

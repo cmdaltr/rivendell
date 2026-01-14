@@ -385,7 +385,7 @@ label.control-label {
                     '[replace_slash]\ndefinition = eval _raw=replace(_raw,"\\\\\\\\","/") | eval Artefact=replace(Artefact,"\\\\\\\\","/")\niseval = 0\n\n'
                 )
                 macrosconf.write(
-                    '[audit_assignments]\ndefinition = rex field=source "\\/(?P<auditfile>rivendell_audit\\.log$|\\.audit$)" | eval audit_file=if(match(auditfile,"rivendell_audit.log"), "Rivendell Log", if(match(auditfile,"lat.audit"), "Last Access Times", if(match(auditfile,"meta.audit"), "File Metadata", "-")))\n\n'
+                    '[audit_assignments]\ndefinition = rex field=source "\\/(?P<auditfile>rivendell_audit\\.log$|_audit\\.log$)" | eval audit_file=if(match(auditfile,"rivendell_audit.log"), "Rivendell Log", if(match(auditfile,"lat_audit.log"), "Last Access Times", if(match(auditfile,"meta_audit.log"), "File Metadata", "-")))\n\n'
                 )
                 macrosconf.write(
                     '[browser_name]\ndefinition = rex field=source "/browsers/(?P<browser>[^/]+)/"\niseval = 0\n\n'

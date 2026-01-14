@@ -153,75 +153,125 @@ def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
     This is much faster than full regex scanning.
     """
     import re
+    import traceback
 
-    # Determine techniques file path at CASE level
-    # json_path example: /output/case/image.E01/artefacts/cooked/browsers/file.json
-    # We need: /output/case/mitre_techniques.txt (alongside rivendell_audit.log)
-    current_dir = os.path.dirname(json_path)
-    # Walk up until we find 'cooked' directory, then go up to case level
-    case_dir = current_dir
-    for _ in range(6):  # Max 6 levels up to reach case from deep cooked paths
-        parent = os.path.dirname(case_dir)
-        if os.path.basename(case_dir) == "cooked":
-            # Found cooked, go up THREE levels: cooked -> artefacts -> image -> case
-            artefacts_dir = os.path.dirname(case_dir)  # artefacts
-            image_dir = os.path.dirname(artefacts_dir)  # image.E01
-            case_dir = os.path.dirname(image_dir)  # case
-            break
-        case_dir = parent
-    techniques_file_path = os.path.join(case_dir, "mitre_techniques.txt")
-    os.makedirs(case_dir, exist_ok=True)
+    print(f"        [DEBUG-ENRICH] ENTERED enrich_with_mitre() for {os.path.basename(json_path)}, artifact_type={artifact_type}", flush=True)
 
-    # Base technique for artifact type
-    base_technique = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower(), {}).get("technique_id")
-
-    found_techniques = set()
-    if base_technique:
-        found_techniques.add(base_technique)
-
-    # Get artifact-appropriate patterns and field extractors
-    patterns, field_pattern = _get_patterns_for_artifact(artifact_type)
-
-    if not patterns:
-        # No specific patterns for this artifact type, just write base technique
-        if base_technique:
-            with open(techniques_file_path, 'a') as f:
-                f.write(f"{base_technique}\n")
-        return True
-
-    field_regex = re.compile(field_pattern, re.IGNORECASE)
-
-    lines_processed = 0
     try:
-        with open(json_path, 'r', errors='ignore') as f:
-            for line in f:
-                lines_processed += 1
-                # Progress every 500k lines
-                if lines_processed % 500000 == 0:
-                    print(f"    ...scanned {lines_processed:,} lines, found {len(found_techniques)} techniques", flush=True)
+        print(f"        [DEBUG-ENRICH] Inside try block, about to determine case_dir", flush=True)
+        # Determine techniques file path at CASE level
+        # json_path example: /output/case/image.E01/artefacts/cooked/browsers/file.json
+        # We need: /output/case/mitre_techniques.txt (alongside rivendell_audit.log)
+        current_dir = os.path.dirname(json_path)
+        case_dir = None
 
-                # Extract relevant fields from this line
-                matches = field_regex.findall(line)
-                for match in matches:
-                    match_lower = match.lower()
-                    for tech_id, indicators in patterns.items():
-                        for indicator in indicators:
-                            if indicator in match_lower:
-                                found_techniques.add(tech_id)
-                                break
+        # Walk up looking for known directory markers
+        check_dir = current_dir
+        for _ in range(8):  # Max 8 levels up
+            dir_name = os.path.basename(check_dir)
+            parent = os.path.dirname(check_dir)
 
-        # Write all found techniques
-        with open(techniques_file_path, 'a') as f:
-            for tech_id in found_techniques:
-                f.write(f"{tech_id}\n")
+            if dir_name == "cooked":
+                # Found cooked, go up THREE levels: cooked -> artefacts -> image -> case
+                case_dir = os.path.dirname(os.path.dirname(os.path.dirname(check_dir)))
+                break
+            elif dir_name == "artefacts":
+                # Found artefacts, go up TWO levels: artefacts -> image -> case
+                case_dir = os.path.dirname(os.path.dirname(check_dir))
+                break
+            elif os.path.exists(os.path.join(check_dir, "rivendell_audit.log")):
+                # Found case level (has audit log)
+                case_dir = check_dir
+                break
 
-        return True
+            check_dir = parent
 
-    except Exception as e:
-        print(f"    WARNING: Error during fast scan: {e}", flush=True)
+        # Fallback: if we didn't find a marker, use original directory
+        if not case_dir:
+            case_dir = current_dir
+
+        techniques_file_path = os.path.join(case_dir, "mitre_techniques.txt")
+        print(f"        [DEBUG-ENRICH] Determined techniques_file_path: {techniques_file_path}", flush=True)
+        os.makedirs(case_dir, exist_ok=True)
+
+        # Base technique for artifact type
+        print(f"        [DEBUG-ENRICH] Looking up base technique for artifact_type.lower()='{artifact_type.lower()}'", flush=True)
+        base_technique = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower(), {}).get("technique_id")
+        print(f"        [DEBUG-ENRICH] Base technique: {base_technique}", flush=True)
+
+        found_techniques = set()
         if base_technique:
+            found_techniques.add(base_technique)
+
+        # Get artifact-appropriate patterns and field extractors
+        print(f"        [DEBUG-ENRICH] Calling _get_patterns_for_artifact('{artifact_type}')", flush=True)
+        patterns, field_pattern = _get_patterns_for_artifact(artifact_type)
+        print(f"        [DEBUG-ENRICH] Got patterns (count={len(patterns) if patterns else 0}), field_pattern={field_pattern if field_pattern else 'None'}", flush=True)
+
+        if not patterns:
+            print(f"        [DEBUG-ENRICH] No patterns for this artifact type, writing base technique and returning", flush=True)
+            # No specific patterns for this artifact type, just write base technique
+            if base_technique:
+                with open(techniques_file_path, 'a') as f:
+                    f.write(f"{base_technique}\n")
+            return True
+
+        print(f"        [DEBUG-ENRICH] Compiling field_regex", flush=True)
+        field_regex = re.compile(field_pattern, re.IGNORECASE)
+
+        lines_processed = 0
+        print(f"        [DEBUG-ENRICH] About to open and read json_path: {json_path}", flush=True)
+        try:
+            with open(json_path, 'r', errors='ignore') as f:
+                for line in f:
+                    lines_processed += 1
+                    # Progress every 500k lines
+                    if lines_processed % 500000 == 0:
+                        print(f"    ...scanned {lines_processed:,} lines, found {len(found_techniques)} techniques", flush=True)
+
+                    # Extract relevant fields from this line
+                    matches = field_regex.findall(line)
+                    for match in matches:
+                        match_lower = match.lower()
+                        for tech_id, indicators in patterns.items():
+                            for indicator in indicators:
+                                if indicator in match_lower:
+                                    found_techniques.add(tech_id)
+                                    break
+
+            print(f"        [DEBUG-ENRICH] Finished reading {lines_processed} lines, found {len(found_techniques)} techniques", flush=True)
+
+            # Write all found techniques
+            print(f"        [DEBUG-ENRICH] About to write {len(found_techniques)} techniques to {techniques_file_path}", flush=True)
             with open(techniques_file_path, 'a') as f:
-                f.write(f"{base_technique}\n")
+                for tech_id in found_techniques:
+                    f.write(f"{tech_id}\n")
+
+            print(f"        [DEBUG-ENRICH] Successfully wrote techniques, returning True", flush=True)
+            return True
+
+        except Exception as e:
+            print(f"        [DEBUG-ENRICH] Inner Exception during fast scan: {e}", flush=True)
+            print(f"    WARNING: Error during fast scan: {e}", flush=True)
+            if base_technique:
+                with open(techniques_file_path, 'a') as f:
+                    f.write(f"{base_technique}\n")
+            print(f"        [DEBUG-ENRICH] Returning False from inner exception", flush=True)
+            return False
+
+    except NameError as e:
+        print(f"        [DEBUG-ENRICH] *** OUTER NameError CAUGHT in enrich_with_mitre() ***", flush=True)
+        print(f"    *** CRITICAL ERROR: NameError in enrich_with_mitre(): {e}", flush=True)
+        print(f"    *** Full traceback:", flush=True)
+        traceback.print_exc()
+        print(f"        [DEBUG-ENRICH] Returning False from NameError", flush=True)
+        return False
+    except Exception as e:
+        print(f"        [DEBUG-ENRICH] *** OUTER Exception CAUGHT in enrich_with_mitre() ***", flush=True)
+        print(f"    *** CRITICAL ERROR: Unexpected error in enrich_with_mitre(): {e}", flush=True)
+        print(f"    *** Full traceback:", flush=True)
+        traceback.print_exc()
+        print(f"        [DEBUG-ENRICH] Returning False from outer exception", flush=True)
         return False
 
 
@@ -515,16 +565,33 @@ def enrich_json_with_mitre(json_path: str, artifact_type: str, techniques_file_p
             # json_path example: /output/case/image.E01/artefacts/cooked/browsers/file.json
             # We need: /output/case/mitre_techniques.txt (alongside rivendell_audit.log)
             current_dir = os.path.dirname(json_path)
-            case_dir = current_dir
-            for _ in range(6):  # Max 6 levels up to reach case from deep cooked paths
-                parent = os.path.dirname(case_dir)
-                if os.path.basename(case_dir) == "cooked":
+            case_dir = None
+
+            # Walk up looking for known directory markers
+            check_dir = current_dir
+            for _ in range(8):  # Max 8 levels up
+                dir_name = os.path.basename(check_dir)
+                parent = os.path.dirname(check_dir)
+
+                if dir_name == "cooked":
                     # Found cooked, go up THREE levels: cooked -> artefacts -> image -> case
-                    artefacts_dir = os.path.dirname(case_dir)  # artefacts
-                    image_dir = os.path.dirname(artefacts_dir)  # image.E01
-                    case_dir = os.path.dirname(image_dir)  # case
+                    case_dir = os.path.dirname(os.path.dirname(os.path.dirname(check_dir)))
                     break
-                case_dir = parent
+                elif dir_name == "artefacts":
+                    # Found artefacts, go up TWO levels: artefacts -> image -> case
+                    case_dir = os.path.dirname(os.path.dirname(check_dir))
+                    break
+                elif os.path.exists(os.path.join(check_dir, "rivendell_audit.log")):
+                    # Found case level (has audit log)
+                    case_dir = check_dir
+                    break
+
+                check_dir = parent
+
+            # Fallback: if we didn't find a marker, use original directory
+            if not case_dir:
+                case_dir = current_dir
+
             techniques_file_path = os.path.join(case_dir, "mitre_techniques.txt")
 
         # Ensure directory exists
@@ -873,9 +940,33 @@ def extract_with_artemis(
 
     # Fast MITRE enrichment - scan JSON files for artifact-specific patterns
     import glob
-    for json_file in glob.glob(os.path.join(cooked_dir, "*.json")):
-        enrich_with_mitre(json_file, artifact_type)
+    import traceback
+    print(f"    [DEBUG] About to enrich MITRE for artifact_type='{artifact_type}'", flush=True)
+    print(f"    [DEBUG] Local variables: {list(locals().keys())}", flush=True)
+    try:
+        for json_file in glob.glob(os.path.join(cooked_dir, "*.json")):
+            print(f"    [DEBUG] Enriching file: {os.path.basename(json_file)}", flush=True)
+            print(f"    [DEBUG] About to call enrich_with_mitre with json_file={json_file}, artifact_type={artifact_type}", flush=True)
+            try:
+                result = enrich_with_mitre(json_file, artifact_type)
+                print(f"    [DEBUG] enrich_with_mitre returned: {result}", flush=True)
+            except Exception as inner_e:
+                print(f"    [DEBUG] *** Exception during enrich_with_mitre call: {type(inner_e).__name__}: {inner_e}", flush=True)
+                print(f"    [DEBUG] *** Full traceback:", flush=True)
+                traceback.print_exc()
+                print(f"    [DEBUG] *** Locals at error: {locals()}", flush=True)
+                raise
+        print(f"    [DEBUG] MITRE enrichment completed successfully", flush=True)
+    except NameError as e:
+        print(f"    [DEBUG] *** NameError caught in extract_with_artemis(): {e}", flush=True)
+        print(f"    [DEBUG] *** Full traceback:", flush=True)
+        traceback.print_exc()
+        print(f"    [DEBUG] *** artifact_type={artifact_type}, cooked_dir={cooked_dir}", flush=True)
+    except Exception as e:
+        print(f"    [DEBUG] *** Exception caught in extract_with_artemis(): {e}", flush=True)
+        traceback.print_exc()
 
+    print(f"    [DEBUG] extract_with_artemis() about to return True", flush=True)
     return True
 
 

@@ -106,12 +106,6 @@ def search_keywords(
             )
     with open(keywords[0], "r") as keywords_source_file:
         for eachkeyword in keywords_source_file:
-            if verbosity != "":
-                print(
-                    "     Searching for keyword '{}' from {}...".format(
-                        eachkeyword.strip(), insert
-                    )
-                )
             for keywords_target_file in keywords_target_list:
                 try:
                     encoding_choice = "UTF-8"
@@ -203,7 +197,9 @@ def build_keyword_list(mnt):
 
 
 def prepare_keywords(verbosity, output_directory, auto, imgs, flags, keywords, stage):
-    if stage == "mounting":
+    # Check if we're in the mounting/metadata phase (when filesystem is still mounted)
+    # Stage can be "mounting" or "metadata" at this point
+    if stage in ("mounting", "metadata"):
         if not auto:
             yes_kw = safe_input("  Do you wish to conduct Keyword Searching for '{}'? Y/n [Y] ".format(
                     img.split("::")[0]
@@ -276,6 +272,7 @@ def prepare_keywords(verbosity, output_directory, auto, imgs, flags, keywords, s
             time.sleep(1)
     else:
         for each in imgs:
+            vsstext = ""  # Initialize vsstext for non-mounting stage
             if os.path.exists(
                 os.path.join(output_directory, each.split("::")[0], "artefacts")
             ):

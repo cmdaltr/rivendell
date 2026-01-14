@@ -22,10 +22,33 @@ function JobList() {
     return () => clearInterval(interval);
   }, [statusFilter]);
 
+  // Status priority for sorting (lower number = higher priority)
+  const statusPriority = {
+    'awaiting_confirmation': 0,
+    'running': 1,
+    'failed': 2,
+    'pending': 3,
+    'cancelled': 4,
+    'completed': 5,
+    'archived': 6
+  };
+
+  const sortJobsByStatus = (jobsToSort) => {
+    return [...jobsToSort].sort((a, b) => {
+      const priorityA = statusPriority[a.status.toLowerCase()] ?? 99;
+      const priorityB = statusPriority[b.status.toLowerCase()] ?? 99;
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      // Secondary sort by created_at (newest first) for same status
+      return new Date(b.created_at) - new Date(a.created_at);
+    });
+  };
+
   const loadJobs = async () => {
     try {
       const data = await listJobs(statusFilter);
-      setJobs(data.jobs);
+      setJobs(sortJobsByStatus(data.jobs));
       setError(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load jobs');

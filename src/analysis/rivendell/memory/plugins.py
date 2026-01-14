@@ -74,6 +74,11 @@ def extract_memory_artefacts(
     memtimeline,
     mesginsrt,
 ):
+    # Create output directory for memory artefacts if it doesn't exist
+    mem_output_dir = os.path.join(output_directory, mempath)
+    if not os.path.exists(mem_output_dir):
+        os.makedirs(mem_output_dir, exist_ok=True)
+
     if volver == "3":  # volatility3
         if not artefact.endswith("hiberfil.sys"):
             print_extraction(
@@ -195,8 +200,11 @@ def extract_memory_artefacts(
                     profile,
                     plugin,
                 )
-            except:
-                pass
+            except Exception as e:
+                print(f"    [ERROR] Failed to extract {plugin} from {artefact.split('/')[-1]}: {type(e).__name__}: {e}")
+                if verbosity in ["verbose", "veryverbose"]:
+                    import traceback
+                    traceback.print_exc()
         if memtimeline:
             volplugins = ["timeliner.Timeliner"]
             for plugin in volplugins:
@@ -212,8 +220,11 @@ def extract_memory_artefacts(
                         profile,
                         plugin,
                     )
-                except:
-                    pass
+                except Exception as e:
+                    print(f"    [ERROR] Failed to extract {plugin} from {artefact.split('/')[-1]}: {type(e).__name__}: {e}")
+                    if verbosity in ["verbose", "veryverbose"]:
+                        import traceback
+                        traceback.print_exc()
     else:  # volatility2.6
         print_extraction(
             verbosity,
@@ -571,5 +582,107 @@ def extract_memory_artefacts(
         insertvssimage,
     )
     write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+    # Enrich memory artefacts with MITRE ATT&CK techniques
+    enrich_memory_artefacts_with_mitre(output_directory, mempath)
+
     print()
     return profile, vssmem
+
+
+def enrich_memory_artefacts_with_mitre(output_directory, mempath):
+    """
+    Enrich memory artefact JSON files with MITRE ATT&CK technique metadata.
+
+    Scans the memory output directory for JSON files and applies MITRE mappings
+    based on the Volatility plugin type (e.g., pslist, netscan, malfind).
+    """
+    try:
+        from rivendell.post.mitre.enrichment import MitreEnrichment, TECHNIQUES_FILE
+        enrichment = MitreEnrichment()
+
+        mem_dir = os.path.join(output_directory, mempath)
+        if not os.path.exists(mem_dir):
+            return
+
+        # Find techniques file path (at case level)
+        case_dir = output_directory.rstrip('/')
+        techniques_file_path = os.path.join(case_dir, TECHNIQUES_FILE)
+
+        print(" -> {} -> enriching memory artefacts with MITRE ATT&CK techniques...".format(
+            datetime.now().isoformat().replace("T", " ")
+        ))
+
+        # Map Volatility plugin names to artefact types
+        plugin_to_artefact = {
+            "windows.pslist": "memory_pslist",
+            "windows.pstree": "memory_pstree",
+            "windows.cmdline": "memory_cmdline",
+            "windows.netscan": "memory_netscan",
+            "windows.netstat": "memory_netstat",
+            "windows.malfind": "memory_malfind",
+            "windows.dlllist": "memory_dlllist",
+            "windows.handles": "memory_handles",
+            "windows.filescan": "memory_filescan",
+            "windows.driverscan": "memory_driverscan",
+            "windows.modules": "memory_modules",
+            "windows.svcscan": "memory_svcscan",
+            "windows.getsids": "memory_getsids",
+            "windows.envars": "memory_envars",
+            "windows.privileges": "memory_privileges",
+            "windows.mutantscan": "memory_mutantscan",
+            "windows.registry": "memory_registry",
+            # Also map short names
+            "pslist": "memory_pslist",
+            "pstree": "memory_pstree",
+            "cmdline": "memory_cmdline",
+            "netscan": "memory_netscan",
+            "netstat": "memory_netstat",
+            "malfind": "memory_malfind",
+            "dlllist": "memory_dlllist",
+            "handles": "memory_handles",
+            "filescan": "memory_filescan",
+            "driverscan": "memory_driverscan",
+            "modules": "memory_modules",
+            "svcscan": "memory_svcscan",
+            "getsids": "memory_getsids",
+            "envars": "memory_envars",
+            "privileges": "memory_privileges",
+            "mutantscan": "memory_mutantscan",
+        }
+
+        enriched_count = 0
+        with open(techniques_file_path, 'a') as techniques_file:
+            for filename in os.listdir(mem_dir):
+                if filename.endswith('.json'):
+                    # Extract plugin name from filename (e.g., "memory_windows.pslist.PsList.json")
+                    basename = filename.replace('memory_', '').replace('.json', '')
+                    # Try to match against known plugins
+                    artefact_type = None
+                    for plugin_name, mapped_type in plugin_to_artefact.items():
+                        if plugin_name.lower() in basename.lower():
+                            artefact_type = mapped_type
+                            break
+
+                    if artefact_type:
+                        json_path = os.path.join(mem_dir, filename)
+                        try:
+                            if enrichment.enrich_json_file_streaming(json_path, techniques_file, artefact_type):
+                                enriched_count += 1
+                        except Exception:
+                            pass
+
+        if enriched_count > 0:
+            print(" -> {} -> enriched {} memory artefact file(s) with MITRE techniques".format(
+                datetime.now().isoformat().replace("T", " "),
+                enriched_count
+            ))
+
+    except ImportError:
+        # MITRE enrichment module not available
+        pass
+    except Exception as e:
+        print(" -> {} -> warning: could not enrich memory artefacts with MITRE: {}".format(
+            datetime.now().isoformat().replace("T", " "),
+            str(e)[:100]
+        ))

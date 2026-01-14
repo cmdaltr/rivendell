@@ -44,8 +44,8 @@ services:
   # Celery worker for background tasks (forensics-enabled)
   celery-worker:
     build:
-      context: ./backend
-      dockerfile: Dockerfile.forensics
+      context: ../..
+      dockerfile: src/web/backend/Dockerfile.forensics
     container_name: rivendell-celery-worker
     privileged: true  # Required for mounting forensic images
     devices:

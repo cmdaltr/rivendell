@@ -8,6 +8,9 @@ if 'TERM' not in os.environ:
     os.environ['TERM'] = 'xterm'
 
 from rivendell.main import main
+from rivendell.core.identify import process_deferred_memory, load_memory_profiles
+from rivendell.mount import unmount_images, cleanup_stale_mounts
+from rivendell.post.clean import archive_artefacts
 
 
 parser = argparse.ArgumentParser()
@@ -85,6 +88,25 @@ parser.add_argument(
 parser.add_argument(
     "--extractIocs",
     help="Extract IOCs from processed files collected from disk; WARNING: This can take a long time!",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
+    "--iocsFile",
+    nargs=1,
+    help="IOC watchlist file to match against extracted IOCs; Example syntax: --iocsFile /path/to/iocs.txt",
+)
+parser.add_argument(
+    "--misplacedBinaries",
+    help="Find Windows system binaries in unexpected locations (MITRE ATT&CK T1036.005 - Masquerading: Match Legitimate Name or Location)",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
+    "--masquerading",
+    help="Detect masquerading techniques: Right-to-Left Override, double file extensions, trailing spaces, renamed utilities (MITRE ATT&CK T1036)",
     action="store_const",
     const=True,
     default=False,
@@ -188,6 +210,13 @@ parser.add_argument(
     default=False,
 )
 parser.add_argument(
+    "--Mordor",
+    help="'Mordor Mode.' Aggressive threat-hunting analysis. Invokes Analysis, extractIocs, Memory, Navigator, Process, Splunk, Elastic, and Userprofiles. Designed for comprehensive incident response and threat detection. You MUST provide either --Collect or --Gandalf.",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
     "--Ziparchive",
     help="Archive raw data as zip after processing",
     action="store_const",
@@ -208,6 +237,9 @@ elastic = args.Elastic
 gandalf = args.Gandalf
 collectfiles = args.collectFiles
 extractiocs = args.extractIocs
+iocsfile = args.iocsFile
+misplaced_binaries = args.misplacedBinaries
+masquerading = args.masquerading
 keywords = args.Keywords
 volatility = args.Memory
 metacollected = args.metacollected
@@ -222,10 +254,20 @@ memorytimeline = args.memorytimeline
 userprofiles = args.Userprofiles
 yara = args.Yara
 exhaustive = args.eXhaustive
+mordor = args.Mordor
 archive = args.Ziparchive
 
 d = directory[0]
 case = case[0]
+
+# Validate case name length
+if len(case) < 6:
+    print(f"\n  Error: Case name must be at least 6 characters (got {len(case)})\n")
+    sys.exit(1)
+if len(case) > 30:
+    print(f"\n  Error: Case name must be no longer than 30 characters (got {len(case)})\n")
+    sys.exit(1)
+
 cwd = os.getcwd()
 hashcollected = args.hashCollected
 hashall = args.hashAll
@@ -410,12 +452,33 @@ if __name__ == "__main__":
         auto = True
         # vss = True  # Don't override VSS - respect command line flag
         # extractiocs = True  # Don't override extractIocs - respect command line flag
+        magicbytes = True  # File signature mismatch detection
+        metacollected = True
+        # navigator = True  # Removed: Navigator requires Splunk, which slows down brisk mode
+        process = True
+        userprofiles = True
+    if mordor:
+        # Mordor Mode: Aggressive threat-hunting analysis
+        analysis = True
+        auto = True
+        extractiocs = True
+        volatility = True  # Memory analysis
         metacollected = True
         navigator = True
         process = True
+        splunk = True
+        elastic = True
         userprofiles = True
     veryverbose = True
     verbose = True
+
+    # Create verbosity string from verbose flags (same logic as main.py)
+    if (veryverbose and verbose) or veryverbose:
+        verbosity = "veryverbose"
+    elif verbose:
+        verbosity = "verbose"
+    else:
+        verbosity = ""
 
     # Handle multiple source images
     # Format: case source1 [source2 ... sourceN] [destination]
@@ -450,6 +513,12 @@ if __name__ == "__main__":
     mounted_data = {}
 
     # =========================================================================
+    # CLEANUP: Unmount any stale mounts from previous runs
+    # =========================================================================
+    print("\n  -> Cleaning up stale mounts from previous runs...")
+    cleanup_stale_mounts(elrond_mount.copy(), ewf_mount.copy())
+
+    # =========================================================================
     # PHASE 1: Mount all images
     # =========================================================================
     print("\n  -> \033[1;36mCommencing Identification Phase...\033[1;m\n  ----------------------------------------")
@@ -482,6 +551,9 @@ if __name__ == "__main__":
             gandalf,
             collectfiles,
             extractiocs,
+            iocsfile,
+            misplaced_binaries,
+            masquerading,
             keywords,
             volatility,
             metacollected,
@@ -553,6 +625,9 @@ if __name__ == "__main__":
             gandalf,
             collectfiles,
             extractiocs,
+            iocsfile,
+            misplaced_binaries,
+            masquerading,
             keywords,
             volatility,
             metacollected,
@@ -607,52 +682,89 @@ if __name__ == "__main__":
 
         # Call main with phase="process" to process artefacts
         # This also handles analysis, MITRE tagging, Splunk, Elastic, cleanup, etc.
-        main(
-            data["source_directory"],
-            case,
-            analysis,
-            auto,
-            collect,
-            vss,
-            delete,
-            elastic,
-            gandalf,
-            collectfiles,
-            extractiocs,
-            keywords,
-            volatility,
-            metacollected,
-            navigator,
-            nsrl,
-            magicbytes,
-            hashall,
-            hashcollected,
-            process,
-            splunk,
-            symlinks,
-            timeline,
-            memorytimeline,
-            userprofiles,
-            veryverbose,
-            verbose,
-            yara,
-            archive,
-            source,
-            cwd,
-            data["source_sha256"],
-            data["allimgs"],
-            data["source_flags"],
-            elrond_mount,
-            ewf_mount,
-            system_artefacts,
-            quotes,
-            asciitext,
-            skip_unmount=True,  # Don't unmount between processing
-            phase="process",
-            mounted_imgs=data,
-        )
+        try:
+            print(f"[DEBUG-ELROND] About to call main() for process phase", flush=True)
+            main(
+                data["source_directory"],
+                case,
+                analysis,
+                auto,
+                collect,
+                vss,
+                delete,
+                elastic,
+                gandalf,
+                collectfiles,
+                extractiocs,
+                iocsfile,
+                misplaced_binaries,
+                masquerading,
+                keywords,
+                volatility,
+                metacollected,
+                navigator,
+                nsrl,
+                magicbytes,
+                hashall,
+                hashcollected,
+                process,
+                splunk,
+                symlinks,
+                timeline,
+                memorytimeline,
+                userprofiles,
+                veryverbose,
+                verbose,
+                yara,
+                archive,
+                source,
+                cwd,
+                data["source_sha256"],
+                data["allimgs"],
+                data["source_flags"],
+                elrond_mount,
+                ewf_mount,
+                system_artefacts,
+                quotes,
+                asciitext,
+                skip_unmount=True,  # Don't unmount between processing
+                phase="process",
+                mounted_imgs=data,
+            )
+            print(f"[DEBUG-ELROND] main() returned successfully for process phase", flush=True)
+        except Exception as e:
+            import traceback
+            import sys
+            print(f"\n{'='*70}", flush=True)
+            print(f"UNCAUGHT EXCEPTION IN main() PROCESS PHASE!", flush=True)
+            print(f"Exception Type: {type(e).__name__}", flush=True)
+            print(f"Exception Message: {e}", flush=True)
+            print(f"{'='*70}", flush=True)
+            print(f"Source: {source}", flush=True)
+            print(f"\nFULL TRACEBACK WITH ALL FRAMES:", flush=True)
+            print(f"{'='*70}", flush=True)
+            traceback.print_exc(file=sys.stdout)
+            print(f"{'='*70}", flush=True)
+            print(f"\nLocal variables at this level:", flush=True)
+            print(f"  verbose = {repr(verbose)}", flush=True)
+            print(f"  veryverbose = {repr(veryverbose)}", flush=True)
+            print(f"  'verbosity' in locals() = {'verbosity' in locals()}", flush=True)
+            print(f"{'='*70}\n", flush=True)
+            raise
 
         print(f"  -> Processing complete for {source}")
+
+    # ========== PHASE 3b: DEFERRED MEMORY PROCESSING ==========
+    # Process any memory images that were identified during the identification phase
+    # This runs ONCE after all disk images are processed
+    has_deferred_memory = bool(load_memory_profiles(output_directory))
+    if volatility or has_deferred_memory:
+        process_deferred_memory(
+            verbosity,
+            output_directory,
+            [],  # flags - not used in deferred processing
+            "/mnt/elrond_mount00",  # mount point for symbol table extraction
+        )
 
     print("\n  ----------------------------------------\n  -> Completed Processing Phase.\n")
 
@@ -682,6 +794,9 @@ if __name__ == "__main__":
                 gandalf,
                 collectfiles,
                 extractiocs,
+                iocsfile,
+                misplaced_binaries,
+                masquerading,
                 keywords,
                 volatility,
                 metacollected,
@@ -723,16 +838,26 @@ if __name__ == "__main__":
 
     print("\n  ----------------------------------------\n  -> Completed Analysis Phase.\n", flush=True)
 
-    # ========== PHASE 5: INDEX ALL IMAGES ==========
+    # ========== PHASE 5: SIEM INDEXING (Splunk/Elastic/Navigator) ==========
     if splunk or elastic:
-        print("\n  -> \033[1;36mCommencing Indexing Phase...\033[1;m\n  ----------------------------------------")
+        # Build phase name based on selected SIEM tools
+        siem_tools = []
+        if splunk:
+            siem_tools.append("Splunk")
+        if elastic:
+            siem_tools.append("Elastic")
+        if navigator:
+            siem_tools.append("Navigator")
+        siem_phase_name = " & ".join(siem_tools) if siem_tools else "SIEM"
+
+        print(f"\n  -> \033[1;36mCommencing {siem_phase_name} Phase...\033[1;m\n  ----------------------------------------")
 
         for idx, source in enumerate(sources):
             if source not in mounted_data:
                 print(f"\n  [{idx + 1}/{len(sources)}] Skipping {source} (not mounted)")
                 continue
 
-            print(f"\n  [{idx + 1}/{len(sources)}] Indexing: {source}\n")
+            print(f"\n  [{idx + 1}/{len(sources)}] Indexing to {siem_phase_name}: {source}\n")
 
             data = mounted_data[source]
 
@@ -749,6 +874,9 @@ if __name__ == "__main__":
                 gandalf,
                 collectfiles,
                 extractiocs,
+                iocsfile,
+                misplaced_binaries,
+                masquerading,
                 keywords,
                 volatility,
                 metacollected,
@@ -782,10 +910,24 @@ if __name__ == "__main__":
                 mounted_imgs=data,
             )
 
-            print(f"  -> Indexing complete for {source}")
+            # Note: Indexing completion messages are handled by main.py with proper image names
 
-        print("\n  ----------------------------------------\n  -> Completed Indexing Phase.\n")
+        print(f"\n  ----------------------------------------\n  -> Completed {siem_phase_name} Phase.\n")
+
+    # ========== PHASE 6: ARCHIVE (if requested) ==========
+    if archive and mounted_data:
+        # Get output directory from first mounted image
+        first_source = next(iter(mounted_data))
+        output_directory = mounted_data[first_source]["output_directory"]
+        verbosity = veryverbose
+
+        archive_artefacts(verbosity, output_directory)
 
     print("\n" + "=" * 60)
     print("  ALL PHASES COMPLETE")
     print("=" * 60 + "\n")
+
+    # Cleanup: unmount all images
+    print("  -> Unmounting images...")
+    unmount_images(elrond_mount, ewf_mount)
+    print("  -> Cleanup complete.\n")

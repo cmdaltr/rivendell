@@ -1,6 +1,6 @@
 # Elrond - Digital Forensics Automation Tool
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/yourusername/elrond)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/cmdaltr/elrond)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -129,7 +129,7 @@ elrond/
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/elrond.git
+git clone https://github.com/cmdaltr/elrond.git
 cd elrond
 
 # Start with Docker (easiest)
@@ -350,7 +350,7 @@ python cli.py --install --required-only
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/elrond.git
+git clone https://github.com/cmdaltr/elrond.git
 cd elrond
 
 # Create virtual environment
@@ -439,9 +439,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For issues, questions, or contributions:
 
-- **GitHub Issues**: [Report a bug](https://github.com/yourusername/elrond/issues)
+- **GitHub Issues**: [Report a bug](https://github.com/cmdaltr/elrond/issues)
 - **Documentation**: See [docs/SUPPORT.md](docs/SUPPORT.md)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/elrond/discussions)
+- **Discussions**: [GitHub Discussions](https://github.com/cmdaltr/elrond/discussions)
 
 ## 🗺️ Roadmap
 

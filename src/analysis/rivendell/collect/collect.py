@@ -109,7 +109,6 @@ def collect_artefacts(
                     )
                 else:
                     metaimage, vsstext = "'" + img.split("::")[0] + "'", ""
-                print("    Collecting Metadata for {}...".format(metaimage))
                 entry, prnt = "{},{},{},commenced\n".format(
                     datetime.now().isoformat(),
                     metaimage.replace("'", ""),
@@ -160,10 +159,12 @@ def collect_artefacts(
     else:
         symlinkvalue = True
     for mnt, img in imgs.items():  # Collection
+        # Extract basename since img may contain full path
+        img_basename = img.split("::")[0].split("/")[-1]
         if "vss" in img.split("::")[1]:
             vssimage = (
                 "'"
-                + img.split("::")[0]
+                + img_basename
                 + "' ("
                 + img.split("::")[1]
                 .split("_")[1]
@@ -171,18 +172,17 @@ def collect_artefacts(
                 + ")"
             )
         else:
-            vssimage = "'" + img.split("::")[0] + "'"
-        print("    Collecting artefacts for {}...".format(vssimage))
+            vssimage = "'" + img_basename + "'"
         entry, prnt = "{},{},{},commenced\n".format(
             datetime.now().isoformat(), vssimage.replace("'", ""), stage
         ), " -> {} -> {} artefacts for {}".format(
             datetime.now().isoformat().replace("T", " "), stage, vssimage
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        artefact_directory = output_directory + img.split("::")[0] + "/artefacts"
-        if volatility and img.split("::")[1].startswith("memory"):
-            if verbosity != "":
-                print("     Identifying profile for {}...".format(vssimage))
+        artefact_directory = output_directory + img_basename + "/artefacts"
+        # Check image type (index 2) not mount point (index 1)
+        img_type = img.split("::")[2] if len(img.split("::")) > 2 else ""
+        if volatility and img_type == "memory":
             if volchoice == "3":
                 process_memory(
                     output_directory,
@@ -373,11 +373,23 @@ def collect_artefacts(
                 )
             )
         print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> cleaning up empty directories...")
-        for tyr, tyd, _ in os.walk(img + "/artefacts/"):
-            for td in tyd:
-                if len(os.listdir(tyr + "/" + td)) == 0:
+        # Clean up empty directories in artefacts and files - run multiple times to handle nested empties
+        img_base = output_directory + img.split("::")[0]
+        for cleanup_pass in range(3):  # Multiple passes to clean nested empty dirs
+            for cleanup_dir in [img_base + "/artefacts/", img_base + "/files/"]:
+                if os.path.exists(cleanup_dir):
+                    for tyr, tyd, _ in os.walk(cleanup_dir, topdown=False):
+                        for td in tyd:
+                            dir_path = os.path.join(tyr, td)
+                            try:
+                                if os.path.isdir(dir_path) and len(os.listdir(dir_path)) == 0:
+                                    shutil.rmtree(dir_path)
+                            except:
+                                pass
+                    # Also check if the cleanup_dir itself is now empty
                     try:
-                        shutil.rmtree(tyr + "/" + td)
+                        if os.path.isdir(cleanup_dir) and len(os.listdir(cleanup_dir)) == 0:
+                            shutil.rmtree(cleanup_dir)
                     except:
                         pass
         entry, prnt = "{},{},{},completed\n".format(

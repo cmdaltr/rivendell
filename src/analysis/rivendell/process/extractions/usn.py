@@ -37,8 +37,6 @@ def extract_usn(
 
     file_size = os.path.getsize(artefact)
     if file_size == 0:
-        if verbosity != "":
-            print(f"     Skipping empty USN journal file: {artefact}")
         return
 
     # Use USN-Journal-Parser for $UsnJrnl parsing

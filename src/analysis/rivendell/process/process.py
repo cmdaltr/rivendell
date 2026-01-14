@@ -55,9 +55,9 @@ def process_artefacts(
     img_name = img.split("::")[0]
     if img_name in artefact:
         # Skip macOS resource fork files (AppleDouble files starting with ._)
-        # unless explicitly included via collect_file.txt (collectfiles != True)
+        # These are metadata files created by macOS, not actual forensic artefacts
         artefact_basename = os.path.basename(artefact)
-        if artefact_basename.startswith("._") and collectfiles == True:
+        if artefact_basename.startswith("._"):
             return
         if artefact.endswith("setupapi.dev.log"):
             process_usb(
@@ -178,6 +178,7 @@ def process_artefacts(
                 jsonlist,
             )
         elif artefact.endswith("OBJECTS.DATA"):
+            print(f"    [DEBUG-PROCESS] About to call process_wbem for {artefact}", flush=True)
             process_wbem(
                 verbosity,
                 vssimage,
@@ -187,6 +188,7 @@ def process_artefacts(
                 stage,
                 artefact,
             )
+            print(f"    [DEBUG-PROCESS] process_wbem returned successfully", flush=True)
         elif artefact.endswith("SRUDB.dat"):
             process_sru(
                 verbosity,
@@ -315,11 +317,6 @@ def process_artefacts(
                 jsonlist,
             )
         elif artefact.endswith("index.dat"):
-            # Process IE index.dat files regardless of size
-            # (removed arbitrary 32KB threshold that was skipping small history files)
-            file_size = os.stat(artefact).st_size
-            if verbosity != "" and file_size <= 32768:
-                print(f"  -> processing small IE index.dat ({file_size} bytes): {artefact.split('/')[-1]}")
             process_browser_index(
                 verbosity,
                 vssimage,
@@ -347,27 +344,32 @@ def process_artefacts(
                 artefact,
             )
         elif artefact.endswith("hiberfil.sys") and volatility:
-            if not os.path.exists(
-                output_directory
-                + img.split("::")[0]
-                + "/artefacts/cooked"
-                + vss_path_insert
-                + "memory"
-            ):
-                process_hiberfil(
-                    d,
-                    verbosity,
-                    vssimage,
-                    output_directory,
-                    img,
-                    vss_path_insert,
-                    stage,
-                    artefact,
-                    volchoice,
-                    vss,
-                    vssmem,
-                    memtimeline,
-                )
+            # TEMPORARY: Skip hiberfil.sys processing due to infinite recursion in Volatility
+            # TODO: Investigate and fix Volatility recursion issue
+            # See: docs/DEFERRED_MEMORY_PROCESSING.md for details
+            print(f"      [WARNING] Skipping hiberfil.sys Volatility processing due to known recursion issue")
+            print(f"      File collected but not processed: {artefact}")
+            # if not os.path.exists(
+            #     output_directory
+            #     + img.split("::")[0]
+            #     + "/artefacts/cooked"
+            #     + vss_path_insert
+            #     + "memory"
+            # ):
+            #     process_hiberfil(
+            #         d,
+            #         verbosity,
+            #         vssimage,
+            #         output_directory,
+            #         img,
+            #         vss_path_insert,
+            #         stage,
+            #         artefact,
+            #         volchoice,
+            #         vss,
+            #         vssmem,
+            #         memtimeline,
+            #     )
         elif artefact.endswith("MEMORY.DMP") and volatility:
             pass
         elif (

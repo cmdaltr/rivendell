@@ -1,12 +1,67 @@
 #!/usr/bin/env python3 -tt
+import json
 import os
 import time
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.meta import extract_metadata
-from rivendell.memory.memory import process_memory
+from rivendell.memory.memory import process_memory, identify_memory_profile
 from rivendell.utils import safe_input
+
+
+# File to store memory image profile information for deferred processing
+MEMORY_PROFILES_FILE = ".memory_profiles.json"
+
+
+def save_memory_profile(output_directory, image_name, profile_info):
+    """Save memory image profile information for later processing.
+
+    Args:
+        output_directory: Base output directory for the case
+        image_name: Name of the memory image file
+        profile_info: Dictionary containing profile data (platform, profile, volchoice, path, etc.)
+    """
+    # Normalize the output_directory path
+    output_directory = output_directory.rstrip('/') + '/'
+    profiles_path = os.path.join(output_directory, MEMORY_PROFILES_FILE)
+
+    profiles = {}
+    if os.path.exists(profiles_path):
+        try:
+            with open(profiles_path, "r") as f:
+                profiles = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            profiles = {}
+    profiles[image_name] = profile_info
+    try:
+        with open(profiles_path, "w") as f:
+            json.dump(profiles, f, indent=2)
+    except Exception as e:
+        print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> ERROR saving memory profile: {e}")
+
+
+def load_memory_profiles(output_directory):
+    """Load saved memory image profiles.
+
+    Args:
+        output_directory: Base output directory for the case
+
+    Returns:
+        Dictionary of image_name -> profile_info
+    """
+    # Normalize the output_directory path
+    output_directory = output_directory.rstrip('/') + '/'
+    profiles_path = os.path.join(output_directory, MEMORY_PROFILES_FILE)
+
+    if os.path.exists(profiles_path):
+        try:
+            with open(profiles_path, "r") as f:
+                profiles = json.load(f)
+            return profiles
+        except (json.JSONDecodeError, IOError):
+            return {}
+    return {}
 
 
 def print_identification(verbosity, output_directory, disk_image, osplatform):
@@ -124,8 +179,14 @@ def identify_memory_image(
     vssmem,
     memtimeline,
 ):
+    """Identify memory image profile and save for later processing.
+
+    This function only identifies the Volatility profile/symbol table for the memory
+    image and saves it to the output directory. The actual memory processing
+    (artefact extraction) is deferred to the processing phase via process_deferred_memory().
+    """
     if not auto:
-        wtm = safe_input("  Do you wish to process '{}'? Y/n [Y] ".format(f, default="y"))
+        wtm = safe_input("  Do you wish to process '{}'? Y/n [Y] ".format(f), default="y")
     else:
         wtm = "y"
     if wtm != "n":
@@ -146,68 +207,58 @@ def identify_memory_image(
             ),
         )
         write_audit_log_entry(verbosity, output_directory, entry, prnt)
-        if volchoice == "2.6":
-            symbolprofile, vssmem = process_memory(
-                output_directory,
-                verbosity,
-                d,
-                "process",
-                f,
-                path,
-                "2.6",
-                vss,
-                vssmem,
-                memtimeline,
-            )
-        elif volchoice == "3":
-            symbolprofile, vssmem = process_memory(
-                output_directory,
-                verbosity,
-                d,
-                "process",
-                f,
-                path,
-                "3",
-                vss,
-                vssmem,
-                memtimeline,
-            )
-        else:
-            symbolprofile, vssmem = process_memory(
-                output_directory,
-                verbosity,
-                d,
-                "process",
-                f,
-                path,
-                "2.6",
-                vss,
-                vssmem,
-                memtimeline,
-            )
-            symbolprofile, vssmem = process_memory(
-                output_directory,
-                verbosity,
-                d,
-                "process",
-                f,
-                path,
-                "3",
-                vss,
-                vssmem,
-                memtimeline,
-            )
-        if "Win" in symbolprofile or "win" in symbolprofile:
+
+        # Identify the memory profile without processing
+        symbolprofile = identify_memory_profile(
+            output_directory,
+            verbosity,
+            d,
+            f,
+            path,
+            volchoice,
+        )
+
+        # Determine platform from profile
+        if "Win" in str(symbolprofile) or "win" in str(symbolprofile):
             memoryplatform = "Windows memory"
         elif (
             "macOS" == symbolprofile
-            or "Mac" in symbolprofile
-            or "11." in symbolprofile
-            or "10." in symbolprofile
+            or "Mac" in str(symbolprofile)
+            or "11." in str(symbolprofile)
+            or "10." in str(symbolprofile)
         ):
             memoryplatform = "macOS memory"
         else:
             memoryplatform = "Linux memory"
+
+        # Save profile info for deferred processing
+        profile_info = {
+            "profile": symbolprofile,
+            "platform": memoryplatform,
+            "volchoice": volchoice,
+            "path": path,
+            "mount_point": d,
+            "vss": vss,
+            "vssmem": vssmem,
+            "memtimeline": memtimeline,
+        }
+        save_memory_profile(output_directory, f, profile_info)
+
+        print("   Identified profile '{}' ({}) for '{}'. Processing deferred to processing phase.".format(
+            symbolprofile, memoryplatform, f
+        ))
+        entry, prnt = "{},{},identified memory profile,{} ({})\n".format(
+            datetime.now().isoformat(),
+            f,
+            symbolprofile,
+            memoryplatform,
+        ), " -> {} -> identified memory profile '{}' for '{}'".format(
+            datetime.now().isoformat().replace("T", " "),
+            symbolprofile,
+            f,
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
         ot[d] = "{}::{}_{}".format(
             f,
             memoryplatform.replace(" ", "_").split("_")[1],
@@ -219,6 +270,92 @@ def identify_memory_image(
     else:
         print("    OK. '{}' will not be processed.\n".format(f))
     return ot
+
+
+def process_deferred_memory(
+    verbosity,
+    output_directory,
+    flags,
+    d,
+):
+    """Process memory images that were identified in the identification phase.
+
+    This function reads saved memory profile information and processes
+    each memory image using its identified Volatility profile.
+    """
+    profiles = load_memory_profiles(output_directory)
+    if not profiles:
+        return
+
+    print("\n  -> Processing {} deferred memory image(s)...".format(len(profiles)))
+
+    for image_name, profile_info in profiles.items():
+        print(" -> {} -> processing memory image '{}' with profile '{}'...".format(
+            datetime.now().isoformat().replace("T", " "),
+            image_name,
+            profile_info.get("profile", "unknown")
+        ))
+
+        try:
+            # Default to Volatility 3 if volchoice is empty or not set
+            volchoice = profile_info.get("volchoice", "3") or "3"
+            path = profile_info.get("path", "")
+            mount_point = profile_info.get("mount_point", d)
+            vss = profile_info.get("vss", False)
+            vssmem = profile_info.get("vssmem", "")
+            memtimeline = profile_info.get("memtimeline", False)
+            profile = profile_info.get("profile", "")
+            platform = profile_info.get("platform", "Windows memory")
+
+            # Construct img in the format expected by process_memory: "filename::memory_Platform"
+            # platform is like "Windows memory", "macOS memory", or "Linux memory"
+            platform_parts = platform.replace(" ", "_").split("_")
+            if len(platform_parts) >= 2:
+                # Format: filename::memory_Windows (or memory_macOS, memory_Linux)
+                img_with_platform = "{}::{}_{}".format(
+                    image_name,
+                    platform_parts[1],  # "memory"
+                    platform_parts[0],  # "Windows"/"macOS"/"Linux"
+                )
+            else:
+                # Fallback if platform format is unexpected
+                img_with_platform = "{}::memory_Windows".format(image_name)
+
+            # Process with Volatility 3 (only version supported)
+            # Note: stage must be "processing" to match the expected value in process_memory()
+            process_memory(
+                output_directory,
+                verbosity,
+                mount_point,
+                "processing",
+                img_with_platform,
+                path,
+                "3",
+                vss,
+                vssmem,
+                memtimeline,
+            )
+
+            print(" -> {} -> completed processing memory image '{}'".format(
+                datetime.now().isoformat().replace("T", " "),
+                image_name,
+            ))
+
+        except Exception as e:
+            print(" -> {} -> ERROR processing memory image '{}': {}".format(
+                datetime.now().isoformat().replace("T", " "),
+                image_name,
+                str(e)
+            ))
+            entry, prnt = "{},{},memory processing failed,{}\n".format(
+                datetime.now().isoformat(),
+                image_name,
+                str(e),
+            ), ""
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
+    if "02processing" not in str(flags):
+        flags.append("02processing")
 
 
 def identify_gandalf_host(output_directory, verbosity, host_info_file):

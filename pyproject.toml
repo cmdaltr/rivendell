@@ -80,10 +80,10 @@ elrond = "src.analysis.cli:main"
 gandalf = "src.acquisition.python.gandalf:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/rivendell"
-Documentation = "https://github.com/yourusername/rivendell"
-Repository = "https://github.com/yourusername/rivendell.git"
-Issues = "https://github.com/yourusername/rivendell/issues"
+Homepage = "https://github.com/cmdaltr/rivendell"
+Documentation = "https://github.com/cmdaltr/rivendell"
+Repository = "https://github.com/cmdaltr/rivendell.git"
+Issues = "https://github.com/cmdaltr/rivendell/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

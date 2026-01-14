@@ -48,14 +48,19 @@ def use_plugins(
             symbolorprofile,
         ) = ({}, {}, [], [], [], "VolatilitySymbolTable")
         if volver == "3":
+            # Use the vol.py wrapper created by Dockerfile.forensics
+            vol_cmd = "/usr/local/bin/vol.py"
+            if not os.path.exists(vol_cmd):
+                vol_cmd = "vol"  # Fallback to 'vol' command
             plugoutlist = (
                 str(
                     subprocess.Popen(
                         [
-                            "python3",
-                            "/usr/local/lib/python3.8/dist-packages/volatility3/vol.py",
+                            vol_cmd,
                             "-f",
                             artefact + memext,
+                            "-r",  # Specify renderer
+                            "json",  # Use JSON output format for easier parsing
                             plugin,
                         ],
                         stdout=subprocess.PIPE,
@@ -191,490 +196,505 @@ def use_plugins(
                     jsondict,
                     jsonlist,
                 )
-        for eachjson in jsonlist:
-            eachjson = (
-                str(eachjson)
-                .replace(
-                    "\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\",
-                    "/",
+
+        # For Volatility 3, jsonlist already contains clean JSON strings
+        # Skip the legacy string replacement processing designed for Vol2
+        if volver == "3":
+            voljsonlist = jsonlist
+        else:
+            # Volatility 2.6 - apply legacy string processing
+            for eachjson in jsonlist:
+                eachjson = (
+                    str(eachjson)
+                    .replace(
+                        "\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\",
+                        "/",
+                    )
+                    .replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\", "/")
+                    .replace("\\\\\\\\\\\\\\\\", "/")
+                    .replace("\\\\\\\\", "/")
+                    .replace("\\\\", "/")
+                    .replace("\\", "/")
+                    .replace("//", "/")
+                    .replace("\\\\ n", "\\\\n")
+                    .replace("/ n", "/n")
+                    .replace('/"', '"')
+                    .replace("'\"", "")
+                    .replace("\"'", "")
+                    .replace('", ', '", "')
+                    .replace('""', '"')
+                    .replace('" ', " ")
+                    .replace(' "', " ")
+                    .replace('": ', '": "')
+                    .replace('", ', '", "')
+                    .replace(" , ", '", "')
+                    .replace('", "', '"; "')
+                    .replace('",', ", ")
+                    .replace('"; "', '", "')
+                    .replace('="', "=")
+                    .replace('": ", "', '": "-", "')
+                    .replace('""', '"-"')
+                    .replace(' "},', ' "-"},')
+                    .replace(' }, {"', '"}, {"')
+                    .replace(" }]", '"}]')
+                    .replace('": "}', '": ""}')
+                    .replace(', "__', ', "')
+                    .replace('{"__', '{"')
+                    .replace('", "/', '", "')
+                    .replace("Pid", "PID")
+                    .replace("pid", "PID")
+                    .replace("Filepath", "Path")
+                    .replace("Command line", "CommandLine")
+                    .replace("LoadTime", "LastWriteTime")
                 )
-                .replace("\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\", "/")
-                .replace("\\\\\\\\\\\\\\\\", "/")
-                .replace("\\\\\\\\", "/")
-                .replace("\\\\", "/")
-                .replace("\\", "/")
-                .replace("//", "/")
-                .replace("\\\\ n", "\\\\n")
-                .replace("/ n", "/n")
-                .replace('/"', '"')
-                .replace("'\"", "")
-                .replace("\"'", "")
-                .replace('", ', '", "')
-                .replace('""', '"')
-                .replace('" ', " ")
-                .replace(' "', " ")
-                .replace('": ', '": "')
-                .replace('", ', '", "')
-                .replace(" , ", '", "')
-                .replace('", "', '"; "')
-                .replace('",', ", ")
-                .replace('"; "', '", "')
-                .replace('="', "=")
-                .replace('": ", "', '": "-", "')
-                .replace('""', '"-"')
-                .replace(' "},', ' "-"},')
-                .replace(' }, {"', '"}, {"')
-                .replace(" }]", '"}]')
-                .replace('": "}', '": ""}')
-                .replace(', "__', ', "')
-                .replace('{"__', '{"')
-                .replace('", "/', '", "')
-                .replace("Pid", "PID")
-                .replace("pid", "PID")
-                .replace("Filepath", "Path")
-                .replace("Command line", "CommandLine")
-                .replace("LoadTime", "LastWriteTime")
-            )
-            if "Win" in profile:
-                if (
-                    ', "ProcessName"' in eachjson
-                    and ', "CommandLine"' in eachjson
-                    and ', "ShellFolderPath"' in eachjson
-                ) or (
-                    '{ProcessName"' in eachjson
-                    and '{"CommandLine"' in eachjson
-                    and '{"ShellFolderPath"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}, "Registry{}'.format(
-                        str(
+                if "Win" in profile:
+                    if (
+                        ', "ProcessName"' in eachjson
+                        and ', "CommandLine"' in eachjson
+                        and ', "ShellFolderPath"' in eachjson
+                    ) or (
+                        '{ProcessName"' in eachjson
+                        and '{"CommandLine"' in eachjson
+                        and '{"ShellFolderPath"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "ProcessName"' in eachjson
-                    and ', "CommandLine"' in eachjson
-                    and ', "RegistryKey"' in eachjson
-                ) or (
-                    '{"ProcessName"' in eachjson
-                    and '{"CommandLine"' in eachjson
-                    and '{"RegistryKey"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}, "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "ProcessName"' in eachjson
+                        and ', "CommandLine"' in eachjson
+                        and ', "RegistryKey"' in eachjson
+                    ) or (
+                        '{"ProcessName"' in eachjson
+                        and '{"CommandLine"' in eachjson
+                        and '{"RegistryKey"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (', "ProcessName"' in eachjson and ', "Path"' in eachjson) or (
-                    '{"ProcessName"' in eachjson and '{"Path"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (', "ProcessName"' in eachjson and ', "Path"' in eachjson) or (
+                        '{"ProcessName"' in eachjson and '{"Path"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "ProcessName"' in eachjson and ', "CommandLine"' in eachjson
-                ) or ('{"ProcessName"' in eachjson and '{"CommandLine"' in eachjson):
-                    insert = ', "Process{}, "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "ProcessName"' in eachjson and ', "CommandLine"' in eachjson
+                    ) or ('{"ProcessName"' in eachjson and '{"CommandLine"' in eachjson):
+                        insert = ', "Process{}, "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "ProcessName"' in eachjson and ', "ShellFolderPath"' in eachjson
-                ) or (
-                    '{"ProcessName"' in eachjson and '{"ShellFolderPath"' in eachjson
-                ):
-                    insert = ', "Process{}, "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "ProcessName"' in eachjson and ', "ShellFolderPath"' in eachjson
+                    ) or (
+                        '{"ProcessName"' in eachjson and '{"ShellFolderPath"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "ProcessName"' in eachjson and ', "RegistryKey"' in eachjson
-                ) or ('{"ProcessName"' in eachjson and '{"RegistryKey"' in eachjson):
-                    insert = ', "Process{}, "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "ProcessName"' in eachjson and ', "RegistryKey"' in eachjson
+                    ) or ('{"ProcessName"' in eachjson and '{"RegistryKey"' in eachjson):
+                        insert = ', "Process{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "Path"' in eachjson
-                    and ', "CommandLine"' in eachjson
-                    and ', "RegistryKey"' in eachjson
-                ) or (
-                    '{"Path"' in eachjson
-                    and '{"CommandLine"' in eachjson
-                    and '{"RegistryKey"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}, "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "Path"' in eachjson
+                        and ', "CommandLine"' in eachjson
+                        and ', "RegistryKey"' in eachjson
+                    ) or (
+                        '{"Path"' in eachjson
+                        and '{"CommandLine"' in eachjson
+                        and '{"RegistryKey"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (', "Path"' in eachjson and ', "CommandLine"' in eachjson) or (
-                    '{"Path"' in eachjson and '{"CommandLine"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (', "Path"' in eachjson and ', "CommandLine"' in eachjson) or (
+                        '{"Path"' in eachjson and '{"CommandLine"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (', "Path"' in eachjson and ', "ShellFolderPath"' in eachjson) or (
-                    '{"Path"' in eachjson and '{"ShellFolderPath"' in eachjson
-                ):
-                    insert = ', "Process{}, "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (', "Path"' in eachjson and ', "ShellFolderPath"' in eachjson) or (
+                        '{"Path"' in eachjson and '{"ShellFolderPath"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "CommandLine"' in eachjson and ', "RegistryKey"' in eachjson
-                ) or ('{"CommandLine"' in eachjson and '{"RegistryKey"' in eachjson):
-                    insert = ', "Command{}, "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "CommandLine"' in eachjson and ', "RegistryKey"' in eachjson
+                    ) or ('{"CommandLine"' in eachjson and '{"RegistryKey"' in eachjson):
+                        insert = ', "Command{}, "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif ', "ProcessName"' in eachjson or '{"ProcessName"' in eachjson:
-                    insert = ', "Process{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif ', "ProcessName"' in eachjson or '{"ProcessName"' in eachjson:
+                        insert = ', "Process{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif ', "Path"' in eachjson or '{"Path"' in eachjson:
-                    insert = ', "Process{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif ', "Path"' in eachjson or '{"Path"' in eachjson:
+                        insert = ', "Process{}'.format(
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif ', "CommandLine"' in eachjson or '{"CommandLine"' in eachjson:
-                    insert = ', "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif ', "CommandLine"' in eachjson or '{"CommandLine"' in eachjson:
+                        insert = ', "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif (
-                    ', "ShellFolderPath"' in eachjson
-                    or '{"ShellFolderPath"' in eachjson
-                ):
-                    insert = ', "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif (
+                        ', "ShellFolderPath"' in eachjson
+                        or '{"ShellFolderPath"' in eachjson
+                    ):
+                        insert = ', "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif ', "RegistryKey"' in eachjson or '{"RegistryKey"' in eachjson:
-                    insert = ', "Registry{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ShellFolderPath(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif ', "RegistryKey"' in eachjson or '{"RegistryKey"' in eachjson:
+                        insert = ', "Registry{}'.format(
                             str(
-                                re.findall(
-                                    r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                                str(
+                                    re.findall(
+                                        r"RegistryKey(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    else:
+                        voljsonlist.append(json.dumps(eachjson))
                 else:
-                    voljsonlist.append(json.dumps(eachjson))
-            else:
-                if (
-                    '", "ProcessName"' in eachjson and '", "CommandLine"' in eachjson
-                ) or ('{"ProcessName"' in eachjson and '{"CommandLine"' in eachjson):
-                    insert = ', "Process{}, "Command{}'.format(
-                        str(
+                    if (
+                        '", "ProcessName"' in eachjson and '", "CommandLine"' in eachjson
+                    ) or ('{"ProcessName"' in eachjson and '{"CommandLine"' in eachjson):
+                        insert = ', "Process{}, "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif ('", "Path"' in eachjson and '", "CommandLine"' in eachjson) or (
-                    '{"Path"' in eachjson and '{"CommandLine"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif ('", "Path"' in eachjson and '", "CommandLine"' in eachjson) or (
+                        '{"Path"' in eachjson and '{"CommandLine"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif ('", "ProcessName"' in eachjson and '", "Path"' in eachjson) or (
-                    '{"ProcessName"' in eachjson and '{"Path"' in eachjson
-                ):
-                    insert = ', "Process{}, "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif ('", "ProcessName"' in eachjson and '", "Path"' in eachjson) or (
+                        '{"ProcessName"' in eachjson and '{"Path"' in eachjson
+                    ):
+                        insert = ', "Process{}, "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_"),
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif '", "ProcessName"' in eachjson or '{"ProcessName"' in eachjson:
-                    insert = ', "Process{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_"),
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif '", "ProcessName"' in eachjson or '{"ProcessName"' in eachjson:
+                        insert = ', "Process{}'.format(
                             str(
-                                re.findall(
-                                    r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif '", "Path"' in eachjson or '{"Path"' in eachjson:
-                    insert = ', "Process{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"ProcessName(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif '", "Path"' in eachjson or '{"Path"' in eachjson:
+                        insert = ', "Process{}'.format(
                             str(
-                                re.findall(
-                                    r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                elif '", "CommandLine"' in eachjson or '{"CommandLine"' in eachjson:
-                    insert = ', "Command{}'.format(
-                        str(
+                                str(
+                                    re.findall(
+                                        r"Path(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    elif '", "CommandLine"' in eachjson or '{"CommandLine"' in eachjson:
+                        insert = ', "Command{}'.format(
                             str(
-                                re.findall(
-                                    r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
-                                    eachjson,
-                                )[0]
-                            ).lower()
-                        ).replace(" ", "_")
-                    )
-                    voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
-                else:
-                    voljsonlist.append(json.dumps(eachjson))
+                                str(
+                                    re.findall(
+                                        r"CommandLine(\": \"(?:(?:[^\"]+\")|(?:[^']+')|(?:[^\,]+,)))",
+                                        eachjson,
+                                    )[0]
+                                ).lower()
+                            ).replace(" ", "_")
+                        )
+                        voljsonlist.append(json.dumps(eachjson[0:-1] + insert + "}"))
+                    else:
+                        voljsonlist.append(json.dumps(eachjson))
         if len(voljsonlist) > 0:
             with open(
                 output_directory + mempath + "/" + plugin + ".json", "w"
             ) as voljson:
-                vol_data = re.sub(
+                # For Volatility 3, jsonlist already contains clean JSON strings
+                # Skip the legacy string replacement chain designed for Vol2 text output
+                if volver == "3":
+                    # Write clean JSON array directly
+                    vol_data = "[" + ", ".join(voljsonlist) + "]"
+                    voljson.write(vol_data)
+                else:
+                    # Volatility 2.6 - use legacy replacement chain
+                    vol_data = re.sub(
                     r'("[^"]+": \[\{"[^"]+": "[^"]+", "[^\{\]]+\})(, \{"VolatilityVersion")',
                     r"\1]}\2",
                     re.sub(
@@ -757,12 +777,12 @@ def use_plugins(
                     .replace('"}}], {"', '"}, {"')
                     .replace('": ""]", "', '": "-", "'),
                 ).replace('\\", "', '", "')
-                vol_data = re.sub(
-                    r'(, "ControlFlags": \[[^\[]+"\})(, \{"VolatilityVersion)',
-                    r"\1]}\2",
-                    str(vol_data),
-                )
-                voljson.write(vol_data)
+                    vol_data = re.sub(
+                        r'(, "ControlFlags": \[[^\[]+"\})(, \{"VolatilityVersion)',
+                        r"\1]}\2",
+                        str(vol_data),
+                    )
+                    voljson.write(vol_data)
             entry, prnt = "{},{},extracted {},{} ({})\n".format(
                 datetime.now().isoformat(),
                 vssimage,

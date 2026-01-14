@@ -128,3 +128,10 @@ config/secrets.yml
 # SIEM credentials
 splunk_credentials.txt
 elastic_credentials.txt
+
+# Tests directory - only ignore generated content, not test scripts
+/tests/logs/
+/tests/output/
+/tests/temp/
+/tests/results/
+*.test.log

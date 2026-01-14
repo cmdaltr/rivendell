@@ -28,12 +28,6 @@ def collect_mac_artefacts(
             or item == mnt + "/etc/shadow"
             or item == mnt + "/etc/group"
         ):
-            if verbosity != "":
-                print(
-                    "     Collecting '/etc/{}' for {}...".format(
-                        item.split("/")[-1], vssimage
-                    )
-                )
             entry, prnt = "{},{},{},'{}'\n".format(
                 datetime.now().isoformat(),
                 img.split("::")[0],
@@ -52,8 +46,6 @@ def collect_mac_artefacts(
                 pass
 
         if item == mnt + "/etc/hosts":
-            if verbosity != "":
-                print("     Collecting '/etc/hosts' for {}...".format(vssimage))
             entry, prnt = "{},{},{},'/etc/hosts'\n".format(
                 datetime.now().isoformat(),
                 img.split("::")[0],
@@ -70,8 +62,6 @@ def collect_mac_artefacts(
                 pass
 
         if item == mnt + "/etc/crontab":
-            if verbosity != "":
-                print("     Collecting crontab for {}...".format(vssimage))
             entry, prnt = "{},{},{},'{}'\n".format(
                 datetime.now().isoformat(),
                 img.split("::")[0],
@@ -100,21 +90,6 @@ def collect_mac_artefacts(
                 os.stat(dest + "logs/")
             except:
                 os.makedirs(dest + "logs/")
-            if verbosity != "":
-                if "etc/security" not in item:
-                    print(
-                        "     Collecting {} logs for {}...".format(
-                            item.split("/")[-2].lower(),
-                            vssimage,
-                        )
-                    )
-                else:
-                    print(
-                        "     Collecting {} logs for {}...".format(
-                            item.split("/")[-1].lower(),
-                            vssimage,
-                        )
-                    )
             item_list = os.listdir(item)
             for each in item_list:
                 try:
@@ -163,25 +138,6 @@ def collect_mac_artefacts(
                 os.stat(dest + "plists/")
             except:
                 os.makedirs(dest + "plists/")
-            if verbosity != "":
-                if "System" in item:
-                    print(
-                        "     Collecting {} for {}...".format(
-                            item.split("/")[-3].lower()
-                            + " "
-                            + item.split("/")[-1].lower(),
-                            vssimage,
-                        )
-                    )
-                else:
-                    print(
-                        "     Collecting {} for {}...".format(
-                            item.split("/")[-2].lower()
-                            + " "
-                            + item.split("/")[-1].lower(),
-                            vssimage,
-                        )
-                    )
             item_list = os.listdir(item)
             for each in item_list:
                 if each.endswith(".plist"):
@@ -228,8 +184,6 @@ def collect_mac_artefacts(
                 os.stat(dest + "trash/")
             except:
                 os.makedirs(dest + "trash/")
-            if verbosity != "":
-                print("     Collecting trash files for {}...".format(vssimage))  #
             item_list = os.listdir(item)
             for each in item_list:
                 try:
@@ -263,8 +217,6 @@ def collect_mac_artefacts(
                 os.stat(dest + "tmp/")
             except:
                 os.makedirs(dest + "tmp/")
-            if verbosity != "":
-                print("     Collecting temp files for {}...".format(vssimage))  #
             item_list = os.listdir(item)
             for each in item_list:
                 if not os.path.isdir(each):
@@ -349,8 +301,6 @@ def collect_mac_artefacts(
         if volatility and item == mnt + "/":
             item_list = os.listdir(item)
             if len(item_list) > 0:
-                if verbosity != "":
-                    print("     Collecting memory files...")
                 for each in item_list:
                     if (
                         item == mnt + "/var/vm/sleepimage"

@@ -162,6 +162,78 @@ class MitreEnrichment:
             {"technique_id": "T1114.001", "technique_name": "Local Email Collection", "tactics": ["Collection"]},
             {"technique_id": "T1566", "technique_name": "Phishing", "tactics": ["Initial Access"]},
         ],
+        # Memory artefacts - Volatility outputs
+        "memory_pslist": [
+            {"technique_id": "T1057", "technique_name": "Process Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1059", "technique_name": "Command and Scripting Interpreter", "tactics": ["Execution"]},
+        ],
+        "memory_pstree": [
+            {"technique_id": "T1057", "technique_name": "Process Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1055", "technique_name": "Process Injection", "tactics": ["Defense Evasion", "Privilege Escalation"]},
+        ],
+        "memory_cmdline": [
+            {"technique_id": "T1059", "technique_name": "Command and Scripting Interpreter", "tactics": ["Execution"]},
+            {"technique_id": "T1059.001", "technique_name": "PowerShell", "tactics": ["Execution"]},
+            {"technique_id": "T1059.003", "technique_name": "Windows Command Shell", "tactics": ["Execution"]},
+        ],
+        "memory_netscan": [
+            {"technique_id": "T1049", "technique_name": "System Network Connections Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1071", "technique_name": "Application Layer Protocol", "tactics": ["Command and Control"]},
+            {"technique_id": "T1095", "technique_name": "Non-Application Layer Protocol", "tactics": ["Command and Control"]},
+        ],
+        "memory_netstat": [
+            {"technique_id": "T1049", "technique_name": "System Network Connections Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1071", "technique_name": "Application Layer Protocol", "tactics": ["Command and Control"]},
+        ],
+        "memory_malfind": [
+            {"technique_id": "T1055", "technique_name": "Process Injection", "tactics": ["Defense Evasion", "Privilege Escalation"]},
+            {"technique_id": "T1055.001", "technique_name": "Dynamic-link Library Injection", "tactics": ["Defense Evasion", "Privilege Escalation"]},
+            {"technique_id": "T1620", "technique_name": "Reflective Code Loading", "tactics": ["Defense Evasion"]},
+        ],
+        "memory_dlllist": [
+            {"technique_id": "T1055.001", "technique_name": "Dynamic-link Library Injection", "tactics": ["Defense Evasion", "Privilege Escalation"]},
+            {"technique_id": "T1574.001", "technique_name": "DLL Search Order Hijacking", "tactics": ["Persistence", "Privilege Escalation", "Defense Evasion"]},
+            {"technique_id": "T1129", "technique_name": "Shared Modules", "tactics": ["Execution"]},
+        ],
+        "memory_handles": [
+            {"technique_id": "T1057", "technique_name": "Process Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1106", "technique_name": "Native API", "tactics": ["Execution"]},
+        ],
+        "memory_filescan": [
+            {"technique_id": "T1083", "technique_name": "File and Directory Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1005", "technique_name": "Data from Local System", "tactics": ["Collection"]},
+        ],
+        "memory_driverscan": [
+            {"technique_id": "T1014", "technique_name": "Rootkit", "tactics": ["Defense Evasion"]},
+            {"technique_id": "T1543.003", "technique_name": "Windows Service", "tactics": ["Persistence", "Privilege Escalation"]},
+        ],
+        "memory_modules": [
+            {"technique_id": "T1014", "technique_name": "Rootkit", "tactics": ["Defense Evasion"]},
+            {"technique_id": "T1547.006", "technique_name": "Kernel Modules and Extensions", "tactics": ["Persistence", "Privilege Escalation"]},
+        ],
+        "memory_svcscan": [
+            {"technique_id": "T1543.003", "technique_name": "Windows Service", "tactics": ["Persistence", "Privilege Escalation"]},
+            {"technique_id": "T1569.002", "technique_name": "Service Execution", "tactics": ["Execution"]},
+        ],
+        "memory_getsids": [
+            {"technique_id": "T1087", "technique_name": "Account Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1078", "technique_name": "Valid Accounts", "tactics": ["Defense Evasion", "Persistence", "Privilege Escalation", "Initial Access"]},
+        ],
+        "memory_envars": [
+            {"technique_id": "T1082", "technique_name": "System Information Discovery", "tactics": ["Discovery"]},
+            {"technique_id": "T1574.007", "technique_name": "Path Interception by PATH Environment Variable", "tactics": ["Persistence", "Privilege Escalation", "Defense Evasion"]},
+        ],
+        "memory_privileges": [
+            {"technique_id": "T1134", "technique_name": "Access Token Manipulation", "tactics": ["Defense Evasion", "Privilege Escalation"]},
+            {"technique_id": "T1134.001", "technique_name": "Token Impersonation/Theft", "tactics": ["Defense Evasion", "Privilege Escalation"]},
+        ],
+        "memory_mutantscan": [
+            {"technique_id": "T1480", "technique_name": "Execution Guardrails", "tactics": ["Defense Evasion"]},
+        ],
+        "memory_registry": [
+            {"technique_id": "T1112", "technique_name": "Modify Registry", "tactics": ["Defense Evasion"]},
+            {"technique_id": "T1547.001", "technique_name": "Registry Run Keys / Startup Folder", "tactics": ["Persistence", "Privilege Escalation"]},
+        ],
     }
 
     # Technique to threat groups mapping (commonly observed)

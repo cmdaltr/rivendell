@@ -1,12 +1,15 @@
 """
 Job Storage
 
-Simple file-based storage for jobs (can be replaced with database later).
+PostgreSQL-based storage for jobs using SQLAlchemy.
 """
 
-import json
-from pathlib import Path
+import os
+from datetime import datetime
 from typing import Optional, List
+from sqlalchemy import create_engine, Column, String, Integer, Text, DateTime, Enum as SQLEnum, JSON
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool
 
 try:
     from .models.job import Job, JobStatus
@@ -17,22 +20,79 @@ except ImportError:
     from config import settings
 
 
-class JobStorage:
-    """File-based job storage."""
+# SQLAlchemy Base
+Base = declarative_base()
 
-    def __init__(self, storage_dir: Optional[Path] = None):
+
+class JobModel(Base):
+    """SQLAlchemy model for jobs table."""
+    __tablename__ = "jobs"
+
+    id = Column(String, primary_key=True)
+    case_number = Column(String, nullable=False, index=True)
+    source_paths = Column(JSON, nullable=False)
+    destination_path = Column(String, nullable=True)
+    options = Column(JSON, nullable=False)
+    status = Column(String, nullable=False, index=True)
+    progress = Column(Integer, default=0)
+    log = Column(JSON, default=list)
+    result = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    celery_task_id = Column(String, nullable=True)
+    pending_action = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+
+class JobStorage:
+    """PostgreSQL-based job storage using SQLAlchemy."""
+
+    def __init__(self, database_url: Optional[str] = None):
         """
         Initialize job storage.
 
         Args:
-            storage_dir: Directory to store job files
+            database_url: PostgreSQL connection URL (defaults to DATABASE_URL env var)
         """
-        self.storage_dir = storage_dir or settings.output_dir / "jobs"
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.database_url = database_url or os.getenv(
+            "DATABASE_URL",
+            "postgresql://rivendell:rivendell@localhost:5432/rivendell"
+        )
 
-    def _get_job_path(self, job_id: str) -> Path:
-        """Get path to job file."""
-        return self.storage_dir / f"{job_id}.json"
+        # Create engine with connection pooling disabled for file-based compatibility
+        # In production, you might want to enable pooling
+        self.engine = create_engine(
+            self.database_url,
+            poolclass=NullPool,
+            echo=False  # Set to True for SQL debugging
+        )
+
+        # Create session factory
+        self.Session = sessionmaker(bind=self.engine)
+
+        # Create tables if they don't exist
+        Base.metadata.create_all(self.engine)
+
+    def _job_model_to_pydantic(self, job_model: JobModel) -> Job:
+        """Convert SQLAlchemy model to Pydantic model."""
+        return Job(
+            id=job_model.id,
+            case_number=job_model.case_number,
+            source_paths=job_model.source_paths,
+            destination_path=job_model.destination_path,
+            options=job_model.options,
+            status=JobStatus(job_model.status),
+            progress=job_model.progress,
+            log=job_model.log or [],
+            result=job_model.result,
+            error=job_model.error,
+            celery_task_id=job_model.celery_task_id,
+            pending_action=job_model.pending_action,
+            created_at=job_model.created_at,
+            started_at=job_model.started_at,
+            completed_at=job_model.completed_at,
+        )
 
     def save_job(self, job: Job) -> None:
         """
@@ -41,13 +101,54 @@ class JobStorage:
         Args:
             job: Job to save
         """
-        job_path = self._get_job_path(job.id)
+        session = self.Session()
+        try:
+            # Check if job exists
+            existing = session.query(JobModel).filter_by(id=job.id).first()
 
-        with open(job_path, "w") as f:
-            json.dump(job.dict(), f, indent=2, default=str)
-            f.flush()  # Ensure data is written to disk
-            import os
-            os.fsync(f.fileno())  # Force OS to write to disk
+            if existing:
+                # Update existing job
+                existing.case_number = job.case_number
+                existing.source_paths = job.source_paths
+                existing.destination_path = job.destination_path
+                existing.options = job.options.dict()
+                existing.status = job.status.value
+                existing.progress = job.progress
+                existing.log = job.log
+                existing.result = job.result
+                existing.error = job.error
+                existing.celery_task_id = job.celery_task_id
+                existing.pending_action = job.pending_action.dict() if job.pending_action else None
+                existing.created_at = job.created_at
+                existing.started_at = job.started_at
+                existing.completed_at = job.completed_at
+            else:
+                # Create new job
+                job_model = JobModel(
+                    id=job.id,
+                    case_number=job.case_number,
+                    source_paths=job.source_paths,
+                    destination_path=job.destination_path,
+                    options=job.options.dict(),
+                    status=job.status.value,
+                    progress=job.progress,
+                    log=job.log,
+                    result=job.result,
+                    error=job.error,
+                    celery_task_id=job.celery_task_id,
+                    pending_action=job.pending_action.dict() if job.pending_action else None,
+                    created_at=job.created_at,
+                    started_at=job.started_at,
+                    completed_at=job.completed_at,
+                )
+                session.add(job_model)
+
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            raise
+        finally:
+            session.close()
 
     def get_job(self, job_id: str) -> Optional[Job]:
         """
@@ -59,30 +160,16 @@ class JobStorage:
         Returns:
             Job if found, None otherwise
         """
-        import time
+        session = self.Session()
+        try:
+            job_model = session.query(JobModel).filter_by(id=job_id).first()
 
-        job_path = self._get_job_path(job_id)
+            if not job_model:
+                return None
 
-        if not job_path.exists():
-            return None
-
-        # Retry logic to handle race conditions when file is being written
-        max_retries = 3
-        retry_delay = 0.1  # 100ms
-
-        for attempt in range(max_retries):
-            try:
-                with open(job_path, "r") as f:
-                    data = json.load(f)
-                    return Job(**data)
-            except json.JSONDecodeError as e:
-                if attempt < max_retries - 1:
-                    # File might be partially written, wait and retry
-                    time.sleep(retry_delay)
-                    continue
-                else:
-                    # Final attempt failed, raise the error
-                    raise
+            return self._job_model_to_pydantic(job_model)
+        finally:
+            session.close()
 
     def list_jobs(
         self,
@@ -101,33 +188,18 @@ class JobStorage:
         Returns:
             List of jobs
         """
-        jobs = []
+        session = self.Session()
+        try:
+            query = session.query(JobModel).order_by(JobModel.created_at.desc())
 
-        # Get all job files
-        job_files = sorted(
-            self.storage_dir.glob("*.json"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
+            if status:
+                query = query.filter_by(status=status.value)
 
-        # Filter and paginate
-        for job_file in job_files:
-            try:
-                with open(job_file, "r") as f:
-                    data = json.load(f)
-                    job = Job(**data)
+            job_models = query.offset(offset).limit(limit).all()
 
-                    # Filter by status if specified
-                    if status and job.status != status:
-                        continue
-
-                    jobs.append(job)
-            except Exception:
-                # Skip invalid job files
-                continue
-
-        # Apply pagination
-        return jobs[offset : offset + limit]
+            return [self._job_model_to_pydantic(jm) for jm in job_models]
+        finally:
+            session.close()
 
     def count_jobs(self, status: Optional[JobStatus] = None) -> int:
         """
@@ -139,22 +211,16 @@ class JobStorage:
         Returns:
             Number of jobs
         """
-        count = 0
+        session = self.Session()
+        try:
+            query = session.query(JobModel)
 
-        for job_file in self.storage_dir.glob("*.json"):
-            try:
-                with open(job_file, "r") as f:
-                    data = json.load(f)
-                    job = Job(**data)
+            if status:
+                query = query.filter_by(status=status.value)
 
-                    if status and job.status != status:
-                        continue
-
-                    count += 1
-            except Exception:
-                continue
-
-        return count
+            return query.count()
+        finally:
+            session.close()
 
     def delete_job(self, job_id: str) -> None:
         """
@@ -163,7 +229,15 @@ class JobStorage:
         Args:
             job_id: Job ID
         """
-        job_path = self._get_job_path(job_id)
+        session = self.Session()
+        try:
+            job_model = session.query(JobModel).filter_by(id=job_id).first()
 
-        if job_path.exists():
-            job_path.unlink()
+            if job_model:
+                session.delete(job_model)
+                session.commit()
+        except Exception as e:
+            session.rollback()
+            raise
+        finally:
+            session.close()

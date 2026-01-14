@@ -63,7 +63,7 @@ def _analyse_artemis_mft_from_status_log(ar, f, stage, vssimage, anysd, verbosit
 
 
 def analyse_artefacts(
-    verbosity, output_directory, img, mnt, analysis, magicbytes, extractiocs, vssimage
+    verbosity, output_directory, img, mnt, analysis, magicbytes, extractiocs, iocsfile, vssimage
 ):
     def analyse_mft_json(stage, vssimage, filepath, anysd, verbosity, output_directory):
         """Analyse MFT data from Artemis JSON output for EA, ADS, and Timestomping."""
@@ -129,12 +129,6 @@ def analyse_artefacts(
                                     ads_name,
                                 )
                             )
-                    if verbosity != "":
-                        print(
-                            "      Alternate Data Stream identified for '{}'".format(
-                                filename.split("/")[-1] if "/" in filename else filename
-                            )
-                        )
                     entry, prnt = "{},{},{},alternate data stream found in '{}'\n".format(
                         datetime.now().isoformat(),
                         vssimage,
@@ -172,12 +166,6 @@ def analyse_artefacts(
                                 datetime.now().isoformat(),
                                 vssimage.replace("'", ""),
                                 filename,
-                            )
-                        )
-                    if verbosity != "":
-                        print(
-                            "      Extended Attributes identified for '{}'".format(
-                                filename.split("/")[-1] if "/" in filename else filename
                             )
                         )
                     entry, prnt = "{},{},{},extended attribute found in '{}'\n".format(
@@ -223,12 +211,6 @@ def analyse_artefacts(
                                         filename,
                                         si_ts,
                                         fn_ts,
-                                    )
-                                )
-                            if verbosity != "":
-                                print(
-                                    "      Evidence of Timestomping identified for '{}'".format(
-                                        filename.split("/")[-1] if "/" in filename else filename
                                     )
                                 )
                             entry, prnt = "{},{},{},evidence of timestomping found in '{}'\n".format(
@@ -319,12 +301,6 @@ def analyse_artefacts(
                                         mftinfo[0][1],
                                     )
                                 )
-                                if verbosity != "":
-                                    print(
-                                        "      Extended Attributes identified for '{}'".format(
-                                            mftinfo[0][1].split("/")[-1]
-                                        )
-                                    )
                                 (
                                     entry,
                                     prnt,
@@ -349,12 +325,6 @@ def analyse_artefacts(
                                         mftinfo[0][1],
                                     )
                                 )
-                                if verbosity != "":
-                                    print(
-                                        "      Alternate Data Stream identified for '{}'".format(
-                                            mftinfo[0][1].split("/")[-1]
-                                        )
-                                    )
                                 (
                                     entry,
                                     prnt,
@@ -407,12 +377,6 @@ def analyse_artefacts(
                                                 fnepoch,
                                             )
                                         )
-                                    if verbosity != "":
-                                        print(
-                                            "      Evidence of Timestomping identified for '{}'".format(
-                                                mftinfo[0][1].split("/")[-1]
-                                            )
-                                        )
                                     (
                                         entry,
                                         prnt,
@@ -438,8 +402,9 @@ def analyse_artefacts(
 
     stage = "analysing"
     # Safe parsing of img - handle both "image::type" and plain "image" formats
+    # Extract basename since img may contain full path
     img_parts = img.split("::")
-    img_name = img_parts[0]
+    img_name = img_parts[0].split("/")[-1]
     img_type = img_parts[1] if len(img_parts) > 1 else ""
 
     atftd = output_directory + img_name + "/artefacts/cooked/"
@@ -684,13 +649,6 @@ def analyse_artefacts(
                                                 str(file_hdr)[2:10],
                                             )
                                         )
-                                    if verbosity != "":
-                                        print(
-                                            "      File-signature (magic-byte) discrepency of '{}' identified for {}".format(
-                                                str(file_hdr)[2:10],
-                                                f.split("/")[-1],
-                                            )
-                                        )
                                     (
                                         entry,
                                         prnt,
@@ -781,12 +739,6 @@ def analyse_artefacts(
             ))
     if extractiocs:
         iocfilelist, lineno, previous = [], 0, 0.0
-        if verbosity != "":
-            print(
-                "\n    \033[1;33mUndertaking IOC extraction for '{}'...\033[1;m".format(
-                    img_name
-                )
-            )
         print(
             "     Assessing readable files to extract IOCs from, for '{}'...".format(
                 img_name
@@ -840,8 +792,10 @@ def analyse_artefacts(
                 "w",
             ) as ioccsv:
                 ioccsv.write(
-                    "CreationTime,LastAccessTime,LastWriteTime,Filename,ioc,indicator_type,line_number,resolvable\n"
+                    "CreationTime,LastAccessTime,LastWriteTime,Filename,ioc,indicator_type,line_number,resolvable,watchlist_match\n"
                 )
+        # Get watchlist file path if provided (iocsfile is a list from argparse)
+        watchlist_file = iocsfile[0] if iocsfile else None
         compare_iocs(
             output_directory,
             verbosity,
@@ -851,6 +805,7 @@ def analyse_artefacts(
             iocfiles,
             lineno,
             previous,
+            watchlist_file=watchlist_file,
         )
     entry, prnt = "{},{},{},completed\n".format(
         datetime.now().isoformat(), vssimage, stage

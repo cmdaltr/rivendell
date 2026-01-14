@@ -16,6 +16,50 @@ from rivendell.core.identify import identify_memory_image
 from rivendell.meta import extract_metadata
 from rivendell.mount import mount_images
 from rivendell.mount import unmount_images
+
+
+def is_memory_image(filename, imgformat, filepath=None):
+    """
+    Detect if a file is a memory image rather than a disk image.
+
+    Memory images are identified by:
+    1. File extensions: .mem, .vmem, .dmp, .lime, .aff4 (definite memory)
+    2. Filename patterns like -raw.001, -memory.001 (memory dump with split extension)
+    3. File type output containing 'crash dump', 'Windows memory', 'MS Windows hibernation'
+    4. For ambiguous extensions (.raw, .001, .bin under 32GB): return False to try mounting first
+       - If mounting fails, the caller can fall back to memory processing
+
+    Returns True if the file appears to be a memory image.
+    """
+    import re
+    filename_lower = filename.lower()
+    imgformat_lower = imgformat.lower() if imgformat else ""
+
+    # Memory-specific extensions (definitive indicators)
+    # Note: .raw is NOT included here as it's ambiguous (could be VMDK converted to raw, etc.)
+    memory_extensions = ['.mem', '.vmem', '.dmp', '.lime', '.aff4', '.img', '.001']
+    has_definite_memory_ext = any(filename_lower.endswith(ext) for ext in memory_extensions)
+
+    # Check for patterns like -raw.001, -memory.001, -memdump.001, etc.
+    # These are memory dumps that have been split or renamed
+    memory_filename_patterns = ['-memory.', '-memdump.', '-mem.', '-physmem.']
+    has_memory_pattern = any(pattern in filename_lower for pattern in memory_filename_patterns)
+
+    # File type indicators for memory images (from 'file' command output)
+    memory_format_indicators = ['crash dump', 'windows memory', 'ms windows hibernation']
+    is_memory_format = any(indicator in imgformat_lower for indicator in memory_format_indicators)
+
+    # Definite memory: has memory extension, memory pattern in filename, or file type indicates memory
+    if has_definite_memory_ext or has_memory_pattern or is_memory_format:
+        return True
+
+    # For ambiguous extensions (.raw, .001, .bin), we return False to try mounting first
+    # If mounting fails, the caller should fall back to treating it as a memory image
+    # This approach is faster since mounting is quicker than Volatility profile detection
+
+    return False
+
+
 from rivendell.post.clean import archive_artefacts
 from rivendell.post.clean import delete_artefacts
 from rivendell.post.clean import cleanup_small_files_and_empty_dirs
@@ -38,6 +82,9 @@ def main(
     gandalf,
     collectfiles,
     extractiocs,
+    iocsfile,
+    misplaced_binaries,
+    masquerading,
     keywords,
     volatility,
     metacollected,
@@ -72,12 +119,6 @@ def main(
 ):
     partitions = []
     hashing_enabled = hashall or hashcollected
-
-    # Print startup message immediately
-    print("Initializing Elrond DFIR Analysis...")
-    print(f"Case: {case}")
-    print(f"Mode: {'Collect' if collect else 'Gandalf'}")
-    sys.stdout.flush()
 
     # Only clear screen in interactive mode
     if not is_noninteractive():
@@ -169,18 +210,26 @@ def main(
     if collectfiles:
         if collectfiles != True:
             if len(collectfiles) > 0:
-                if not collectfiles.startswith(
-                    "include:"
-                ) and not collectfiles.startswith("exclude:"):
-                    print(
-                        "\n  [-F --collectfiles] - if providing an inclusion or exclusion list, the optional argument must start with 'include:' or 'exclude:' respectively\n   The correct syntax is: [include/exclude]:/path/to/inclusion_or_exclusion.list\n  Please try again.\n\n"
-                    )
-                    sys.exit()
-                if not os.path.exists(collectfiles[8:]):
-                    print(
-                        "\n  [-F --collectfiles] - '{}' does not exist and/or is an invalid file, please try again.\n\n".format(
-                            collectfiles[8:]
+                if collectfiles.startswith("include:") or collectfiles.startswith("exclude:"):
+                    # Path to inclusion/exclusion file
+                    if not os.path.exists(collectfiles[8:]):
+                        print(
+                            "\n  [-F --collectfiles] - '{}' does not exist and/or is an invalid file, please try again.\n\n".format(
+                                collectfiles[8:]
+                            )
                         )
+                        sys.exit()
+                elif "," in collectfiles or re.match(r'^[a-zA-Z0-9]+$', collectfiles):
+                    # Comma-separated extension list (e.g., "exe,dll,sys") or single extension
+                    # This is valid - will be handled as inline extension filter
+                    pass
+                else:
+                    print(
+                        "\n  [-F --collectfiles] - invalid format. Use one of:\n"
+                        "   1. No argument (collect all files)\n"
+                        "   2. Comma-separated extensions: exe,dll,sys\n"
+                        "   3. Path to include/exclude file: include:/path/to/file.txt\n"
+                        "  Please try again.\n\n"
                     )
                     sys.exit()
     if yara:
@@ -428,6 +477,69 @@ def main(
         ):  # potentially add ova and vdi - https://superuser.com/questions/915615/mount-vmware-disk-images-under-linux
             stage = "mounting"
             path, root, f, imgformat = foundimg.split("||")
+
+            # Check if this is a memory image
+            # Note: 'path' is already the full filepath from foundimg.split("||")
+            if is_memory_image(f, imgformat, path):
+                # Memory image detected - always process with Volatility
+                # (regardless of whether Memory option was explicitly checked)
+                print(" -> {} -> identified '{}' as memory image, will save profile for deferred processing".format(
+                    datetime.now().isoformat().replace("T", " "), f
+                ))
+                if hashing_enabled:
+                    if not os.path.exists(output_directory + f + "/meta_audit.log"):
+                        with open(
+                            output_directory + f + "/meta_audit.log", "w"
+                        ) as metaimglog:
+                            metaimglog.write(
+                                "Filename,SHA256,known-good,Entropy,Filesize,LastWriteTime,LastAccessTime,LastInodeChangeTime,Permissions,FileType\n"
+                            )
+                    with open(path, "rb") as metaimg:
+                        buffer = metaimg.read(262144)
+                        while len(buffer) > 0:
+                            sha256.update(buffer)
+                            buffer = metaimg.read(262144)
+                        metaentry = (
+                            path
+                            + ","
+                            + sha256.hexdigest()
+                            + ",unknown,N/A,N/A,N/A,N/A,N/A,N/A,N/A\n"
+                        )
+                    with open(output_directory + f + "/meta_audit.log", "a") as metaimglog:
+                        metaimglog.write(metaentry)
+                    extract_metadata(
+                        verbosity,
+                        output_directory,
+                        f,
+                        path,
+                        "metadata",
+                        sha256,
+                        nsrl,
+                    )
+                ot = identify_memory_image(
+                    verbosity,
+                    output_directory,
+                    flags,
+                    auto,
+                    metacollected,
+                    cwd,
+                    sha256,
+                    nsrl,
+                    f,
+                    ot,
+                    d,
+                    path,
+                    volchoice,
+                    vss,
+                    vssmem,
+                    memtimeline,
+                )
+                for mempath, memimg in ot.items():
+                    allimgs[memimg] = mempath
+                allimgs = OrderedDict(sorted(allimgs.items(), key=lambda x: x[1]))
+                print()
+                continue  # Skip to next image (don't try to mount memory images)
+
             # Print mounting message so UI shows progress during long mount operations
             print(" -> {} -> mounting '{}' ...".format(
                 datetime.now().isoformat().replace("T", " "), f
@@ -454,19 +566,13 @@ def main(
                     wish_to_mount = "y"
                 if wish_to_mount != "n":
                     if hashing_enabled:
-                        if not os.path.exists(output_directory + f + "/meta.audit"):
+                        if not os.path.exists(output_directory + f + "/meta_audit.log"):
                             with open(
-                                output_directory + f + "/meta.audit", "w"
+                                output_directory + f + "/meta_audit.log", "w"
                             ) as metaimglog:
                                 metaimglog.write(
                                     "Filename,SHA256,NSRL,Entropy,Filesize,LastWriteTime,LastAccessTime,LastInodeChangeTime,Permissions,FileType\n"
                                 )
-                        if verbosity != "":
-                            print(
-                                "    Calculating SHA256 hash for '{}', please stand by...".format(
-                                    f
-                                )
-                            )
                         with open(path, "rb") as metaimg:
                             buffer = metaimg.read(262144)
                             while len(buffer) > 0:
@@ -479,7 +585,7 @@ def main(
                                 + ",unknown,N/A,N/A,N/A,N/A,N/A,N/A,N/A\n"
                             )
                         with open(
-                            output_directory + f + "/meta.audit", "a"
+                            output_directory + f + "/meta_audit.log", "a"
                         ) as metaimglog:
                             metaimglog.write(metaentry)
                         extract_metadata(
@@ -532,36 +638,66 @@ def main(
                             datetime.now().isoformat().replace("T", " "), f
                         )
                         write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                        # Clean up the empty directory to avoid phantom directories
-                        phantom_dir = os.path.join(output_directory, f)
-                        if os.path.isdir(phantom_dir):
-                            try:
-                                # Only remove if empty or contains only audit files we created
-                                dir_contents = os.listdir(phantom_dir)
-                                if len(dir_contents) == 0 or dir_contents == ["meta.audit"] or dir_contents == ["rivendell_audit.log"] or set(dir_contents) == {"meta.audit", "rivendell_audit.log"}:
-                                    shutil.rmtree(phantom_dir)
-                                    print(f"   Removed empty directory for unmounted image '{f}'")
-                            except Exception as e:
-                                print(f"   Warning: Could not remove phantom directory: {e}")
+
+                        # For ambiguous extensions (.raw, .dd) under 32GB, fallback to memory processing
+                        ambiguous_extensions = ['.raw', '.dd']
+                        is_ambiguous = any(f.lower().endswith(ext) for ext in ambiguous_extensions)
+                        max_memory_size = 32 * 1024 * 1024 * 1024  # 32GB
+                        try:
+                            file_size = os.path.getsize(path)
+                        except (OSError, IOError):
+                            file_size = max_memory_size + 1  # Assume too large if can't check
+
+                        if is_ambiguous and file_size < max_memory_size:
+                            print(" -> {} -> mount failed, attempting to process '{}' as memory image...".format(
+                                datetime.now().isoformat().replace("T", " "), f
+                            ))
+                            ot = identify_memory_image(
+                                verbosity,
+                                output_directory,
+                                flags,
+                                auto,
+                                metacollected,
+                                cwd,
+                                sha256,
+                                nsrl,
+                                f,
+                                ot,
+                                d,
+                                path,
+                                volchoice,
+                                vss,
+                                vssmem,
+                                memtimeline,
+                            )
+                            for mempath, memimg in ot.items():
+                                allimgs[memimg] = mempath
+                            allimgs = OrderedDict(sorted(allimgs.items(), key=lambda x: x[1]))
+                        else:
+                            # Clean up the empty directory to avoid phantom directories
+                            phantom_dir = os.path.join(output_directory, f)
+                            if os.path.isdir(phantom_dir):
+                                try:
+                                    # Only remove if empty or contains only audit files we created
+                                    dir_contents = os.listdir(phantom_dir)
+                                    if len(dir_contents) == 0 or dir_contents == ["meta_audit.log"] or dir_contents == ["rivendell_audit.log"] or set(dir_contents) == {"meta_audit.log", "rivendell_audit.log"}:
+                                        shutil.rmtree(phantom_dir)
+                                        print(f"   Removed empty directory for unmounted image '{f}'")
+                                except Exception as e:
+                                    print(f"   Warning: Could not remove phantom directory: {e}")
                 else:
                     print("    OK. '{}' will not be mounted.\n".format(f))
                 allimgs = {**allimgs, **ot}
                 print()
             elif volatility and ("data" in imgformat or "crash dump" in imgformat):
                 if hashing_enabled:
-                    if not os.path.exists(output_directory + f + "/meta.audit"):
+                    if not os.path.exists(output_directory + f + "/meta_audit.log"):
                         with open(
-                            output_directory + f + "/meta.audit", "w"
+                            output_directory + f + "/meta_audit.log", "w"
                         ) as metaimglog:
                             metaimglog.write(
                                 "Filename,SHA256,known-good,Entropy,Filesize,LastWriteTime,LastAccessTime,LastInodeChangeTime,Permissions,FileType\n"
                             )
-                    if verbosity != "":
-                        print(
-                            "    Calculating SHA256 hash for '{}', please stand by...".format(
-                                f
-                            )
-                        )
                     with open(path, "rb") as metaimg:
                         buffer = metaimg.read(262144)
                         while len(buffer) > 0:
@@ -573,7 +709,7 @@ def main(
                             + sha256.hexdigest()
                             + ",unknown,N/A,N/A,N/A,N/A,N/A,N/A,N/A\n"
                         )
-                    with open(output_directory + f + "/meta.audit", "a") as metaimglog:
+                    with open(output_directory + f + "/meta_audit.log", "a") as metaimglog:
                         metaimglog.write(metaentry)
                     extract_metadata(
                         verbosity,
@@ -638,24 +774,14 @@ def main(
         time.sleep(1)
         # Don't print phase completion in mount phase - elrond.py will handle it after all images
         if phase != "mount":
-            if volatility:
-                print(
-                    "  ----------------------------------------\n  -> Completed Identification & Extraction Phase.\n"
-                )
-            else:
-                print(
-                    "  ----------------------------------------\n  -> Completed Identification Phase.\n"
-                )
-    else:
-        if not auto:
-            nodisks = safe_input(
-                "  No disk images exist in the provided directory.\n   Do you wish to continue? Y/n [Y] "
+            print(
+                "  ----------------------------------------\n  -> Completed Identification Phase.\n"
             )
-            if nodisks == "n":
-                print(
-                    "  ----------------------------------------\n  -> Completed Identification Phase.\n\n\n  ----------------------------------------\n   If you are confident there are valid images in this directory, maybe try with the Memory switch (-M)?\n   Otherwise review the path location and ensure the images are supported by elrond.\n  ----------------------------------------\n\n\n"
-                )
-                sys.exit()
+    else:
+        nodisks = safe_input(
+            "  No images exist in the provided directory.\n   Please try again."
+        )
+        sys.exit()
     time.sleep(1)
 
     # PHASE CONTROL: If mount-only phase, return after mounting
@@ -684,6 +810,7 @@ def main(
                 analysis,
                 magicbytes,
                 extractiocs,
+                iocsfile,
                 timeline,
                 vss,
                 collectfiles,
@@ -867,6 +994,50 @@ def main(
                 "  ----------------------------------------\n  -> Completed Metadata phase for proccessed artefacts.\n"
             )
             time.sleep(1)
+        if misplaced_binaries:
+            safe_print(
+                "\n\n  -> \033[1;36mCommencing Misplaced Binaries Detection (T1036.005)...\033[1;m\n  ----------------------------------------"
+            )
+            time.sleep(1)
+            from rivendell.analysis.misplaced import detect_misplaced_binaries
+            for loc, img in imgs.items():
+                if not auto:
+                    yes_misplaced = safe_input(
+                        "  Do you wish to scan for misplaced binaries in '{}'? Y/n [Y] ".format(
+                            img.split("::")[0]
+                        )
+                    )
+                if auto or yes_misplaced != "n":
+                    detect_misplaced_binaries(
+                        loc, output_directory, verbosity, img, img.split("::")[0]
+                    )
+            flags.append("06misplaced")
+            print(
+                "  ----------------------------------------\n  -> Completed Misplaced Binaries Phase.\n"
+            )
+            time.sleep(1)
+        if masquerading:
+            safe_print(
+                "\n\n  -> \033[1;36mCommencing Masquerading Detection (T1036)...\033[1;m\n  ----------------------------------------"
+            )
+            time.sleep(1)
+            from rivendell.analysis.masquerading import detect_masquerading
+            for loc, img in imgs.items():
+                if not auto:
+                    yes_masq = safe_input(
+                        "  Do you wish to scan for masquerading techniques in '{}'? Y/n [Y] ".format(
+                            img.split("::")[0]
+                        )
+                    )
+                if auto or yes_masq != "n":
+                    detect_masquerading(
+                        loc, output_directory, verbosity, img, img.split("::")[0]
+                    )
+            flags.append("06masquerading")
+            print(
+                "  ----------------------------------------\n  -> Completed Masquerading Detection Phase.\n"
+            )
+            time.sleep(1)
         if yara:
             safe_print(
                 "\n\n  -> \033[1;36mCommencing Yara Phase...\033[1;m\n  ----------------------------------------"
@@ -875,8 +1046,10 @@ def main(
             yara_files = []
             for yroot, _, yfiles in os.walk(yara[0]):
                 for yfile in yfiles:
-                    if yfile.endswith(".yara"):
+                    if yfile.endswith(".yara") or yfile.endswith(".yar"):
                         yara_files.append(os.path.join(yroot, yfile))
+            if not yara_files:
+                print(f"     WARNING: No YARA rule files (.yar or .yara) found in {yara[0]}")
             for loc, img in imgs.items():
                 if not auto:
                     yes_yara = safe_input(
@@ -886,7 +1059,7 @@ def main(
                     )
                 if auto or yes_yara != "n":
                     run_yara_signatures(
-                        verbosity, output_directory, loc, img, collectfiles, yara_files
+                        verbosity, output_directory, img, loc, collectfiles, yara_files
                     )
             flags.append("07yara")
             print(
@@ -1185,13 +1358,15 @@ def main(
                         except:
                             pass
             # Remove empty directories
-            for donedir in donedirs:
-                dirpath = os.path.join(doneroot, donedir)
-                try:
-                    if os.path.exists(dirpath) and len(os.listdir(dirpath)) == 0:
-                        shutil.rmtree(dirpath)
-                except:
-                    pass
+            # TEMPORARILY DISABLED for debugging - see BUG3_DEEP_INVESTIGATION.md
+            # This was removing /artefacts/ directories when artifact copy silently failed
+            # for donedir in donedirs:
+            #     dirpath = os.path.join(doneroot, donedir)
+            #     try:
+            #         if os.path.exists(dirpath) and len(os.listdir(dirpath)) == 0:
+            #             shutil.rmtree(dirpath)
+            #     except:
+            #         pass
     for doneimg in doneimgs:
         print("       '{}'".format(doneimg))
         entry, prnt = "{},{},finished,'{}'-'{}': ({} seconds)".format(

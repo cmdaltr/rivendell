@@ -51,10 +51,6 @@ def extract_i30(
             os.listdir(output_directory + img.split("::")[0] + "/" + "artefacts")
         )
     ):
-        if verbosity != "":
-            print(
-                "     Extracting '$I30' records from '{}'...".format(img.split("::")[0])
-            )
         for image_root, _, image_files in os.walk(d):
             for image_file in image_files:
                 if (
@@ -107,12 +103,6 @@ def extract_i30(
                                 "/mnt/i30_{}/ewf1".format(img.split("::")[0])
                             )
                             for eachoffset in offset_values:
-                                if verbosity != "":
-                                    print(
-                                        "      Extracting '$I30' records from offset '#{}' for '{}'...".format(
-                                            eachoffset, img.split("::")[0]
-                                        )
-                                    )
                                 indxripper_result = rip_i30(
                                     output_directory, img, str(eachoffset)
                                 )

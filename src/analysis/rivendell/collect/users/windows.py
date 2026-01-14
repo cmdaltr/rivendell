@@ -827,12 +827,6 @@ def windows_users(
                         symlinks=symlinkvalue,
                         exclude_cache=exclude_cache,
                     )
-                    print(
-                        " -> {} -> completed copying profile '{}'".format(
-                            datetime.now().isoformat().replace("T", " "),
-                            each,
-                        )
-                    )
                 except Exception as e:
                     # Extract just source file paths from shutil.Error
                     if hasattr(e, 'args') and e.args and isinstance(e.args[0], list):

@@ -265,6 +265,18 @@ async def create_job(job_request: JobCreate):
         # Sanitize case number
         case_number = sanitize_case_number(job_request.case_number)
 
+        # Validate case number length
+        if len(case_number) < 6:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Case number must be at least 6 characters (got {len(case_number)})",
+            )
+        if len(case_number) > 30:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Case number must be no longer than 30 characters (got {len(case_number)})",
+            )
+
         # Validate and sanitize source paths
         sanitized_source_paths = []
         for path in job_request.source_paths:
@@ -350,6 +362,7 @@ async def list_jobs(
     status: Optional[JobStatus] = None,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    log_limit: int = Query(10, description="Max log entries per job"),
 ):
     """
     List all analysis jobs.
@@ -358,6 +371,7 @@ async def list_jobs(
         status: Filter by job status
         limit: Maximum number of jobs to return
         offset: Offset for pagination
+        log_limit: Maximum log entries per job (default: 10, 0 for all)
 
     Returns:
         List of jobs
@@ -365,6 +379,12 @@ async def list_jobs(
     try:
         jobs = job_storage.list_jobs(status=status, limit=limit, offset=offset)
         total = job_storage.count_jobs(status=status)
+
+        # Truncate logs to avoid sending massive payloads
+        if log_limit > 0:
+            for job in jobs:
+                if len(job.log) > log_limit:
+                    job.log = job.log[-log_limit:]
 
         return JobListResponse(jobs=jobs, total=total)
 
@@ -401,12 +421,13 @@ async def validate_case_id(case_id: str):
 
 
 @app.get("/api/jobs/{job_id}", response_model=Job)
-async def get_job(job_id: str):
+async def get_job(job_id: str, log_limit: int = Query(100, description="Max log entries to return")):
     """
     Get job details.
 
     Args:
         job_id: Job ID
+        log_limit: Maximum number of recent log entries to return (default: 100, 0 for all)
 
     Returns:
         Job details
@@ -416,6 +437,11 @@ async def get_job(job_id: str):
 
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+
+        # Truncate log to most recent entries to avoid sending massive payloads
+        # Jobs can accumulate 60k+ log entries (7+ MB), causing API timeouts
+        if log_limit > 0 and len(job.log) > log_limit:
+            job.log = job.log[-log_limit:]
 
         return job
 
@@ -509,94 +535,10 @@ async def delete_job(job_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/api/jobs/{job_id}/cancel")
-async def cancel_job(job_id: str):
-    """
-    Cancel a running job.
-
-    Args:
-        job_id: Job ID
-
-    Returns:
-        Updated job
-    """
-    try:
-        job = job_storage.get_job(job_id)
-
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Job already {job.status.value} - can only cancel pending or running jobs",
-            )
-
-        # Revoke Celery task if it exists
-        if job.celery_task_id:
-            from celery import current_app
-            current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGKILL')
-
-        # Update job status
-        job.status = JobStatus.CANCELLED
-        job.completed_at = datetime.now()
-        job.log.append(f"[{datetime.now().isoformat()}] Job cancelled by user")
-
-        job_storage.save_job(job)
-
-        return job
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/jobs/{job_id}/restart")
-async def restart_job(job_id: str):
-    """
-    Restart a failed or cancelled job.
-
-    Args:
-        job_id: Job ID
-
-    Returns:
-        Updated job
-    """
-    try:
-        job = job_storage.get_job(job_id)
-
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        if job.status not in [JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.COMPLETED]:
-            raise HTTPException(
-                status_code=400,
-                detail="Can only restart failed, cancelled, or completed jobs",
-            )
-
-        # Reset job state
-        job.status = JobStatus.PENDING
-        job.progress = 0
-        job.error = None
-        job.started_at = None
-        job.completed_at = None
-        job.log.append(f"[{datetime.now().isoformat()}] Job restarted by user")
-
-        job_storage.save_job(job)
-
-        # Start new analysis task
-        task = start_analysis.delay(job_id)
-        job.celery_task_id = task.id
-        job_storage.save_job(job)
-
-        return job
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
+# =====================================================
+# BULK OPERATIONS - Must be defined BEFORE {job_id} routes
+# to prevent FastAPI from matching "bulk" as a job_id
+# =====================================================
 
 @app.post("/api/jobs/bulk/cancel")
 async def bulk_cancel_jobs(job_ids: list[str]):
@@ -627,6 +569,13 @@ async def bulk_cancel_jobs(job_ids: list[str]):
             # Revoke Celery task if it exists
             if job.celery_task_id:
                 current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGKILL')
+
+            # Release image locks for this job
+            try:
+                from tasks_docker import release_image_locks_for_job
+                release_image_locks_for_job(job_id, job.source_paths)
+            except Exception as e:
+                logger.warning(f"Failed to release image locks for job {job_id}: {e}")
 
             # Update job status
             job.status = JobStatus.CANCELLED
@@ -672,92 +621,6 @@ async def bulk_delete_jobs(job_ids: list[str]):
 
         return {"results": results}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/jobs/{job_id}/archive")
-async def archive_job(job_id: str):
-    """
-    Archive a completed, failed, or cancelled job.
-
-    Args:
-        job_id: Job ID
-
-    Returns:
-        Updated job
-    """
-    try:
-        job = job_storage.get_job(job_id)
-
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot archive pending or running jobs",
-            )
-
-        if job.status == JobStatus.ARCHIVED:
-            raise HTTPException(
-                status_code=400,
-                detail="Job is already archived",
-            )
-
-        # Update job status to archived
-        job.status = JobStatus.ARCHIVED
-        job.log.append(f"[{datetime.now().isoformat()}] Job archived by user")
-
-        job_storage.save_job(job)
-
-        return job
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/api/jobs/{job_id}/unarchive")
-async def unarchive_job(job_id: str):
-    """
-    Unarchive a job, restoring it to its previous status.
-
-    Args:
-        job_id: Job ID
-
-    Returns:
-        Updated job
-    """
-    try:
-        job = job_storage.get_job(job_id)
-
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-
-        if job.status != JobStatus.ARCHIVED:
-            raise HTTPException(
-                status_code=400,
-                detail="Job is not archived",
-            )
-
-        # Determine status to restore to based on job state
-        if job.error:
-            job.status = JobStatus.FAILED
-        elif job.completed_at:
-            job.status = JobStatus.COMPLETED
-        else:
-            job.status = JobStatus.CANCELLED
-
-        job.log.append(f"[{datetime.now().isoformat()}] Job unarchived by user")
-
-        job_storage.save_job(job)
-
-        return job
-
-    except HTTPException:
-        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -845,6 +708,274 @@ async def bulk_restart_jobs(job_ids: list[str]):
 
         return {"results": results}
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================
+# SINGLE JOB OPERATIONS
+# =====================================================
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """
+    Cancel a running job.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Job already {job.status.value} - can only cancel pending or running jobs",
+            )
+
+        # Revoke Celery task if it exists
+        if job.celery_task_id:
+            from celery import current_app
+            current_app.control.revoke(job.celery_task_id, terminate=True, signal='SIGKILL')
+
+        # Release image locks for this job
+        try:
+            from tasks_docker import release_image_locks_for_job
+            release_image_locks_for_job(job_id, job.source_paths)
+        except Exception as e:
+            logger.warning(f"Failed to release image locks for job {job_id}: {e}")
+
+        # Update job status
+        job.status = JobStatus.CANCELLED
+        job.completed_at = datetime.now()
+        job.log.append(f"[{datetime.now().isoformat()}] Job cancelled by user")
+
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/restart")
+async def restart_job(job_id: str):
+    """
+    Restart a failed or cancelled job.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status not in [JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.COMPLETED]:
+            raise HTTPException(
+                status_code=400,
+                detail="Can only restart failed, cancelled, or completed jobs",
+            )
+
+        # Reset job state
+        job.status = JobStatus.PENDING
+        job.progress = 0
+        job.error = None
+        job.started_at = None
+        job.completed_at = None
+        job.log.append(f"[{datetime.now().isoformat()}] Job restarted by user")
+
+        job_storage.save_job(job)
+
+        # Start new analysis task
+        task = start_analysis.delay(job_id)
+        job.celery_task_id = task.id
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/confirm-sudo")
+async def confirm_sudo(job_id: str):
+    """
+    Confirm sudo action for a job awaiting confirmation.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        from tasks_docker import confirm_sudo_action
+
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status != JobStatus.AWAITING_CONFIRMATION:
+            raise HTTPException(
+                status_code=400,
+                detail="Job is not awaiting confirmation",
+            )
+
+        success = confirm_sudo_action(job_id)
+
+        # Refresh job after action
+        job = job_storage.get_job(job_id)
+
+        if success:
+            # Restart the job now that directory is removed
+            task = start_analysis.delay(job_id)
+            job.celery_task_id = task.id
+            job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/cancel-sudo")
+async def cancel_sudo(job_id: str):
+    """
+    Cancel sudo action for a job awaiting confirmation.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        from tasks_docker import cancel_sudo_action
+
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status != JobStatus.AWAITING_CONFIRMATION:
+            raise HTTPException(
+                status_code=400,
+                detail="Job is not awaiting confirmation",
+            )
+
+        cancel_sudo_action(job_id)
+
+        # Refresh job after action
+        job = job_storage.get_job(job_id)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/archive")
+async def archive_job(job_id: str):
+    """
+    Archive a completed, failed, or cancelled job.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot archive pending or running jobs",
+            )
+
+        if job.status == JobStatus.ARCHIVED:
+            raise HTTPException(
+                status_code=400,
+                detail="Job is already archived",
+            )
+
+        # Update job status to archived
+        job.status = JobStatus.ARCHIVED
+        job.log.append(f"[{datetime.now().isoformat()}] Job archived by user")
+
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/jobs/{job_id}/unarchive")
+async def unarchive_job(job_id: str):
+    """
+    Unarchive a job, restoring it to its previous status.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    try:
+        job = job_storage.get_job(job_id)
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job.status != JobStatus.ARCHIVED:
+            raise HTTPException(
+                status_code=400,
+                detail="Job is not archived",
+            )
+
+        # Determine status to restore to based on job state
+        if job.error:
+            job.status = JobStatus.FAILED
+        elif job.completed_at:
+            job.status = JobStatus.COMPLETED
+        else:
+            job.status = JobStatus.CANCELLED
+
+        job.log.append(f"[{datetime.now().isoformat()}] Job unarchived by user")
+
+        job_storage.save_job(job)
+
+        return job
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

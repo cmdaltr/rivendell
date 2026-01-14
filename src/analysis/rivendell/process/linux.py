@@ -151,12 +151,6 @@ def process_journal(
             + ".journalctl.json",
             "a",
         ) as journaljson:
-            if verbosity != "":
-                print(
-                    "     Processing systemd journals for {}...".format(
-                        vssimage,
-                    )
-                )
             entry, prnt = "{},{},{},systemd journals\n".format(
                 datetime.now().isoformat(),
                 vssimage.replace("'", ""),

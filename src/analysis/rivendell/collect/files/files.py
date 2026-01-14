@@ -16,7 +16,7 @@ def collect_files(
     collectfiles,
     file_selection,
 ):
-    if collectfiles == True:
+    if collectfiles:  # True or include:/path or exclude:/path
         if (
             (
                 recovered_file.lower().startswith(".")
@@ -65,7 +65,7 @@ def collect_files(
                 or recovered_file.lower().endswith(".pl")
                 or recovered_file.lower().endswith(".go")
                 or recovered_file.lower().endswith(".lnk")
-                or recovered_file.lower().endswith(".apsx")
+                or recovered_file.lower().endswith(".aspx")
                 or recovered_file.lower().endswith(".html")
                 or recovered_file.lower().endswith(".htm")
                 or recovered_file.lower().endswith(".php")

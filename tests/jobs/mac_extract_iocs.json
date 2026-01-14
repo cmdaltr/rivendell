@@ -1,0 +1,39 @@
+{
+  "case_number": "TEST_mac_extract_iocs",
+  "source_paths": [
+    "/Volumes/Media5TB/rivendell_imgs/MacintoshHD_disk5.E01"
+  ],
+  "destination_path": "/Volumes/Media5TB/rivendell_imgs/tests/mac_extract_iocs",
+  "options": {
+    "local": true,
+    "gandalf": false,
+    "analysis": true,
+    "extract_iocs": true,
+    "timeline": false,
+    "memory": false,
+    "memory_timeline": false,
+    "keywords": false,
+    "yara": false,
+    "collectFiles": false,
+    "brisk": false,
+    "vss": false,
+    "symlinks": false,
+    "userprofiles": false,
+    "nsrl": false,
+    "hash_collected": false,
+    "hash_all": false,
+    "splunk": false,
+    "elastic": false,
+    "navigator": false
+  },
+  "metadata": {
+    "test_name": "mac_extract_iocs",
+    "description": "macOS disk image with Extract IOCs",
+    "tags": [
+      "macos",
+      "iocs"
+    ],
+    "estimated_duration_minutes": 60,
+    "generated_at": "2025-12-17T20:29:59.039404"
+  }
+}

@@ -18,6 +18,7 @@ class JobStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
     ARCHIVED = "archived"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"  # Waiting for user to confirm sudo action
 
 
 class AnalysisOptions(BaseModel):
@@ -31,6 +32,9 @@ class AnalysisOptions(BaseModel):
     # Analysis options
     analysis: bool = False
     extract_iocs: bool = False
+    iocs_file: Optional[str] = None  # Optional IOC watchlist file
+    misplaced_binaries: bool = False  # Find system binaries in unexpected locations (T1036.005)
+    masquerading: bool = False  # Detect masquerading: RLO, double ext, spaces, renamed utils (T1036)
     timeline: bool = False
     memory: bool = False
     memory_timeline: bool = False
@@ -45,11 +49,23 @@ class AnalysisOptions(BaseModel):
 
     # Speed/Quality modes (merged into analysis)
     brisk: bool = False
+    mordor: bool = False  # Aggressive threat-hunting mode
 
     # Collection options
     vss: bool = False
-    symlinks: bool = False
     userprofiles: bool = False
+    # Collect files options (matching file selection menu)
+    collect_files_all: bool = False  # Collect ALL file types
+    collect_files_archive: bool = False  # Collect archive files
+    collect_files_bin: bool = False  # Collect binary/executable files
+    collect_files_docs: bool = False  # Collect document files
+    collect_files_hidden: bool = False  # Collect hidden files
+    collect_files_lnk: bool = False  # Collect LNK/shortcut files
+    collect_files_mail: bool = False  # Collect email files
+    collect_files_scripts: bool = False  # Collect script files
+    collect_files_unalloc: bool = False  # Carve unallocated space
+    collect_files_virtual: bool = False  # Collect virtual machine files
+    collect_files_web: bool = False  # Collect web-related files
 
     # Verification options
     nsrl: bool = False
@@ -64,6 +80,7 @@ class AnalysisOptions(BaseModel):
     # Post-processing
     delete: bool = False
     archive: bool = False
+    save_template: bool = False  # Save options as template to output directory
 
     # Internal options
     force_overwrite: bool = False
@@ -80,6 +97,13 @@ class JobCreate(BaseModel):
     options: AnalysisOptions = Field(default_factory=AnalysisOptions)
 
 
+class PendingAction(BaseModel):
+    """Pending action awaiting user confirmation."""
+    action_type: str  # e.g., "sudo_remove_directory"
+    target_path: str  # Path to act on
+    message: str  # Message to show user
+
+
 class Job(BaseModel):
     """Analysis job."""
     id: str = Field(..., description="Unique job ID")
@@ -93,6 +117,7 @@ class Job(BaseModel):
     result: Optional[Dict[str, Any]] = Field(None, description="Job results")
     error: Optional[str] = Field(None, description="Error message if failed")
     celery_task_id: Optional[str] = Field(None, description="Celery task ID for job control")
+    pending_action: Optional[PendingAction] = Field(None, description="Action awaiting user confirmation")
     created_at: datetime = Field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

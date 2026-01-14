@@ -20,34 +20,71 @@
 ### Installation
 
 ```bash
-# Clone repository
+# 1. Clone repository
 git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
-```
-<div align="left">
-  <table><tr><td>
-        <img src="./docs/images/readme/linux.png" alt="Rivendell - The Last Homely House" width="42"/>
-      </td><td>
-        <code>sudo ./scripts/install_linux.sh</code>
-      </td></tr><tr><td>
-        <img src="./docs/images/readme/apple.png" alt="Rivendell - The Last Homely House" width="42"/>
-      </td><td>
-        <code>sudo ./scripts/install_macos.sh</code>
-      </td></tr><tr><td>
-        <img src="./docs/images/readme/microsoft.png" alt="Rivendell - The Last Homely House" width="42"/>
-      </td><td>
-        <code>.\scripts\install_windows_wsl.ps1</code>
-  </td></tr></table>
-</div>
 
+# 2. Install Docker and configure image paths
+python3 scripts/install-rivendell.py
+# The installer will prompt you for forensic image locations
+
+# 3. Start Rivendell in testing mode
+./scripts/start-testing-mode.sh
+
+# 4. Run your first test
+cd tests
+./scripts/run_single_test.sh win_brisk
 ```
-elrond --check-dependencies
+
+**📖 [Complete Installation Guide →](INSTALL.md)** - Detailed setup instructions
+
+### Access Rivendell
+
+- **Web Interface:** http://localhost:5687
+- **Backend API:** http://localhost:5688
+
+### Quick Commands
+
+```bash
+# Manage forensic image paths
+python3 scripts/image_paths.py
+
+# Check job status
+./scripts/status.sh
+
+# Stop all jobs
+./scripts/stop-jobs.sh
+
+# View logs
+docker-compose logs -f backend
 ```
+
+### System Requirements
+
+| Component | Minimum | Recommended |
+|-----------|---------|-------------|
+| **RAM** | 10GB | 16GB+ |
+| **CPU** | 4 cores | 8+ cores |
+| **Disk** | 10GB | 50GB+ |
+| **OS** | macOS 12+, Ubuntu 20.04+, Windows 10+ | Latest versions |
+
+**Supported Platforms:**
+- macOS (Apple Silicon & Intel)
+- Linux (Ubuntu, Debian, Fedora, RHEL, CentOS)
+- Windows (with WSL2 recommended)
+
+---
 
 ### Basic Usage
 
 **Web Investigation Workflow:**
 
+1. Access web interface at http://localhost:5687
+2. Create a new investigation case
+3. Upload evidence or configure remote acquisition
+4. Monitor processing progress
+5. View results, timelines, and ATT&CK mappings
+6. Export reports and SIEM data
 
 ---
 
@@ -464,12 +501,27 @@ And 25+ additional tools. See [TOOLS.md](docs/TOOLS.md) for the complete list.
 
 ---
 
+## 📚 Documentation
+
+### Getting Started
+- **[Installation Guide](INSTALL.md)** - Complete setup from git clone to first test
+- **[Quick Start](tests/QUICK_START.md)** - Fast track for running tests
+- **[Test Runner Guide](tests/docs/TEST_RUNNER_GUIDE.md)** - Comprehensive testing documentation
+
+### Reference
+- **[Docker Installation](scripts/DOCKER_INSTALL.md)** - Docker Desktop and OrbStack setup
+- **[Gandalf Documentation](docs/gandalf-README.md)** - Remote acquisition guide
+- **[Elrond Documentation](docs/elrond-README.md)** - Analysis engine guide
+- **[Tools Reference](docs/TOOLS.md)** - All integrated forensic tools
+- **[Support Guide](docs/SUPPORT.md)** - Troubleshooting and help
+
+---
+
 ## 📞 Support
 
 - **Documentation**: See [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/rivendell/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/rivendell/discussions)
-- **Support Guide**: [SUPPORT.md](docs/SUPPORT.md)
+- **Issues**: [GitHub Issues](https://github.com/cmdaltr/rivendell/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/cmdaltr/rivendell/discussions)
 
 ---
 

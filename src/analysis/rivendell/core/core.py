@@ -8,6 +8,7 @@ from rivendell.analysis.analysis import analyse_artefacts
 from rivendell.analysis.keywords import prepare_keywords
 from rivendell.audit import write_audit_log_entry
 from rivendell.collect.collect import collect_artefacts
+from rivendell.core.identify import process_deferred_memory, load_memory_profiles
 # Reorganise functionality removed - redundant
 from rivendell.process.select import select_pre_process_artefacts
 from rivendell.process.timeline import create_plaso_timeline
@@ -21,6 +22,7 @@ def collect_process_keyword_analysis_timeline(
     analysis,
     magicbytes,
     extractiocs,
+    iocsfile,
     timeline,
     vss,
     collectfiles,
@@ -109,6 +111,8 @@ def collect_process_keyword_analysis_timeline(
             memtimeline,
             collectfiles,
         )
+        # NOTE: Deferred memory processing is now handled by elrond.py after all disk images
+        # are processed. This ensures proper ordering of messages and separation of phases.
         if os.path.exists("/opt/elrond/elrond/tools/.profiles"):
             os.remove("/opt/elrond/elrond/tools/.profiles")
 
@@ -189,6 +193,7 @@ def collect_process_keyword_analysis_timeline(
                         analysis,
                         magicbytes,
                         extractiocs,
+                        iocsfile,
                         vssimage,
                     )
 
@@ -216,26 +221,26 @@ def collect_process_keyword_analysis_timeline(
         )
         time.sleep(1)
     if timeline:
-        stage, timelineimages = "timeline", []
+        stage = "timeline"
+        # Build dict mapping image names to full img strings (name::platform)
+        timeline_imgs = {}
         print(
             "\n\n  -> \033[1;36mCommencing Timeline Phase...\033[1;m\n  ----------------------------------------"
         )
         time.sleep(1)
-        for img in imgs:  # Identifying images for timelining
-            if not img.split("::")[1].endswith("memory"):
-                timelineimages.append(img.split("::")[0])
-        if len(timelineimages) > 0:
-            # Use safe_iterdir for macOS Docker VirtioFS filesystem compatibility
-            for entry in safe_iterdir(output_directory):
-                each = entry.name
-                if each + "/" == output_directory or each == img.split("::")[0]:
-                    if not os.path.exists(
-                        output_directory + img.split("::")[0] + "/artefacts/"
-                    ):
-                        os.makedirs(
-                            output_directory + img.split("::")[0] + "/artefacts/"
-                        )
-            for timelineimage in timelineimages:
+        for _, img in imgs.items():  # Identifying images for timelining
+            # Check image type (index 2) not mount point (index 1)
+            img_type = img.split("::")[2] if len(img.split("::")) > 2 else ""
+            if img_type != "memory":
+                img_name = img.split("::")[0]
+                timeline_imgs[img_name] = img
+        if len(timeline_imgs) > 0:
+            # Create artefacts directories for all timeline images
+            for img_name in timeline_imgs:
+                artefacts_dir = os.path.join(output_directory, img_name, "artefacts")
+                if not os.path.exists(artefacts_dir):
+                    os.makedirs(artefacts_dir)
+            for timelineimage, img in timeline_imgs.items():
                 timelineexist = safe_input("   Does a timeline already exist for '{}'? Y/n [n] ".format(
                         timelineimage
                     )
@@ -265,7 +270,9 @@ def collect_process_keyword_analysis_timeline(
                     if "Message" not in firstline and "Artefact" not in firstline:
                         os.mkdir(".plaso")
                         shutil.copy2(timelinefile, "./.plaso/plaso_timeline.csvtmp")
-                        create_plaso_timeline()
+                        create_plaso_timeline(
+                            verbosity, output_directory, stage, img, d, timelineimage
+                        )
                     else:
                         shutil.copy2(
                             timelinefile,

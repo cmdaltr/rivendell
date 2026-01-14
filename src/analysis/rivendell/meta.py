@@ -13,21 +13,24 @@ def extract_metadata(
     # If hashing is disabled (sha256 is None), skip metadata extraction that requires hashing
     if sha256 is None:
         return
+    # Handle case where img doesn't contain "::" (standalone memory image processing)
+    # Extract basename since img may contain full path
+    img_name = img.split("::")[0].split("/")[-1] if "::" in img else img.split("/")[-1]
     for hr, _, hf in os.walk(imgloc):
         for intgfile in hf:
             metaimg, metapath, unknowngoods = (
-                img.split("::")[0],
+                img_name,
                 os.path.join(hr, intgfile),
                 {},
             )
-            if not os.path.exists(output_directory + metaimg + "/meta.audit"):
+            if not os.path.exists(output_directory + metaimg + "/meta_audit.log"):
                 with open(
-                    output_directory + metaimg + "/meta.audit", "w"
+                    output_directory + metaimg + "/meta_audit.log", "w"
                 ) as metaimglog:
                     metaimglog.write(
                         "Filename,SHA256,NSRL,Entropy,Filesize,LastWriteTime,LastAccessTime,LastInodeChangeTime,Permissions,FileType\n"
                     )
-            with open(output_directory + metaimg + "/meta.audit", "a") as metaimglog:
+            with open(output_directory + metaimg + "/meta_audit.log", "a") as metaimglog:
                 try:
                     iinfo = os.stat(metapath)
                     isize = iinfo.st_size
@@ -44,7 +47,7 @@ def extract_metadata(
                             if stage == "processing":
                                 metaimage = (
                                     "'"
-                                    + img.split("::")[0]
+                                    + img_name
                                     + "' ("
                                     + metapath.split("cooked/")[1][0:4].replace(
                                         "vss", "volume shadow copy #"
@@ -52,23 +55,21 @@ def extract_metadata(
                                     + ")"
                                 )
                             elif stage == "metadata":
-                                metaimage = (
-                                    "'"
-                                    + img.split("::")[0]
-                                    + "' ("
-                                    + img.split("::")[1]
-                                    .split("_")[1]
-                                    .replace("vss", "volume shadow copy #")
-                                    + ")"
-                                )
+                                # Handle case where img has "::" for VSS info extraction
+                                if "::" in img and len(img.split("::")) > 1:
+                                    metaimage = (
+                                        "'"
+                                        + img_name
+                                        + "' ("
+                                        + img.split("::")[1]
+                                        .split("_")[1]
+                                        .replace("vss", "volume shadow copy #")
+                                        + ")"
+                                    )
+                                else:
+                                    metaimage = "'" + img_name + "'"
                         else:
-                            metaimage = "'" + img.split("::")[0] + "'"
-                        if verbosity != "":
-                            print(
-                                "     Extracting metadata for '{}' for {}...".format(
-                                    metapath.split("/")[-1], metaimage
-                                )
-                            )
+                            metaimage = "'" + img_name + "'"
                         metaentry = metapath + ","
                         try:
                             with open(metapath, "rb") as metafile:
@@ -135,7 +136,7 @@ def extract_metadata(
                             or "/files/web/" in metapath
                             or "/files/mail/" in metapath
                             or "/files/virtual/" in metapath
-                            or "{}/user_profiles/".format(img.split("::")[0])
+                            or "{}/user_profiles/".format(img_name)
                             in metapath
                         ):  # do not assess entropy or extract metadata from raw or cooked artefacts - only files
                             try:

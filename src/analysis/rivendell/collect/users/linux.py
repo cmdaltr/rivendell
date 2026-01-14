@@ -40,12 +40,6 @@ def linux_users(
     for each in item_list:
         if os.path.isdir(item + "/" + each):
             if os.path.exists(item + "/" + each + "/.local/share/recently-used.xbel"):
-                if verbosity != "":
-                    print(
-                        "     Collecting recently used files for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 for eachused in usedfiles:
                     try:
                         shutil.copy2(
@@ -83,12 +77,6 @@ def linux_users(
                 or os.path.exists(item + "/" + each + "/.bashrc")
                 or os.path.exists(item + "/" + each + "/.bash_session")
             ):
-                if verbosity != "":
-                    print(
-                        "     Collecting bash files for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 for eachbash in bashfiles:
                     try:
                         shutil.copy2(
@@ -120,10 +108,6 @@ def linux_users(
                     except:
                         pass
             if os.path.exists(item + "/" + each + "/.local/share/keyrings/"):
-                if verbosity != "":
-                    print(
-                        "     Collecting keys for '{}' for {}...".format(each, vssimage)
-                    )
                 for keytype in os.listdir(
                     item + "/" + each + "/.local/share/keyrings/"
                 ):
@@ -158,12 +142,6 @@ def linux_users(
                         except:
                             pass
             if os.path.exists(item + "/" + each + "/.ssh/"):
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' ssh files for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -196,12 +174,6 @@ def linux_users(
                     except:
                         pass
             if os.path.exists(item + "/" + each + "/.config/autostart/"):
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' autostart files for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -238,12 +210,6 @@ def linux_users(
             ) or os.path.exists(item + "/" + each + "/.local/share/Trash/info"):
                 if not os.path.exists(dest + "/deleted/"):
                     os.makedirs(dest + "/deleted/")
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' deleted files for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -298,12 +264,6 @@ def linux_users(
             if os.path.exists(item + "/" + each + "/.thunderbird"):
                 if not os.path.exists(dest + "/mail/"):
                     os.makedirs(dest + "/mail/")
-                if verbosity != "":
-                    print(
-                        "     Collecting '{}' mail artefacts for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,
@@ -371,12 +331,6 @@ def linux_users(
                     os.stat(bwsrdest + each + "/firefox/")
                 except:
                     os.makedirs(bwsrdest + each + "/firefox/")
-                if verbosity != "":
-                    print(
-                        "     Collecting Mozilla Firefox browser artefacts for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 if not each.startswith("."):
                     for defaultdir in os.listdir(
                         item + "/" + each + "/.mozilla/firefox"
@@ -432,12 +386,6 @@ def linux_users(
                         os.stat(bwsrdest + each + "/chrome/")
                     except:
                         os.makedirs(bwsrdest + each + "/chrome/")
-                    if verbosity != "":
-                        print(
-                            "     Collecting Google Chrome browser artefacts for '{}' for {}...".format(
-                                each, vssimage
-                            )
-                        )
                     for defaultdir in os.listdir(
                         item + "/" + each + "/.config/google-chrome"
                     ):
@@ -492,12 +440,6 @@ def linux_users(
                     os.stat(userdest)
                 except:
                     os.makedirs(userdest)
-                if verbosity != "":
-                    print(
-                        "     Collecting user profile for '{}' for {}...".format(
-                            each, vssimage
-                        )
-                    )
                 (
                     entry,
                     prnt,

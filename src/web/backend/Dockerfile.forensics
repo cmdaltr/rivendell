@@ -38,6 +38,8 @@ RUN apt-get update && apt-get install -y \
     afflib-tools \
     libafflib-dev \
     sleuthkit \
+    # File carving tools
+    foremost \
     # Volume Shadow Copy tools
     libvshadow-utils \
     # File system tools
@@ -60,6 +62,8 @@ RUN apt-get update && apt-get install -y \
     p7zip-full \
     unzip \
     zip \
+    # YARA for signature scanning
+    yara \
     bzip2 \
     # Network tools
     curl \
@@ -177,11 +181,42 @@ RUN cd /opt && \
     cd USN-Journal-Parser && \
     python3 setup.py install
 
-# 4d: Install plaso (timeline analysis) - optional, may fail on some architectures
-RUN pip3 install --no-cache-dir plaso || echo "Plaso installation skipped"
+# 4d: Install plaso (timeline analysis) using GIFT PPA
+# The GIFT PPA provides pre-built packages for plaso and its dependencies
+RUN add-apt-repository -y ppa:gift/stable && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        plaso-tools \
+    || echo "Plaso installation via PPA skipped, trying pip..." && \
+    pip3 install --no-cache-dir plaso || echo "Plaso installation skipped"
 
-# 4e: Create symlink for log2timeline.py (elrond looks for .py extension)
-RUN ln -s /usr/local/bin/log2timeline /usr/local/bin/log2timeline.py || true
+# 4e: Create symlinks for plaso tools (elrond looks for .py extension)
+RUN ln -sf /usr/bin/log2timeline /usr/local/bin/log2timeline.py 2>/dev/null || \
+    ln -sf /usr/local/bin/log2timeline /usr/local/bin/log2timeline.py 2>/dev/null || true
+RUN ln -sf /usr/bin/psteal /usr/local/bin/psteal.py 2>/dev/null || \
+    ln -sf /usr/local/bin/psteal /usr/local/bin/psteal.py 2>/dev/null || true
+
+# 4f: Install Volatility3 for memory forensics
+# Note: The wrapper script clears elrond paths to prevent PYTHONPATH conflicts
+RUN pip3 install --no-cache-dir volatility3 && \
+    # Create a wrapper script that isolates volatility3 from elrond's PYTHONPATH
+    printf '%s\n' \
+        '#!/usr/bin/env python3' \
+        'import sys' \
+        'import os' \
+        '' \
+        '# Remove elrond paths from sys.path to prevent module conflicts' \
+        'sys.path = [p for p in sys.path if "elrond" not in p.lower()]' \
+        '' \
+        '# Clear PYTHONPATH to prevent elrond module interference' \
+        'if "PYTHONPATH" in os.environ:' \
+        '    del os.environ["PYTHONPATH"]' \
+        '' \
+        'from volatility3 import cli' \
+        'cli.main()' \
+        > /usr/local/bin/vol.py && \
+    chmod +x /usr/local/bin/vol.py && \
+    echo "Volatility3 installed successfully"
 
 # =============================================================================
 # Step 5/5: Rivendell source code configuration

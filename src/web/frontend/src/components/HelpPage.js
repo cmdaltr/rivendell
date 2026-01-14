@@ -237,13 +237,27 @@ sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence`}
   -o /output`}
           </pre>
 
-          <h4>Processing Options</h4>
+          <h4>Processing Modes</h4>
           <ul>
-            <li><strong>Super Quick:</strong> Minimal processing for fastest results</li>
-            <li><strong>Quick:</strong> Faster processing, skips some hash calculations</li>
-            <li><strong>Brisk:</strong> Balanced speed and thoroughness</li>
-            <li><strong>Custom:</strong> Full control over all options</li>
+            <li><strong>Brisk:</strong> Optimized processing that balances speed and thoroughness</li>
+            <li><strong>Exhaustive:</strong> Enable all available options for maximum thoroughness</li>
+            <li><strong>Custom:</strong> Full control over all processing options</li>
+            <li><strong>Template:</strong> Load a saved template of custom options for quick reuse</li>
           </ul>
+
+          <h4>Templates</h4>
+          <p>
+            Templates allow you to save your custom processing configurations for reuse across multiple jobs.
+            This is useful when you regularly process similar evidence with the same options.
+          </p>
+          <ul>
+            <li><strong>Save:</strong> On the Confirm step, click "Save as Template" to save your current configuration</li>
+            <li><strong>Load:</strong> Select "Template" mode and choose from your saved templates</li>
+            <li><strong>Delete:</strong> Click the × button next to a template to remove it</li>
+          </ul>
+          <p>
+            Templates are stored locally in your browser and persist across sessions.
+          </p>
 
           <h4>Analysis Features</h4>
           <ul>

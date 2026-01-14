@@ -1,0 +1,14 @@
+# Rivendell IOC Watchlist
+# Add known malicious indicators here (one per line)
+# Lines starting with # are comments
+
+# Example malicious IPs
+# 192.168.1.100
+# 10.0.0.50
+
+# Example malicious domains
+# evil-domain.com
+# malware-c2.net
+
+# Example file hashes (MD5, SHA1, SHA256)
+# d41d8cd98f00b204e9800998ecf8427e

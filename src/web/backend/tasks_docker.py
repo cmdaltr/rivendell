@@ -9,15 +9,19 @@ import subprocess
 import sys
 import os
 import re
+import json
+import time
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
 from celery import Celery
 from celery.utils.log import get_task_logger
+import redis
 
 from config import settings
 from storage import JobStorage
-from models.job import JobStatus
+from models.job import JobStatus, PendingAction
 
 # Initialize Celery
 celery_app = Celery(
@@ -28,6 +32,233 @@ celery_app = Celery(
 
 logger = get_task_logger(__name__)
 job_storage = JobStorage()
+
+# Redis client for image locking
+_redis_client = None
+
+
+def get_redis_client():
+    """Get or create Redis client for image locking."""
+    global _redis_client
+    if _redis_client is None:
+        redis_host = os.environ.get("REDIS_HOST", "redis")
+        redis_port = int(os.environ.get("REDIS_PORT", 6379))
+        _redis_client = redis.Redis(host=redis_host, port=redis_port, db=1)  # Use db=1 for locks
+    return _redis_client
+
+
+def _get_image_lock_key(image_path: str) -> str:
+    """Generate a Redis key for an image lock."""
+    # Normalize the path and create a hash for consistent key naming
+    normalized = os.path.normpath(image_path).lower()
+    path_hash = hashlib.md5(normalized.encode()).hexdigest()[:16]
+    return f"rivendell:image_lock:{path_hash}"
+
+
+def acquire_image_locks(job_id: str, image_paths: list, timeout: int = 3600, retry_interval: int = 10) -> bool:
+    """
+    Acquire locks on all image paths. Waits if any image is in use.
+
+    Args:
+        job_id: Job ID (used as lock value for identification)
+        image_paths: List of image paths to lock
+        timeout: Lock timeout in seconds (default 1 hour)
+        retry_interval: Seconds between retry attempts
+
+    Returns:
+        True if all locks acquired, False if failed
+    """
+    redis_client = get_redis_client()
+    acquired_locks = []
+
+    try:
+        for image_path in image_paths:
+            lock_key = _get_image_lock_key(image_path)
+            image_name = os.path.basename(image_path)
+
+            while True:
+                # Try to acquire the lock using SETNX (set if not exists)
+                # The lock value contains job_id for debugging
+                lock_acquired = redis_client.set(
+                    lock_key,
+                    f"{job_id}:{datetime.now().isoformat()}",
+                    nx=True,  # Only set if not exists
+                    ex=timeout  # Expire after timeout
+                )
+
+                if lock_acquired:
+                    acquired_locks.append(lock_key)
+                    logger.info(f"Job {job_id}: Acquired lock on '{image_name}'")
+                    break
+                else:
+                    # Lock exists - another job is using this image
+                    existing_lock = redis_client.get(lock_key)
+                    if existing_lock:
+                        existing_job = existing_lock.decode().split(":")[0]
+                        logger.info(f"Job {job_id}: Waiting for '{image_name}' (in use by job {existing_job})")
+
+                        # Update job status to show waiting
+                        job = job_storage.get_job(job_id)
+                        if job:
+                            job.log.append(
+                                f"[{datetime.now().isoformat().replace('T', ' ')}] -> Waiting for '{image_name}' (in use by another job)"
+                            )
+                            job_storage.save_job(job)
+
+                    # Wait and retry
+                    time.sleep(retry_interval)
+
+                    # Check if our job was cancelled while waiting
+                    job = job_storage.get_job(job_id)
+                    if job and job.status == JobStatus.CANCELLED:
+                        logger.info(f"Job {job_id}: Cancelled while waiting for image lock")
+                        release_image_locks(acquired_locks)
+                        return False
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Job {job_id}: Error acquiring image locks: {e}")
+        # Release any locks we acquired
+        release_image_locks(acquired_locks)
+        return False
+
+
+def release_image_locks(lock_keys: list):
+    """Release image locks."""
+    if not lock_keys:
+        return
+
+    redis_client = get_redis_client()
+    for lock_key in lock_keys:
+        try:
+            redis_client.delete(lock_key)
+            logger.debug(f"Released lock: {lock_key}")
+        except Exception as e:
+            logger.warning(f"Error releasing lock {lock_key}: {e}")
+
+
+def release_image_locks_for_job(job_id: str, source_paths: list):
+    """
+    Release image locks held by a specific job.
+    Only releases locks if they are actually held by this job.
+    """
+    if not source_paths:
+        return
+
+    redis_client = get_redis_client()
+    for image_path in source_paths:
+        lock_key = _get_image_lock_key(image_path)
+        try:
+            # Check if this job holds the lock
+            lock_value = redis_client.get(lock_key)
+            if lock_value:
+                lock_str = lock_value.decode() if isinstance(lock_value, bytes) else str(lock_value)
+                if lock_str.startswith(f"{job_id}:"):
+                    redis_client.delete(lock_key)
+                    logger.info(f"Released image lock for job {job_id}: {os.path.basename(image_path)}")
+        except Exception as e:
+            logger.warning(f"Error releasing lock for {image_path}: {e}")
+
+
+def _request_sudo_confirmation(job, target_path: str, reason: str):
+    """Set job to awaiting confirmation status for sudo directory removal."""
+    from models.job import PendingAction
+
+    job.status = JobStatus.AWAITING_CONFIRMATION
+    job.pending_action = PendingAction(
+        action_type="sudo_remove_directory",
+        target_path=target_path,
+        message=f"Failed to remove directory: {reason}. Use sudo to force removal?"
+    )
+    job_storage.save_job(job)
+    logger.info(f"Job {job.id} awaiting sudo confirmation for: {target_path}")
+
+
+def confirm_sudo_action(job_id: str) -> bool:
+    """
+    Execute the pending sudo action for a job.
+    Returns True if successful, False otherwise.
+    """
+    job = job_storage.get_job(job_id)
+    if not job or job.status != JobStatus.AWAITING_CONFIRMATION:
+        return False
+
+    if not job.pending_action or job.pending_action.action_type != "sudo_remove_directory":
+        return False
+
+    target_path = job.pending_action.target_path
+
+    job.log.append(
+        f"[{datetime.now().isoformat().replace('T', ' ')}] -> User confirmed sudo removal of: {target_path}"
+    )
+    job_storage.save_job(job)
+
+    try:
+        # Use rm -rf (container runs as root, no sudo needed)
+        result = subprocess.run(
+            ["rm", "-rf", target_path],
+            capture_output=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        if result.returncode == 0:
+            job.log.append(
+                f"[{datetime.now().isoformat().replace('T', ' ')}] -> Successfully removed directory"
+            )
+            job.status = JobStatus.PENDING  # Reset to pending so it can be restarted
+            job.pending_action = None
+            job_storage.save_job(job)
+            return True
+        else:
+            stderr = result.stderr.decode() if result.stderr else "Unknown error"
+            job.log.append(
+                f"[{datetime.now().isoformat().replace('T', ' ')}] -> Removal failed: {stderr}"
+            )
+            job.status = JobStatus.FAILED
+            job.error = f"Directory removal failed: {stderr}"
+            job.pending_action = None
+            job.completed_at = datetime.now()
+            job_storage.save_job(job)
+            return False
+
+    except subprocess.TimeoutExpired:
+        job.log.append(
+            f"[{datetime.now().isoformat().replace('T', ' ')}] -> Directory removal timed out"
+        )
+        job.status = JobStatus.FAILED
+        job.error = "Directory removal timed out after 5 minutes"
+        job.pending_action = None
+        job.completed_at = datetime.now()
+        job_storage.save_job(job)
+        return False
+    except Exception as e:
+        job.log.append(
+            f"[{datetime.now().isoformat().replace('T', ' ')}] -> Directory removal error: {e}"
+        )
+        job.status = JobStatus.FAILED
+        job.error = f"Directory removal error: {e}"
+        job.pending_action = None
+        job.completed_at = datetime.now()
+        job_storage.save_job(job)
+        return False
+
+
+def cancel_sudo_action(job_id: str) -> bool:
+    """Cancel the pending sudo action and fail the job."""
+    job = job_storage.get_job(job_id)
+    if not job or job.status != JobStatus.AWAITING_CONFIRMATION:
+        return False
+
+    job.log.append(
+        f"[{datetime.now().isoformat().replace('T', ' ')}] -> User cancelled sudo removal"
+    )
+    job.status = JobStatus.FAILED
+    job.error = "Directory removal cancelled by user"
+    job.pending_action = None
+    job.completed_at = datetime.now()
+    job_storage.save_job(job)
+    return True
 
 
 def translate_path_for_worker(path_str: str) -> str:
@@ -86,6 +317,7 @@ def start_analysis(self, job_id: str):
     Start Elrond analysis task in dockerized environment.
 
     Runs the full forensics engine directly in the container.
+    Uses Redis-based locking to ensure only one job can process a given image at a time.
 
     Args:
         job_id: Job ID
@@ -96,7 +328,29 @@ def start_analysis(self, job_id: str):
         logger.error(f"Job {job_id} not found")
         return
 
+    # Track acquired locks for cleanup
+    acquired_lock_keys = []
+
     try:
+        # Acquire locks on all source images before starting
+        # This ensures jobs using the same image wait for each other
+        if job.source_paths:
+            job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Checking image availability...")
+            job_storage.save_job(job)
+
+            # Build list of lock keys we need to acquire
+            for image_path in job.source_paths:
+                acquired_lock_keys.append(_get_image_lock_key(image_path))
+
+            # Try to acquire all locks (will wait if images are in use)
+            if not acquire_image_locks(job_id, job.source_paths, timeout=7200, retry_interval=10):
+                # Failed to acquire locks (job was cancelled while waiting)
+                job.status = JobStatus.CANCELLED
+                job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Job cancelled while waiting for images")
+                job.completed_at = datetime.now()
+                job_storage.save_job(job)
+                return
+
         # Update job status
         job.status = JobStatus.RUNNING
         job.started_at = datetime.now()
@@ -172,16 +426,22 @@ def start_analysis(self, job_id: str):
                 except subprocess.TimeoutExpired:
                     logger.error(f"Timeout removing directory: {dest_dir_str}")
                     job.log.append(
-                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Timeout removing directory (took more than 5 minutes)"
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Timeout removing directory - requesting sudo confirmation"
                     )
+                    _request_sudo_confirmation(job, dest_dir_str, "Timeout after 5 minutes")
+                    return
                 except subprocess.CalledProcessError as e:
                     logger.error(f"Error removing directory (exit code {e.returncode})")
-                    job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error removing directory")
+                    job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error removing directory - requesting sudo confirmation")
+                    _request_sudo_confirmation(job, dest_dir_str, f"Permission denied (exit code {e.returncode})")
+                    return
                 except Exception as e:
                     logger.error(f"Error removing directory: {e}")
                     job.log.append(
-                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error removing directory: {e}"
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error removing directory - requesting sudo confirmation"
                     )
+                    _request_sudo_confirmation(job, dest_dir_str, str(e))
+                    return
                 job_storage.save_job(job)
 
         # Create the output directory if it doesn't exist
@@ -244,6 +504,17 @@ def start_analysis(self, job_id: str):
         ie_indexdat_count = 0
         ie_indexdat_logged = False
 
+        # Verbose logging - write all output to verbose.log when debug is enabled
+        debug_enabled = getattr(job.options, "debug", False)
+        verbose_log_file = None
+        if debug_enabled:
+            verbose_log_path = os.path.join(dest_dir_str, "verbose.log")
+            try:
+                verbose_log_file = open(verbose_log_path, "w")
+                logger.info(f"Verbose logging enabled, writing to: {verbose_log_path}")
+            except Exception as e:
+                logger.warning(f"Failed to open verbose log file: {e}")
+
         # Track phase completion for validation
         phases_completed = {
             "collection": False,
@@ -258,8 +529,15 @@ def start_analysis(self, job_id: str):
                 # Strip ANSI color codes
                 line = re.sub(r"\x1b\[[0-9;]*m", "", line)
 
+                # Write ALL output to verbose.log when debug is enabled (before any filtering)
+                if verbose_log_file:
+                    try:
+                        verbose_log_file.write(line + "\n")
+                        verbose_log_file.flush()
+                    except Exception:
+                        pass
+
                 # Exclude verbose messages (MITRE enrichment, verbose command output) unless debug is enabled
-                debug_enabled = getattr(job.options, "debug", False)
                 if not debug_enabled:
                     excluded_keywords = ["mitre", "extracting mitre", "mitre enrichment"]
                     excluded_patterns = [
@@ -298,6 +576,14 @@ def start_analysis(self, job_id: str):
                                    "DEBUG" in line or line.startswith("    ")  # Indented traceback lines
                     if not has_arrow and not is_phase_line and not is_error_line:
                         continue
+
+                # Skip lines that are just separator dashes (e.g., "----------------------------------------")
+                if re.match(r'^\[.*\]\s*-+\s*$', line) or re.match(r'^-+$', line.strip()):
+                    continue
+
+                # Skip redundant "X phase complete." messages (we show "Completed X Phase" instead)
+                if re.search(r'(collect|process|analysis)\s+phase\s+complete\.?$', line, re.IGNORECASE):
+                    continue
 
                 # Clean up duplicate slashes in file paths (e.g., //$ -> /$)
                 line = re.sub(r"/+", "/", line)
@@ -393,6 +679,14 @@ def start_analysis(self, job_id: str):
                 # Fix double single quotes (e.g., ''image_name'' -> 'image_name')
                 line = re.sub(r"'{2,}", "'", line)
 
+                # Add IE index.dat summary BEFORE the "Completed Processing Phase" message
+                # Check original_line to detect phase completion, add summary before appending the phase line
+                if "completed processing phase" in original_line.lower() and " for " not in original_line.lower():
+                    if ie_indexdat_count > 0:
+                        job.log.append(
+                            f"[{datetime.now().isoformat().replace('T', ' ')}] -> processed {ie_indexdat_count} IE index.dat files"
+                        )
+
                 # Update log - only add timestamp if line doesn't already have one
                 # Check if line starts with a timestamp (YYYY-MM-DD format or contains ' -> ')
                 if re.match(r"^\d{4}-\d{2}-\d{2}", line) or " -> " in line:
@@ -435,11 +729,6 @@ def start_analysis(self, job_id: str):
                 elif "completed collection phase" in original_lower and " for " not in original_lower:
                     new_progress = max(new_progress, 35)
                 elif "completed processing phase" in original_lower and " for " not in original_lower:
-                    # Add IE index.dat summary BEFORE the processing phase completion message
-                    if ie_indexdat_count > 0:
-                        job.log.append(
-                            f"[{datetime.now().isoformat().replace('T', ' ')}] -> processed {ie_indexdat_count} IE index.dat files"
-                        )
                     new_progress = max(new_progress, 70)
                 elif "completed analysis phase" in original_lower and " for " not in original_lower:
                     new_progress = max(new_progress, 95)
@@ -506,6 +795,14 @@ def start_analysis(self, job_id: str):
 
         # Wait for completion
         return_code = process.wait()
+
+        # Close verbose log file if it was opened
+        if verbose_log_file:
+            try:
+                verbose_log_file.close()
+                logger.info("Verbose log file closed")
+            except Exception as e:
+                logger.warning(f"Failed to close verbose log file: {e}")
 
         # Validate that required phases completed
         # If analysis was requested (started), it must also complete
@@ -575,6 +872,33 @@ def start_analysis(self, job_id: str):
 
             job.result = result_info
 
+            # Save template if requested
+            if getattr(job.options, "save_template", False):
+                try:
+                    template_data = {}
+                    # Extract all processing options (exclude mode selections and save_template itself)
+                    mode_keys = {'brisk', 'exhaustive', 'custom', 'template', 'save_template', 'collect', 'process'}
+                    for key, value in vars(job.options).items():
+                        if not key.startswith('_') and key not in mode_keys and isinstance(value, bool):
+                            template_data[key] = value
+
+                    # Generate filename with timestamp
+                    timestamp = datetime.now().strftime("%Y-%m-%d-%H:%M")
+                    template_filename = f"{timestamp}_Template.json"
+                    template_path = dest_dir / template_filename
+
+                    with open(template_path, "w") as f:
+                        json.dump(template_data, f, indent=2)
+
+                    job.log.append(
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Template saved: {template_filename}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to save template: {e}")
+                    job.log.append(
+                        f"[{datetime.now().isoformat().replace('T', ' ')}] -> Warning: Failed to save template: {e}"
+                    )
+
         if return_code != 0:
             # Failed
             job.status = JobStatus.FAILED
@@ -588,6 +912,11 @@ def start_analysis(self, job_id: str):
         job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error: {str(e)}")
 
     finally:
+        # Release image locks
+        if acquired_lock_keys:
+            release_image_locks(acquired_lock_keys)
+            logger.info(f"Job {job_id}: Released {len(acquired_lock_keys)} image lock(s)")
+
         job.completed_at = datetime.now()
         job_storage.save_job(job)
 
@@ -622,6 +951,9 @@ def build_elrond_command(job):
     # Process is ALWAYS invoked
     cmd.append("--Process")
 
+    # Note: elrond.py already runs in auto mode by default (auto = True)
+    # No --Auto flag needed
+
     # Collection mode (mutually exclusive)
     if opts.gandalf:
         # Gandalf mode: process pre-collected artifacts (no collection)
@@ -640,21 +972,58 @@ def build_elrond_command(job):
         cmd.append("--magicBytes")
     if opts.extract_iocs:
         cmd.append("--extractIocs")
+    if opts.iocs_file:
+        cmd.extend(["--iocsFile", opts.iocs_file])
+    if opts.misplaced_binaries:
+        cmd.append("--misplacedBinaries")
+    if opts.masquerading:
+        cmd.append("--masquerading")
     if opts.keywords_file:
         cmd.extend(["--Keywords", opts.keywords_file])
     if opts.yara_dir:
         cmd.extend(["--Yara", opts.yara_dir])
 
     # Collection options
-    if opts.collectFiles:
+    # Build file selection string for elrond (matches select.py file_selection letters)
+    # A=All, H=Hidden, B=Binaries, D=Documents, R=Archives, S=Scripts,
+    # L=LNK, W=Web, M=Mail, V=Virtual, U=Unallocated
+    file_selection = ""
+
+    if opts.collect_files_all:
+        file_selection = "A"  # All includes everything + carving
+    else:
+        if opts.collect_files_hidden:
+            file_selection += "H"
+        if opts.collect_files_bin:
+            file_selection += "B"
+        if opts.collect_files_docs:
+            file_selection += "D"
+        if opts.collect_files_archive:
+            file_selection += "R"
+        if opts.collect_files_scripts:
+            file_selection += "S"
+        if opts.collect_files_lnk:
+            file_selection += "L"
+        if opts.collect_files_web:
+            file_selection += "W"
+        if opts.collect_files_mail:
+            file_selection += "M"
+        if opts.collect_files_virtual:
+            file_selection += "V"
+        if opts.collect_files_unalloc:
+            file_selection += "U"  # Unallocated = carving only
+
+    if file_selection:
+        # Pass file selection to elrond via --collectFiles with selection string
+        cmd.extend(["--collectFiles", file_selection])
+    elif opts.collectFiles:
         if opts.collectFiles_filter:
             cmd.extend(["--collectFiles", opts.collectFiles_filter])
         else:
             cmd.append("--collectFiles")
+
     if opts.vss:
         cmd.append("--vss")
-    if opts.symlinks:
-        cmd.append("--symlinks")
     if opts.userprofiles:
         cmd.append("--Userprofiles")
 
@@ -677,6 +1046,8 @@ def build_elrond_command(job):
     # Speed/Quality modes
     if opts.brisk:
         cmd.append("--Brisk")
+    if opts.mordor:
+        cmd.append("--Mordor")
 
     # Hash comparison
     if opts.nsrl:
@@ -689,9 +1060,5 @@ def build_elrond_command(job):
         cmd.append("--Delete")
     if opts.archive:
         cmd.append("--Ziparchive")
-
-    # Logging options
-    if getattr(opts, "debug", False):
-        cmd.append("--Verbosity")
 
     return cmd

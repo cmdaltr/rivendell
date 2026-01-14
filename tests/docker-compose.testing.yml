@@ -1,0 +1,59 @@
+# Docker Compose Override for Testing on 16GB Macs
+# This configuration disables heavy SIEM services to save 6GB+ RAM
+#
+# Usage (from repo root):
+#   docker-compose -f docker-compose.yml -f tests/docker-compose.testing.yml up -d
+#
+# Or set as default:
+#   export COMPOSE_FILE=docker-compose.yml:tests/docker-compose.testing.yml
+#   docker-compose up -d
+
+version: '3.8'
+
+services:
+  # Reduce celery-worker memory from 8G to 6G
+  celery-worker:
+    deploy:
+      resources:
+        limits:
+          memory: 6G  # Reduced from 8G
+        reservations:
+          memory: 1G
+
+  # Disable Splunk (saves 4GB)
+  splunk:
+    profiles:
+      - siem-testing  # Only start if profile 'siem-testing' is active
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # Reduced from 4G if needed
+
+  # Disable Elastic (saves 2GB)
+  elastic:
+    profiles:
+      - siem-testing
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # Reduced from 2G if needed
+
+  # Disable Kibana
+  kibana:
+    profiles:
+      - siem-testing
+
+  # Disable Elastic setup container
+  elastic-setup:
+    profiles:
+      - siem-testing
+
+  # Disable Kibana setup container
+  kibana-setup:
+    profiles:
+      - siem-testing
+
+  # Disable Navigator (ATT&CK Navigator)
+  navigator:
+    profiles:
+      - optional

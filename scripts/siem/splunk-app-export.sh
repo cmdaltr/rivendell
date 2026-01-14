@@ -210,7 +210,7 @@ Installation
 Documentation
 -------------
 For full documentation, visit:
-https://github.com/yourusername/rivendell
+https://github.com/cmdaltr/rivendell
 
 Support
 -------

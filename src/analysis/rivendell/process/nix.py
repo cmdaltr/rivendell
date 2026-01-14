@@ -122,12 +122,6 @@ def repair_malformed_service(service_json):
 def process_bash_history(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
-    if verbosity != "":
-        print(
-            "     Processing 'bash_history' ({}) for {}...".format(
-                artefact.split("/")[-1].split("+")[0], vssimage
-            )
-        )
     entry, prnt = "{},{},{},bash_history ({}) file\n".format(
         datetime.now().isoformat(),
         vssimage.replace("'", ""),
@@ -222,14 +216,6 @@ def process_email(
             )
         except:
             pass
-    if verbosity != "":
-        print(
-            "     Processing Mail artefact '{}' ({}) for {}...".format(
-                artefact.split("/")[-1],
-                artefact.split("/")[-2],
-                vssimage,
-            )
-        )
     entry, prnt = "{},{},{},'{}' ({}) Mail artefact\n".format(
         datetime.now().isoformat(),
         vssimage.replace("'", ""),
@@ -409,8 +395,6 @@ def process_email(
 def process_group(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
-    if verbosity != "":
-        print("     Processing 'group' file for {}...".format(vssimage))
     entry, prnt = "{},{},{},group file\n".format(
         datetime.now().isoformat(), vssimage.replace("'", ""), stage
     ), " -> {} -> {} group file from {}".format(
@@ -516,13 +500,6 @@ def process_logs(
                 or "vmware-vmtoolsd-root"
                 in artefact.split("/")[-1].split("+")[-1].split(".log")[0]
             ):
-                if verbosity != "":
-                    print(
-                        "     Processing '{}' for {}...".format(
-                            artefact.split("/")[-1].split("+")[-1],
-                            vssimage,
-                        )
-                    )
                 entry, prnt = "{},{},{},'{}' file\n".format(
                     datetime.now().isoformat(),
                     vssimage.replace("'", ""),
@@ -888,12 +865,6 @@ def process_service(
             )
         except:
             pass
-        if verbosity != "":
-            print(
-                "     Processing '{}' service for {}...".format(
-                    artefact.split("/")[-1], vssimage
-                )
-            )
         with open(
             output_directory
             + img.split("::")[0]

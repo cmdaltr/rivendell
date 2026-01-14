@@ -15,7 +15,7 @@ Get Elrond up and running in Docker in 5 minutes!
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/elrond.git
+git clone https://github.com/cmdaltr/elrond.git
 cd elrond
 
 # Copy environment file

@@ -1,0 +1,40 @@
+{
+  "case_number": "TEST_win_full",
+  "source_paths": [
+    "/Volumes/Media5TB/rivendell_imgs/win7-64-nfury-c-drive.E01"
+  ],
+  "destination_path": "/Volumes/Media5TB/rivendell_imgs/tests/win_full",
+  "options": {
+    "local": true,
+    "gandalf": false,
+    "analysis": true,
+    "extract_iocs": true,
+    "timeline": false,
+    "memory": false,
+    "memory_timeline": false,
+    "keywords": false,
+    "yara": false,
+    "collectFiles": false,
+    "brisk": false,
+    "vss": true,
+    "symlinks": false,
+    "userprofiles": true,
+    "nsrl": false,
+    "hash_collected": false,
+    "hash_all": false,
+    "splunk": true,
+    "elastic": true,
+    "navigator": true
+  },
+  "metadata": {
+    "test_name": "win_full",
+    "description": "Windows disk image with ALL options (comprehensive)",
+    "tags": [
+      "windows",
+      "comprehensive",
+      "slow"
+    ],
+    "estimated_duration_minutes": 180,
+    "generated_at": "2025-12-17T20:29:59.031116"
+  }
+}

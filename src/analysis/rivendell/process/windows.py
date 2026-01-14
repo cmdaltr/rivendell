@@ -98,10 +98,6 @@ def process_usb(
     jsondict,
     jsonlist,
 ):
-    if verbosity != "":
-        print(
-            "     Processing '{}' for {}...".format(artefact.split("/")[-1], vssimage)
-        )
     entry, prnt = "{},{},{},'{}'\n".format(
         datetime.now().isoformat(), vssimage.replace("'", ""), stage, vss_path_insert
     ), " -> {} -> {} '{}' from {}".format(
@@ -187,12 +183,6 @@ def process_registry_system(
             )
         except:
             pass
-        if verbosity != "":
-            print(
-                "     Processing '{}' registry hive for {}...".format(
-                    artefact.split("/")[-1], vssimage
-                )
-            )
         entry, prnt = "{},{},{},'{}' registry hive\n".format(
             datetime.now().isoformat(),
             vssimage.replace("'", ""),
@@ -250,12 +240,6 @@ def process_registry_profile(
             )
         except:
             pass
-        if verbosity != "":
-            print(
-                "     Processing '{}' {} registry hive for {}...".format(
-                    regusr, regart, vssimage
-                )
-            )
         entry, prnt = "{},{},{},'{}' ({}) registry hive\n".format(
             datetime.now().isoformat(),
             vssimage.replace("'", ""),
@@ -368,14 +352,6 @@ def process_clipboard(
             )
         except:
             pass
-        if verbosity != "":
-            print(
-                "     Processing '{}' ({}) clipboard evidence for {}...".format(
-                    artefact.split("/")[-1].split("_")[-1],
-                    artefact.split("/")[-1].split("+")[0],
-                    vssimage,
-                )
-            )
         extract_clipboard(
             verbosity,
             vssimage,
@@ -452,21 +428,11 @@ def process_wmi(
     wmi_dir = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "wbem/"
 
     if not os.path.exists(wmi_dir):
-        if verbosity != "":
-            print("     Warning: WMI repository not found at {}".format(wmi_dir))
         return
 
     # Get specific file being processed for better logging
     artefact_name = artefact.split("/")[-1] if artefact else "OBJECTS.DATA"
 
-    if verbosity != "":
-        print(
-            " -> {} -> processing WMI persistence '{}' for {}...".format(
-                datetime.now().isoformat().replace("T", " "),
-                artefact_name,
-                vssimage
-            )
-        )
 
     artemis.extract_wmipersist(
         verbosity=verbosity,
@@ -489,27 +455,19 @@ def process_wbem(
     artefact,
 ):
     """Process WBEM/WMI repository using Artemis (Rust-based forensic parser)"""
+    print(f"    [DEBUG-WBEM] Entered process_wbem, verbosity={verbosity}, artefact={artefact}", flush=True)
     # WBEM is processed via wmipersist in Artemis - this is a wrapper for compatibility
     wbem_dir = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "wbem/"
 
     if not os.path.exists(wbem_dir):
-        if verbosity != "":
-            print("     Warning: WBEM repository not found at {}".format(wbem_dir))
+        print(f"    [DEBUG-WBEM] wbem_dir does not exist, returning", flush=True)
         return
 
     # Get specific file being processed for better logging
     artefact_name = artefact.split("/")[-1] if artefact else "OBJECTS.DATA"
 
-    if verbosity != "":
-        print(
-            " -> {} -> processing WBEM '{}' for {}...".format(
-                datetime.now().isoformat().replace("T", " "),
-                artefact_name,
-                vssimage,
-            )
-        )
-
-    artemis.extract_wmipersist(
+    print(f"    [DEBUG-WBEM] About to call artemis.extract_wmipersist", flush=True)
+    result = artemis.extract_wmipersist(
         verbosity=verbosity,
         vssimage=vssimage,
         output_directory=output_directory,
@@ -518,6 +476,8 @@ def process_wbem(
         stage=stage,
         wmi_dir=wbem_dir,
     )
+    print(f"    [DEBUG-WBEM] artemis.extract_wmipersist returned: {result}", flush=True)
+    print(f"    [DEBUG-WBEM] About to return from process_wbem", flush=True)
 
 
 def process_sru(
@@ -577,13 +537,6 @@ def process_ual(
             )
         except:
             pass
-        if verbosity != "":
-            print(
-                "     Processing User Access Log '{}' for {}...".format(
-                    artefact.split("/")[-1].split("_")[-1],
-                    vssimage,
-                )
-            )
         entry, prnt = "{},{},{},'{}' user access log \n".format(
             datetime.now().isoformat(),
             vssimage.replace("'", ""),
@@ -685,14 +638,6 @@ def process_outlook(
     verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
 ):
     """Process Outlook OST/PST files using Artemis (Rust-based forensic parser)"""
-    if verbosity != "":
-        print(
-            "     Processing Outlook file '{}' ({}) for {}...".format(
-                artefact.split("/")[-1],
-                artefact.split("/")[-2],
-                vssimage,
-            )
-        )
 
     # Artemis supports OST files; for PST we may need to keep readpst as fallback
     if artefact.lower().endswith('.ost') and os.path.exists(artefact):
@@ -754,10 +699,6 @@ def process_hiberfil(
     vssmem,
     memtimeline,
 ):
-    if verbosity != "":
-        print(
-            "     Processing '{}' for {}...".format(artefact.split("/")[-1], vssimage)
-        )
     os.makedirs(
         output_directory
         + img.split("::")[0]
@@ -790,12 +731,6 @@ def process_pagefile(
         + vss_path_insert
         + "memory"
     ):
-        if verbosity != "":
-            print(
-                "     Processing '{}' for {}...".format(
-                    artefact.split("/")[-1], vssimage
-                )
-            )
         os.makedirs(
             output_directory
             + img.split("::")[0]

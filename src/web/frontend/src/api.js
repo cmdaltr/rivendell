@@ -79,6 +79,16 @@ export const restartJob = async (jobId) => {
   return response.data;
 };
 
+export const confirmSudo = async (jobId) => {
+  const response = await api.post(`/api/jobs/${jobId}/confirm-sudo`);
+  return response.data;
+};
+
+export const cancelSudo = async (jobId) => {
+  const response = await api.post(`/api/jobs/${jobId}/cancel-sudo`);
+  return response.data;
+};
+
 export const bulkCancelJobs = async (jobIds) => {
   const response = await api.post('/api/jobs/bulk/cancel', jobIds);
   return response.data;

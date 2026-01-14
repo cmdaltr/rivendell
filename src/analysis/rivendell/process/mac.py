@@ -104,13 +104,6 @@ def process_plist(
             try:
                 with open(artefact, "rb") as plist:
                     plistdata = plistlib.load(plist)
-                if verbosity != "":
-                    print(
-                        "     Processing '{}' plist for {}...".format(
-                            artefact.split("/")[-1].split("+")[-1],
-                            vssimage,
-                        )
-                    )
                 entry, prnt = "{},{},{},'{}' plist file\n".format(
                     datetime.now().isoformat(),
                     vssimage.replace("'", ""),
