@@ -8,11 +8,26 @@
 #   export COMPOSE_FILE=docker-compose.yml:tests/docker-compose.testing.yml
 #   docker-compose up -d
 
-version: '3.8'
-
 services:
   # Reduce celery-worker memory from 8G to 6G
+  # Remove SIEM dependencies since we're disabling them in testing mode
   celery-worker:
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+      backend:
+        condition: service_started
+    volumes:
+      - ./src/web/backend:/app
+      - /Volumes:/Volumes
+      - /tmp/rivendell:/tmp/elrond/output
+      - /tmp/rivendell:/tmp/rivendell
+      - ./fixtures:/tmp/rivendell/fixtures:ro
+      - rivendell_uploads:/tmp/elrond/uploads
+      - navigator_data:/navigator
+      # NOTE: splunk volumes removed in testing mode
     deploy:
       resources:
         limits:
@@ -20,23 +35,31 @@ services:
         reservations:
           memory: 1G
 
-  # Disable Splunk (saves 4GB)
+  # Replace Splunk with a no-op container to satisfy dependency
   splunk:
-    profiles:
-      - siem-testing  # Only start if profile 'siem-testing' is active
+    image: alpine:latest
+    container_name: rivendell-splunk-stub
+    command: /bin/sh -c "echo 'Splunk disabled in testing mode' && sleep infinity"
+    restart: "no"
     deploy:
       resources:
         limits:
-          memory: 2G  # Reduced from 4G if needed
+          memory: 64M
+        reservations:
+          memory: 16M
 
-  # Disable Elastic (saves 2GB)
+  # Replace Elastic with a no-op container to satisfy dependency
   elastic:
-    profiles:
-      - siem-testing
+    image: alpine:latest
+    container_name: rivendell-elastic-stub
+    command: /bin/sh -c "echo 'Elasticsearch disabled in testing mode' && sleep infinity"
+    restart: "no"
     deploy:
       resources:
         limits:
-          memory: 1G  # Reduced from 2G if needed
+          memory: 64M
+        reservations:
+          memory: 16M
 
   # Disable Kibana
   kibana:
