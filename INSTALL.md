@@ -64,21 +64,41 @@ git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 ```
 
-### Step 2: Install Docker and Configure Image Paths
+### Step 2: Install Docker Container Runtime
 
-Rivendell includes a cross-platform installer that will help you install Docker Desktop or OrbStack, and configure your forensic image paths.
+**Recommended: OrbStack (macOS Only)**
 
-**Run the installer:**
+OrbStack is the **preferred solution** for macOS users:
+
+```bash
+# Install via Homebrew
+brew install --cask orbstack
+
+# Or download from: https://orbstack.dev/download
+```
+
+**Why OrbStack?**
+- ✅ **No gVisor networking bugs** - Docker Desktop 4.52.0+ has critical bugs that cause crashes when processing large forensic images (11GB+ E01 files)
+- ✅ **2-3x faster** than Docker Desktop for forensic workloads
+- ✅ **Uses ~4GB RAM** instead of 8-12GB
+- ✅ **Native file sharing** - Much faster than Docker Desktop's VirtioFS
+- ✅ **Instant startup** - Containers start immediately
+- ✅ **Free for personal use** ($10/month for commercial)
+- ✅ **Docker Engine v28.5.2** - Stable version without bugs
+
+**Alternative: Docker Desktop (Linux/Windows, or macOS if needed)**
+
+For non-macOS platforms, use the installer:
 
 ```bash
 python3 scripts/install-rivendell.py
 ```
 
-**The installer will:**
+The installer will:
 1. Detect your operating system and architecture
 2. Present installation options:
+   - **OrbStack** (macOS only) - **RECOMMENDED**
    - **Docker Desktop 4.51.0** (Engine v28.5.2) - Stable, no gVisor bugs
-   - **OrbStack** (macOS only) - Faster, uses less RAM
 3. Download and install your selected option
 4. Verify the installation
 5. **Prompt for forensic image paths** (primary, secondary, tertiary)
@@ -86,19 +106,22 @@ python3 scripts/install-rivendell.py
 
 **Installation Options Comparison:**
 
-| Feature | Docker Desktop 4.51.0 | OrbStack |
-|---------|----------------------|----------|
-| **Platforms** | macOS, Linux, Windows | macOS only |
-| **RAM Usage** | ~8-12GB | ~4GB |
-| **Performance** | Standard | 2-3x faster |
-| **File Sharing** | VirtioFS (slower) | Native (faster) |
-| **Cost** | Free | Free (personal), $10/month (commercial) |
-| **Stability** | ✅ Stable (no gVisor bug) | ✅ Very stable |
+| Feature | OrbStack (macOS) | Docker Desktop 4.51.0 |
+|---------|------------------|----------------------|
+| **Platforms** | macOS only | macOS, Linux, Windows |
+| **RAM Usage** | ~4GB | ~8-12GB |
+| **Performance** | **2-3x faster** | Standard |
+| **File Sharing** | **Native (fast)** | VirtioFS (slower) |
+| **gVisor Bugs** | ✅ **None** | ✅ None (4.51.0 only) |
+| **Startup Time** | **Instant** | 30-60 seconds |
+| **Cost** | Free (personal), $10/mo (commercial) | Free |
+
+**⚠️ AVOID Docker Desktop 4.52.0+** - These versions include Docker Engine v29.x with gVisor networking bugs that cause crashes when processing large forensic images.
 
 **Recommendation:**
-- **macOS users**: Try OrbStack first (faster, less RAM)
+- **macOS users**: **Use OrbStack** (best performance, no bugs)
 - **Linux/Windows users**: Use Docker Desktop 4.51.0
-- **16GB RAM or less**: Use Testing Mode (see below)
+- **16GB RAM or less**: Use OrbStack or Testing Mode
 
 #### What Happens During Image Path Configuration
 

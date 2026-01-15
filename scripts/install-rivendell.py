@@ -698,18 +698,26 @@ def main():
 
     # Show options
     print(f"{Colors.BOLD}Installation Options:{Colors.END}\n")
-    print(f"  {Colors.BOLD}1. Docker Desktop 4.51.0{Colors.END} (Engine v28.5.2)")
-    print(f"     • Stable version without gVisor networking bugs")
-    print(f"     • Official Docker Desktop experience")
-    print(f"     • Works on macOS, Linux, and Windows\n")
 
     if os_type == 'macos':
-        print(f"  {Colors.BOLD}2. OrbStack{Colors.END} (Latest)")
+        # For macOS: OrbStack is option 1 (recommended)
+        print(f"  {Colors.BOLD}1. OrbStack{Colors.END} (Latest) {Colors.GREEN}← RECOMMENDED{Colors.END}")
         print(f"     • 2-3x faster than Docker Desktop")
         print(f"     • Uses ~4GB RAM instead of 8-12GB")
+        print(f"     • No gVisor networking bugs")
         print(f"     • Better file sharing performance")
-        print(f"     • Free for personal use, $10/month commercial")
-        print(f"     • macOS only\n")
+        print(f"     • Free for personal use, $10/month commercial\n")
+
+        print(f"  {Colors.BOLD}2. Docker Desktop 4.51.0{Colors.END} (Engine v28.5.2)")
+        print(f"     • Stable version without gVisor bugs (4.51.0 only)")
+        print(f"     • Official Docker Desktop experience")
+        print(f"     • {Colors.YELLOW}⚠ Avoid 4.52.0+ (critical gVisor bugs){Colors.END}\n")
+    else:
+        # For Linux/Windows: Docker Desktop is the only option
+        print(f"  {Colors.BOLD}1. Docker Desktop 4.51.0{Colors.END} (Engine v28.5.2)")
+        print(f"     • Stable version without gVisor networking bugs")
+        print(f"     • Official Docker Desktop experience")
+        print(f"     • Works on macOS, Linux, and Windows\n")
 
     print(f"  {Colors.BOLD}3. Cancel{Colors.END}\n")
 
@@ -718,16 +726,26 @@ def main():
         choice = input(f"{Colors.YELLOW}Select option (1-3): {Colors.END}").strip()
 
         if choice == '1':
-            success = installer.install_docker_desktop()
+            if os_type == 'macos':
+                success = installer.install_orbstack()
+            else:
+                success = installer.install_docker_desktop()
             break
-        elif choice == '2' and os_type == 'macos':
-            success = installer.install_orbstack()
+        elif choice == '2':
+            if os_type == 'macos':
+                success = installer.install_docker_desktop()
+            else:
+                installer.print_error("Invalid option. Please enter 1 or 3.")
+                continue
             break
         elif choice == '3':
             installer.print_info("Installation cancelled")
             sys.exit(0)
         else:
-            installer.print_error("Invalid option. Please enter 1, 2, or 3.")
+            if os_type == 'macos':
+                installer.print_error("Invalid option. Please enter 1, 2, or 3.")
+            else:
+                installer.print_error("Invalid option. Please enter 1 or 3.")
 
     # Configure image paths if Docker installation succeeded
     image_paths = []

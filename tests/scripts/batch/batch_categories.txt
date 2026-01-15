@@ -1,0 +1,10 @@
+Batch categories:
+1 - basic
+2 - additional collection
+3 - additional extraction
+4 - output features
+5 - emcompassing
+
+Additional categories:
+Brisk mode performs collection and conversion of artefacts from local disk image
+Full-analysis is complete forensics + IOC extraction + VSS + user profiles + SIEM exports

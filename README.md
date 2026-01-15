@@ -24,19 +24,27 @@
 git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 
-# 2. Install Docker and configure image paths
-python3 scripts/install-rivendell.py
-# The installer will prompt you for forensic image locations
+# 2. Install OrbStack (macOS - RECOMMENDED) or Docker Desktop
+# OrbStack: 2-3x faster, uses less RAM, no networking bugs
+brew install --cask orbstack
 
-# 3. Start Rivendell in testing mode
+# For other platforms, use the installer:
+# python3 scripts/install-rivendell.py
+
+# 3. Configure forensic image paths
+python3 scripts/image_paths.py
+
+# 4. Start Rivendell in testing mode
 ./scripts/start-testing-mode.sh
 
-# 4. Run your first test
+# 5. Run your first test
 cd tests
 ./scripts/run_single_test.sh win_brisk
 ```
 
 **📖 [Complete Installation Guide →](INSTALL.md)** - Detailed setup instructions
+
+**💡 Why OrbStack?** On macOS, OrbStack is 2-3x faster than Docker Desktop, uses ~4GB RAM instead of 8-12GB, and has no gVisor networking bugs that cause crashes with large forensic images. It's free for personal use.
 
 ### Access Rivendell
 
