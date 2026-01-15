@@ -5,15 +5,15 @@ import subprocess
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
-from utils.file_limits import retry_on_fd_limit, safe_open
 
 
-@retry_on_fd_limit(max_retries=5)
 def load_ioc_watchlist(watchlist_file):
     """Load IOCs from a watchlist file (one IOC per line).
 
     Returns a set of lowercase IOCs for fast lookup.
     """
+    from utils.file_limits import safe_open
+
     watchlist = set()
     if watchlist_file and os.path.exists(watchlist_file):
         try:
@@ -30,7 +30,6 @@ def load_ioc_watchlist(watchlist_file):
     return watchlist
 
 
-@retry_on_fd_limit(max_retries=10, initial_wait=1.0, max_wait=30.0)
 def compare_iocs(
     output_directory,
     verbosity,
@@ -42,6 +41,8 @@ def compare_iocs(
     previous_state,
     watchlist_file=None,
 ):
+    from utils.file_limits import safe_open
+
     # Load IOC watchlist if provided
     watchlist = load_ioc_watchlist(watchlist_file)
 

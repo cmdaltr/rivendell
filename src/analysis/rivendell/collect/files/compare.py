@@ -4,7 +4,6 @@ import shutil
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
-from utils.file_limits import retry_on_fd_limit, safe_open
 
 
 def multiple_files(source, destination, increment):
@@ -20,7 +19,6 @@ def multiple_files(source, destination, increment):
         increment += 1
 
 
-@retry_on_fd_limit(max_retries=10, initial_wait=1.0, max_wait=30.0)
 def compare_include_exclude(
     output_directory,
     verbosity,
@@ -34,6 +32,8 @@ def compare_include_exclude(
     increment,
     collectfiles,
 ):
+    from utils.file_limits import safe_open
+
     def successful_copy(
         verbosity, output_directory, img, stage, vssimage, recovered_file, filetype
     ):

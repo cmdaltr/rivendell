@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from elrond.utils.constants import SUPPORTED_IMAGE_EXTENSIONS
+from utils.constants import SUPPORTED_IMAGE_EXTENSIONS
 
 
 class ValidationError(Exception):
