@@ -7,6 +7,9 @@ TEST_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 cd "$TEST_DIR"
 BATCH_NAME="4c-navigator-export"
 LOG_FILE="$TEST_DIR/logs/${BATCH_NAME}-$(date +%Y%m%d-%H%M%S).log"
+
+# Delay between tests (seconds) - override with: DELAY_BETWEEN_TESTS=60 ./script.sh
+DELAY_BETWEEN_TESTS=${DELAY_BETWEEN_TESTS:-30}
 tests=("win_splunk_elastic_nav")
 passed=0; failed=0
 for test in "${tests[@]}"; do

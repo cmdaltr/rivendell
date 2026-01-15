@@ -13,6 +13,9 @@ cd "$TEST_DIR"
 BATCH_NAME="1b_collect--lnk-docs"
 LOG_FILE="$TEST_DIR/logs/${BATCH_NAME}-$(date +%Y%m%d-%H%M%S).log"
 
+# Delay between tests (seconds) - override with: DELAY_BETWEEN_TESTS=60 ./script.sh
+DELAY_BETWEEN_TESTS=${DELAY_BETWEEN_TESTS:-30}
+
 echo "======================================"
 echo "BATCH 1b: Collect Files - LNK + Docs"
 echo "======================================"
@@ -29,11 +32,15 @@ tests=(
 
 passed=0
 failed=0
+total_tests=${#tests[@]}
+current_test=0
 
 for test in "${tests[@]}"; do
+    ((current_test++))
+
     echo ""
     echo "========================================"
-    echo "Running: $test ($(date +%H:%M:%S))"
+    echo "Running: $test [$current_test/$total_tests] ($(date +%H:%M:%S))"
     echo "========================================"
 
     if python3 scripts/run_test.py --run "$test" -y --wait 2>&1 | tee -a "$LOG_FILE"; then
@@ -42,6 +49,13 @@ for test in "${tests[@]}"; do
     else
         echo "✗ $test FAILED"
         ((failed++))
+    fi
+
+    # Delay between tests (except after the last one)
+    if [ $current_test -lt $total_tests ]; then
+        echo ""
+        echo "Waiting ${DELAY_BETWEEN_TESTS}s before next test (resource cleanup)..."
+        sleep "$DELAY_BETWEEN_TESTS"
     fi
 done
 

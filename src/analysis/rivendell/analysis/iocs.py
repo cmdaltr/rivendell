@@ -5,8 +5,10 @@ import subprocess
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+from utils.file_limits import retry_on_fd_limit, safe_open
 
 
+@retry_on_fd_limit(max_retries=5)
 def load_ioc_watchlist(watchlist_file):
     """Load IOCs from a watchlist file (one IOC per line).
 
@@ -15,7 +17,7 @@ def load_ioc_watchlist(watchlist_file):
     watchlist = set()
     if watchlist_file and os.path.exists(watchlist_file):
         try:
-            with open(watchlist_file, "r") as f:
+            with safe_open(watchlist_file, "r") as f:
                 for line in f:
                     ioc = line.strip().lower()
                     # Skip empty lines and comments
@@ -28,6 +30,7 @@ def load_ioc_watchlist(watchlist_file):
     return watchlist
 
 
+@retry_on_fd_limit(max_retries=10, initial_wait=1.0, max_wait=30.0)
 def compare_iocs(
     output_directory,
     verbosity,
@@ -45,7 +48,7 @@ def compare_iocs(
     print("      Commencing IOC extraction for '{}'...\n".format(img.split("::")[0]))
     for iocfile in iocfiles:
         if os.path.exists(iocfile.split(": ")[0]):
-            with open(iocfile.split(": ")[0], "r") as reading_for_iocs:
+            with safe_open(iocfile.split(": ")[0], "r") as reading_for_iocs:
                 lines_iocs, current_progress = (
                     {},
                     round(

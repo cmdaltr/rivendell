@@ -12,6 +12,9 @@ cd "$TEST_DIR"
 BATCH_NAME="5a-full_analysis"
 LOG_FILE="$TEST_DIR/logs/${BATCH_NAME}-$(date +%Y%m%d-%H%M%S).log"
 
+# Delay between tests (seconds) - override with: DELAY_BETWEEN_TESTS=60 ./script.sh
+DELAY_BETWEEN_TESTS=${DELAY_BETWEEN_TESTS:-30}
+
 echo "======================================"
 echo "BATCH 5a: Full Analysis"
 echo "======================================"

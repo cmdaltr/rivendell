@@ -31,6 +31,14 @@ from .validators import (
     validate_mode_flags,
     validate_all_arguments,
 )
+from .file_limits import (
+    retry_on_fd_limit,
+    safe_open,
+    FileDescriptorLimitError,
+    get_open_fd_count,
+    get_fd_limit,
+    check_fd_usage,
+)
 
 __all__ = [
     "ElrondError",
@@ -57,4 +65,10 @@ __all__ = [
     "ValidationError",
     "validate_mode_flags",
     "validate_all_arguments",
+    "retry_on_fd_limit",
+    "safe_open",
+    "FileDescriptorLimitError",
+    "get_open_fd_count",
+    "get_fd_limit",
+    "check_fd_usage",
 ]
