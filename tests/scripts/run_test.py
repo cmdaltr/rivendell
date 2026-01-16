@@ -2630,7 +2630,10 @@ def main():
     elif args.run:
         if args.run in TEST_LOOKUP:
             test = TEST_LOOKUP[args.run]
-            run_test(test, args.api_url, wait=args.wait, yes=args.yes)
+            result = run_test(test, args.api_url, wait=args.wait, yes=args.yes)
+            # Exit with non-zero code if test failed
+            if result and result.get("status") in ("failed", "timeout", "connection_error", "http_error"):
+                sys.exit(1)
         else:
             print(f"Test '{args.run}' not found")
             print("Use --list to see available tests")

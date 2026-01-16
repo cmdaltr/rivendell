@@ -4,8 +4,8 @@ Rivendell Image Path Manager
 Manage forensic image paths without reinstalling Rivendell
 
 Usage:
-    python3 scripts/image_paths.py
-    ./scripts/image_paths.py
+    python3 scripts/image-paths.py
+    ./scripts/image-paths.py
 """
 
 import os
