@@ -2179,11 +2179,9 @@ def run_test(test: TestCase, api_url: str, wait: bool = False, yes: bool = False
 
     start_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    print(f"\nSubmitting test: {test.name}")
     print(f"  Description: {test.description}")
     print(f"  Images: {', '.join(test.images) or 'None (Gandalf mode)'}")
     print(f"  API URL: {api_url}")
-    print(f"  Started: {start_time_str}")
 
     last_error = None
     for attempt in range(retries):
@@ -2197,7 +2195,6 @@ def run_test(test: TestCase, api_url: str, wait: bool = False, yes: bool = False
             response.raise_for_status()
             job = response.json()
             print(f"  Job ID: {job['id']}")
-            print(f"  Status: {job['status']}")
 
             if wait:
                 # Use at least 90 minutes timeout, or test estimate if longer
@@ -2239,7 +2236,7 @@ def run_test(test: TestCase, api_url: str, wait: bool = False, yes: bool = False
 
 def wait_for_job(job_id: str, api_url: str, timeout_minutes: int = 60) -> dict:
     """Wait for a job to complete."""
-    print(f"\n  Waiting for job {job_id} to complete (timeout: {timeout_minutes} min)...")
+    print(f"\n  Waiting for job to complete (timeout: {timeout_minutes} min)...")
 
     start_time = time.time()
     timeout_seconds = timeout_minutes * 60
@@ -2248,10 +2245,7 @@ def wait_for_job(job_id: str, api_url: str, timeout_minutes: int = 60) -> dict:
     while True:
         elapsed = time.time() - start_time
         if elapsed > timeout_seconds:
-            end_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(f"\n  TIMEOUT: Job did not complete within {timeout_minutes} minutes")
-            print(f"  Job ID: {job_id}")
-            print(f"  Ended: {end_time_str}")
             return {"status": "timeout", "id": job_id}
 
         try:
@@ -2267,14 +2261,10 @@ def wait_for_job(job_id: str, api_url: str, timeout_minutes: int = 60) -> dict:
                 last_progress = progress
 
             if status in ("completed", "failed", "cancelled"):
-                end_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 elapsed_minutes = int(elapsed / 60)
                 elapsed_seconds = int(elapsed % 60)
 
-                print(f"\n  Final status: {status}")
-                print(f"  Job ID: {job_id}")
-                print(f"  Ended: {end_time_str}")
-                print(f"  Duration: {elapsed_minutes}m {elapsed_seconds}s")
+                print(f"\n  Duration: {elapsed_minutes}m {elapsed_seconds}s")
                 if status == "failed":
                     print(f"  Error: {job.get('error', 'Unknown error')}")
                 return job

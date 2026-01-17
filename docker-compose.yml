@@ -61,12 +61,12 @@ services:
       # Platform-specific mounts - uncomment for your OS:
       # - /mnt:/mnt:ro              # Linux: Mount points (read-only)
       # - /media:/media:ro          # Linux: Ubuntu/Debian mounts (read-only)
-      - /Volumes:/Volumes:ro      # macOS: External drives (read-only)
+      - /Volumes:/Volumes:ro # macOS: External drives (read-only)
       # - D:/:/mnt/d:ro             # Windows: Mount D: drive (example, adjust as needed)
-      - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
-      - /tmp/rivendell:/tmp/rivendell:ro  # Mount for test images in /tmp/rivendell
-      - /tmp/rivendell:/host/tmp/rivendell  # Also mount at /host/tmp/rivendell for frontend compatibility
-      - rivendell_uploads:/tmp/elrond/uploads  # Upload directory
+      - /tmp/rivendell:/tmp/elrond/output # Output directory (accessible at /tmp/rivendell on host)
+      - /tmp/rivendell:/tmp/rivendell:ro # Mount for test images in /tmp/rivendell
+      - /tmp/rivendell:/host/tmp/rivendell # Also mount at /host/tmp/rivendell for frontend compatibility
+      - rivendell_uploads:/tmp/elrond/uploads # Upload directory
     depends_on:
       - redis
       - postgres
@@ -89,11 +89,11 @@ services:
       context: .
       dockerfile: src/web/backend/Dockerfile.forensics
     container_name: rivendell-celery-worker
-    privileged: true  # Required for mounting forensic images
+    privileged: true # Required for mounting forensic images
     devices:
-      - /dev/fuse:/dev/fuse  # Required for FUSE mounts
+      - /dev/fuse:/dev/fuse # Required for FUSE mounts
     cap_add:
-      - SYS_ADMIN  # Required for loop device mounts
+      - SYS_ADMIN # Required for loop device mounts
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
@@ -117,15 +117,15 @@ services:
       # Platform-specific mounts - uncomment for your OS:
       # - /mnt:/mnt                 # Linux: Mount points (read-write for output)
       # - /media:/media             # Linux: Ubuntu/Debian mounts (read-write for output)
-      - /Volumes:/Volumes           # macOS: External drives (read-write for output) - COMMENT OUT ON LINUX/WINDOWS
+      - /Volumes:/Volumes # macOS: External drives (read-write for output) - COMMENT OUT ON LINUX/WINDOWS
       # - D:/:/mnt/d                # Windows: Mount D: drive (example, adjust as needed)
-      - /tmp/rivendell:/tmp/elrond/output  # Output directory (accessible at /tmp/rivendell on host)
-      - /tmp/rivendell:/tmp/rivendell  # Mount for test images in /tmp/rivendell
-      - ./fixtures:/tmp/rivendell/fixtures:ro  # Keywords, YARA rules, IOC watchlists for analysis
-      - rivendell_uploads:/tmp/elrond/uploads  # For uploaded forensic images
+      - /tmp/rivendell:/tmp/elrond/output # Output directory (accessible at /tmp/rivendell on host)
+      - /tmp/rivendell:/tmp/rivendell # Mount for test images in /tmp/rivendell
+      - ./fixtures:/tmp/rivendell/fixtures:ro # Keywords, YARA rules, IOC watchlists for analysis
+      - rivendell_uploads:/tmp/elrond/uploads # For uploaded forensic images
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var
-      - navigator_data:/navigator  # Shared with navigator for ATT&CK Navigator JSON output
+      - navigator_data:/navigator # Shared with navigator for ATT&CK Navigator JSON output
     depends_on:
       - redis
       - postgres
@@ -174,12 +174,13 @@ services:
   # Splunk Enterprise
   splunk:
     image: splunk/splunk:latest
+    platform: linux/amd64
     container_name: rivendell-splunk
     hostname: splunk
     ports:
-      - "8089:8089"  # Splunk API
-      - "7755:8000"  # Splunk Web
-      - "9997:9997"  # Splunk Forwarder
+      - "8089:8089" # Splunk API
+      - "7755:8000" # Splunk Web
+      - "9997:9997" # Splunk Forwarder
     environment:
       - SPLUNK_START_ARGS=--accept-license
       - SPLUNK_GENERAL_TERMS=--accept-sgt-current-at-splunk-com
@@ -187,7 +188,7 @@ services:
     volumes:
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var
-      - /tmp/rivendell:/tmp/elrond/output:ro  # Mount output directory for monitoring
+      - /tmp/rivendell:/tmp/elrond/output:ro # Mount output directory for monitoring
     networks:
       - rivendell-network
     restart: unless-stopped
@@ -219,7 +220,11 @@ services:
       - rivendell-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s -u elastic:rivendell http://localhost:9200/_cluster/health | grep -q '\"status\"'"]
+      test:
+        [
+          "CMD-SHELL",
+          'curl -s -u elastic:rivendell http://localhost:9200/_cluster/health | grep -q ''"status"''',
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -280,7 +285,11 @@ services:
       - rivendell-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:5601/api/status | grep -q 'available'"]
+      test:
+        [
+          "CMD-SHELL",
+          "curl -s http://localhost:5601/api/status | grep -q 'available'",
+        ]
       interval: 30s
       timeout: 10s
       retries: 10

@@ -32,7 +32,7 @@ brew install --cask orbstack
 # python3 scripts/install-rivendell.py
 
 # 3. Configure forensic image paths
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 
 # 4. Start Rivendell in testing mode
 ./scripts/start-testing-mode.sh
@@ -55,7 +55,7 @@ cd tests
 
 ```bash
 # Manage forensic image paths
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 
 # Check job status
 ./scripts/status.sh

@@ -5,13 +5,13 @@ Interactive script to manage forensic image paths in Rivendell without reinstall
 ## Usage
 
 ```bash
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 ```
 
 Or make it executable and run directly:
 ```bash
-chmod +x scripts/image_paths.py
-./scripts/image_paths.py
+chmod +x scripts/image-paths.py
+./scripts/image-paths.py
 ```
 
 ## Features
@@ -170,7 +170,7 @@ Paths are mounted inside containers as:
 ## Example Session
 
 ```bash
-$ python3 scripts/image_paths.py
+$ python3 scripts/image-paths.py
 
 ======================================================================
   Rivendell Image Path Manager
@@ -263,7 +263,7 @@ docker-compose up -d
 ### Adding an External Drive
 
 ```bash
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 # Select: 2. Add paths
 # Enter: /Volumes/ExternalDrive/forensics
 ```
@@ -271,7 +271,7 @@ python3 scripts/image_paths.py
 ### Switching to Different Location
 
 ```bash
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 # Select: 4. Replace all paths
 # Enter new path(s)
 ```
@@ -279,7 +279,7 @@ python3 scripts/image_paths.py
 ### Removing Temporary Paths
 
 ```bash
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 # Select: 3. Remove paths
 # Enter: 2,3 (to remove 2nd and 3rd paths)
 ```
@@ -287,7 +287,7 @@ python3 scripts/image_paths.py
 ### Checking Current Configuration
 
 ```bash
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 # Select: 1. Show current paths
 ```
 

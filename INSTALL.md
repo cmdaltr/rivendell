@@ -229,7 +229,7 @@ API_KEY=your-api-key-here
 The easiest way to configure or update paths:
 
 ```bash
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 ```
 
 **This interactive script lets you:**
@@ -659,7 +659,7 @@ docker-compose logs -f backend
 Update forensic image paths anytime:
 ```bash
 # Interactive path manager
-python3 scripts/image_paths.py
+python3 scripts/image-paths.py
 
 # Options:
 # 1. Show current paths
