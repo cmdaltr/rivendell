@@ -19,6 +19,7 @@ try:
     from .config import settings
     from .auth.routes_simple import router as auth_router  # Simple file-based auth
     from .ai_routes import router as ai_router  # AI assistant routes
+    from .mordor_routes import router as mordor_router  # Mordor dataset management
     from .models.job import (
         Job,
         JobCreate,
@@ -34,6 +35,7 @@ except ImportError:
     from config import settings
     from auth.routes_simple import router as auth_router  # Simple file-based auth
     from ai_routes import router as ai_router  # AI assistant routes
+    from mordor_routes import router as mordor_router  # Mordor dataset management
     from models.job import (
         Job,
         JobCreate,
@@ -115,6 +117,9 @@ app.include_router(auth_router)
 
 # Include AI assistant routes
 app.include_router(ai_router)
+
+# Include Mordor dataset management routes
+app.include_router(mordor_router)
 
 
 @app.get("/")

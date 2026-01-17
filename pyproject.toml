@@ -35,6 +35,7 @@ dependencies = [
     "python-dateutil>=2.8.0",
     "tabulate>=0.8.9",
     "packaging>=21.0",
+    "requests>=2.28.0",
     # Acquisition dependencies (Gandalf)
     "paramiko>=3.3.1",
     "scp>=0.14.5",
@@ -74,6 +75,7 @@ all = [
 rivendell = "src.cli.rivendell:main"
 rivendell-acquire = "src.acquisition.python.gandalf:main"
 rivendell-analyze = "src.analysis.cli:main"
+rivendell-mordor = "src.cli.mordor:main"
 rivendell-web = "src.web.backend.main:start_server"
 # Legacy compatibility
 elrond = "src.analysis.cli:main"

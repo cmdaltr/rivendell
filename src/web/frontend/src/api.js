@@ -202,4 +202,52 @@ export const getStoredUser = () => {
   return userStr ? JSON.parse(userStr) : null;
 };
 
+// ============================================
+// Mordor Datasets API
+// ============================================
+
+export const getMordorCatalog = async (params = {}) => {
+  const response = await api.get('/api/mordor/catalog', { params });
+  return response.data;
+};
+
+export const refreshMordorCatalog = async (force = false) => {
+  const response = await api.post('/api/mordor/catalog/refresh', null, {
+    params: { force }
+  });
+  return response.data;
+};
+
+export const getLocalMordorDatasets = async (params = {}) => {
+  const response = await api.get('/api/mordor/datasets', { params });
+  return response.data;
+};
+
+export const getMordorDataset = async (datasetId) => {
+  const response = await api.get(`/api/mordor/datasets/${datasetId}`);
+  return response.data;
+};
+
+export const downloadMordorDataset = async (datasetId, outputDir = null) => {
+  const response = await api.post(`/api/mordor/datasets/${datasetId}/download`, {
+    output_dir: outputDir
+  });
+  return response.data;
+};
+
+export const deleteMordorDataset = async (datasetId) => {
+  const response = await api.delete(`/api/mordor/datasets/${datasetId}`);
+  return response.data;
+};
+
+export const verifyMordorDataset = async (datasetId) => {
+  const response = await api.get(`/api/mordor/datasets/${datasetId}/verify`);
+  return response.data;
+};
+
+export const getMordorStats = async () => {
+  const response = await api.get('/api/mordor/stats');
+  return response.data;
+};
+
 export default api;

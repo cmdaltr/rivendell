@@ -45,7 +45,7 @@ parser.add_argument(
 )  # outstanding - Out-of-Sequence Windows-based file activity
 parser.add_argument(
     "--Brisk",
-    help="'Brisk Mode.' Invokes Analysis, extractIocs, Navigator, Process, and Userprofiles. You MUST provide either --Collect or --Gandalf depending on whether you've acquired disk images or leveraged gandalf, respectively.",
+    help="'Brisk Mode.' Invokes Analysis, extractIocs, Navigator, Process, and Userprofiles. You MUST provide either --Collect, --Gandalf, or --Mordor depending on your data source.",
     action="store_const",
     const=True,
     default=False,
@@ -81,6 +81,13 @@ parser.add_argument(
 parser.add_argument(
     "--Gandalf",
     help="Read artefacts acquired using gandalf",
+    action="store_const",
+    const=True,
+    default=False,
+)
+parser.add_argument(
+    "--Mordor",
+    help="Read artefacts from OTRF Mordor attack simulation datasets (pre-collected threat data)",
     action="store_const",
     const=True,
     default=False,
@@ -204,14 +211,14 @@ parser.add_argument(
 )
 parser.add_argument(
     "--eXhaustive",
-    help="Exhaustive mode. Invoke all flags: Brisk, Delete, Elastic, Memory, nsrl, Splunk, Timeline, memorytimeline, and Ziparchive. You MUST provide either --Collect or --Gandalf depending on whether you've acquired disk images or leveraged gandalf, respectively.",
+    help="Exhaustive mode. Invoke all flags: Brisk, Delete, Elastic, Memory, nsrl, Splunk, Timeline, memorytimeline, and Ziparchive. You MUST provide either --Collect, --Gandalf, or --Mordor depending on your data source.",
     action="store_const",
     const=True,
     default=False,
 )
 parser.add_argument(
-    "--Mordor",
-    help="'Mordor Mode.' Aggressive threat-hunting analysis. Invokes Analysis, extractIocs, Memory, Navigator, Process, Splunk, Elastic, and Userprofiles. Designed for comprehensive incident response and threat detection. You MUST provide either --Collect or --Gandalf.",
+    "--ThreatHunt",
+    help="'Threat Hunt Mode.' Aggressive threat-hunting analysis. Invokes Analysis, extractIocs, Memory, Navigator, Process, Splunk, Elastic, and Userprofiles. Designed for comprehensive incident response and threat detection. You MUST provide either --Collect, --Gandalf, or --Mordor.",
     action="store_const",
     const=True,
     default=False,
@@ -254,7 +261,8 @@ memorytimeline = args.memorytimeline
 userprofiles = args.Userprofiles
 yara = args.Yara
 exhaustive = args.eXhaustive
-mordor = args.Mordor
+threathunt = args.ThreatHunt
+mordor = args.Mordor  # Input type flag for Mordor datasets
 archive = args.Ziparchive
 
 d = directory[0]
@@ -457,8 +465,8 @@ if __name__ == "__main__":
         # navigator = True  # Removed: Navigator requires Splunk, which slows down brisk mode
         process = True
         userprofiles = True
-    if mordor:
-        # Mordor Mode: Aggressive threat-hunting analysis
+    if threathunt:
+        # Threat Hunt Mode: Aggressive threat-hunting analysis
         analysis = True
         auto = True
         extractiocs = True
@@ -469,6 +477,10 @@ if __name__ == "__main__":
         splunk = True
         elastic = True
         userprofiles = True
+    if mordor:
+        # Mordor input type: Treat like Gandalf (pre-collected artefacts)
+        # Mordor datasets are pre-collected attack simulation data from OTRF
+        gandalf = True  # Mordor datasets behave like Gandalf-collected artefacts
     veryverbose = True
     verbose = True
 
