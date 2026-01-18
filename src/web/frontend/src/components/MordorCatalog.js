@@ -1,25 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { getMordorCatalog, downloadMordorDataset } from '../api';
 
-const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = false }) => {
+const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = false, platform = '', tactic = '', technique = '', selectedDatasets = [], setSelectedDatasets }) => {
   const [datasets, setDatasets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  // Filters
-  const [platform, setPlatform] = useState('');
-  const [tactic, setTactic] = useState('');
-
-  // Statistics
-  const [stats, setStats] = useState({ platforms: {}, tactics: {}, total: 0 });
-
-  // Selected datasets
-  const [selectedDatasets, setSelectedDatasets] = useState([]);
+  const [total, setTotal] = useState(0);
   const [downloading, setDownloading] = useState({});
 
   useEffect(() => {
     loadCatalog();
-  }, [platform, tactic, search]);
+  }, [platform, tactic, technique, search]);
 
   const loadCatalog = async () => {
     try {
@@ -27,16 +18,13 @@ const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = f
       const params = {};
       if (platform) params.platform = platform;
       if (tactic) params.tactic = tactic;
+      if (technique) params.technique = technique;
       if (search) params.search = search;
 
       params.limit = 200; // Request all datasets
       const result = await getMordorCatalog(params);
       setDatasets(result.datasets);
-      setStats({
-        platforms: result.platforms || {},
-        tactics: result.tactics || {},
-        total: result.total
-      });
+      setTotal(result.total);
       setError(null);
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to load catalog');
@@ -58,13 +46,6 @@ const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = f
     } finally {
       setDownloading(prev => ({ ...prev, [datasetId]: false }));
     }
-  };
-
-  const handleBulkDownload = async () => {
-    for (const datasetId of selectedDatasets) {
-      await handleDownload(datasetId);
-    }
-    setSelectedDatasets([]);
   };
 
   const toggleSelect = (datasetId) => {
@@ -132,54 +113,11 @@ const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = f
 
   return (
     <div>
-      {/* Filters */}
-      <div className="dropdown-row" style={{ marginBottom: '1rem' }}>
-        <select
-          className="large-select"
-          value={platform}
-          onChange={(e) => setPlatform(e.target.value)}
-        >
-          <option value="">All Platforms</option>
-          {Object.entries(stats.platforms).map(([p, count]) => (
-            <option key={p} value={p}>{p} ({count})</option>
-          ))}
-        </select>
-
-        <select
-          className="large-select"
-          value={tactic}
-          onChange={(e) => setTactic(e.target.value)}
-        >
-          <option value="">All Tactics</option>
-          {Object.entries(stats.tactics).sort().map(([t, count]) => (
-            <option key={t} value={t}>{t} ({count})</option>
-          ))}
-        </select>
-      </div>
-
-      {selectedDatasets.length > 0 && (
-        <div style={{ marginBottom: '1rem' }}>
-          <button
-            onClick={handleBulkDownload}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'rgba(102, 217, 239, 0.3)',
-              color: '#66d9ef',
-              border: '1px solid #5ac8d8',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Download Selected ({selectedDatasets.length})
-          </button>
-        </div>
-      )}
-
       {error && <div className="error" style={{ marginBottom: '1rem' }}>{error}</div>}
 
       {/* Results */}
       <div style={{ marginBottom: '0.5rem', color: '#888' }}>
-        Showing {filteredDatasets.length} of {stats.total} datasets
+        Showing {filteredDatasets.length} of {total} datasets
         {showDownloadedOnly && ' (downloaded only)'}
       </div>
 

@@ -215,34 +215,88 @@ elrond [FLAGS] CASE_ID SOURCE_PATH OUTPUT_PATH [OPTIONS]
 
 ---
 
-### Analysis Modes
+### Evidence Sources
 
-**Collection Mode** (`-C, --Collect`)
-- Mount disk images
+Evidence sources determine how Elrond reads and interprets the input data:
+
+**Local** (`-C, --Collect`)
+- Mount disk images (E01, RAW, DD, VMDK, VHD/VHDX)
 - Extract artifacts from filesystems
 - Parse MFT, USN Journal, event logs
 - Collect browser artifacts, registry, etc.
 
-**Processing Mode** (`-P, --Process`)
+**Gandalf** (`-G, --Gandalf`)
+- Read artifacts acquired using Gandalf acquisition tool
+- Process pre-collected tarballs from remote/local systems
+
+**Cloud**
+- Process cloud storage acquisitions (AWS S3, Azure Blob, GCP)
+- Analyze CloudTrail, Activity Logs, and cloud audit data
+
+**Mordor** (`--Mordor`)
+- Read artifacts from OTRF Mordor attack simulation datasets
+- Pre-collected threat data for detection testing and research
+
+**JSON**
+- Load configuration from JSON file
+- Automated/scripted analysis with predefined settings
+
+---
+
+### Processing Modes
+
+Processing modes control the depth and scope of analysis:
+
+**Brisk** (`-B, --Brisk`)
+- Optimized balance of speed and thoroughness
+- Enables: Analysis, extractIocs, Navigator, Userprofiles
+- Recommended for most investigations
+
+**Exhaustive** (`-X, --eXhaustive`)
+- Maximum thoroughness with all options enabled
+- Enables: All Brisk options plus Memory, Timeline, NSRL, Splunk, Elastic, Archive
+- Use for comprehensive deep-dive investigations
+
+**Custom**
+- Full control over all processing options
+- Select individual features as needed
+
+**Template**
+- Load a saved template of custom options
+- Reuse configurations across investigations
+
+---
+
+### Processing (Always Enabled)
+
+Processing is always enabled automatically for all evidence sources and processing modes:
 - Parse collected artifacts
 - Convert binary data to CSV/JSON
 - Generate structured reports
-
-**Analysis Mode** (`-A, --Analysis`)
-- Timeline generation
-- IOC extraction
-- Pattern matching
-- YARA scanning
-- Keyword search
+- Note: The `-P, --Process` flag is accepted but redundant
 
 ---
 
 ### Common Flags
 
+**Evidence Source Flags:**
+```
+-C, --Collect               Local disk/memory images
+-G, --Gandalf               Gandalf acquisition archives
+--Mordor                    OTRF Mordor datasets
+```
+
+**Processing Mode Flags:**
+```
+-B, --Brisk                 Brisk mode (balanced speed/thoroughness)
+-X, --eXhaustive            Exhaustive analysis (all artifacts)
+-q, --quick                 Quick analysis (essential artifacts only)
+-Q, --superQuick            Super quick (critical artifacts only)
+```
+
 **Phase Flags:**
 ```
--C, --Collect               Collection phase
--P, --Process               Processing phase
+-P, --Process               Processing phase (always enabled, flag optional)
 -A, --Analysis              Analysis phase
 -M, --Memory                Memory analysis with Volatility3
 -T, --Timeline              Generate timeline with Plaso
@@ -255,14 +309,6 @@ elrond [FLAGS] CASE_ID SOURCE_PATH OUTPUT_PATH [OPTIONS]
 -K, --Keywords FILE         Search for keywords
 -c, --vss                   Process Volume Shadow Copies
 -U, --Userprofiles          Collect user profiles
-```
-
-**Speed Modes:**
-```
--q, --quick                 Quick analysis (essential artifacts only)
--Q, --superQuick            Super quick (critical artifacts only)
--B, --Brisk                 Brisk mode (balanced speed/thoroughness)
--X, --eXhaustive            Exhaustive analysis (all artifacts)
 ```
 
 **SIEM Export:**

@@ -481,6 +481,10 @@ if __name__ == "__main__":
         # Mordor input type: Treat like Gandalf (pre-collected artefacts)
         # Mordor datasets are pre-collected attack simulation data from OTRF
         gandalf = True  # Mordor datasets behave like Gandalf-collected artefacts
+
+    # Process mode is always enabled - it's the core analysis functionality
+    process = True
+
     veryverbose = True
     verbose = True
 

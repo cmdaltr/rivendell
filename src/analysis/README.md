@@ -197,17 +197,24 @@ python elrond.py INC-2025-001 /evidence/disk.E01 /output \
 
 ### Common Options
 
-- `-C, --Collect`: Collect artifacts from disk image
-- `-P, --Process`: Process collected artifacts
+**Evidence Sources:**
+- `-C, --Collect`: Local disk/memory images
+- `-G, --Gandalf`: Gandalf acquisition archives
+- `--Mordor`: OTRF Mordor datasets
+
+**Processing Modes:**
+- `-B, --Brisk`: Balanced speed/thoroughness (recommended)
+- `-X, --eXhaustive`: Comprehensive analysis (all flags)
+- `-q, --quick`: Quick mode (skip hashing/entropy)
+
+**Other Options:**
+- `-P, --Process`: Processing phase (always enabled, flag optional)
 - `-A, --Analysis`: Conduct automated forensic analysis
 - `-M, --Memory`: Analyze memory dumps with Volatility
 - `-T, --Timeline`: Create timeline with Plaso
 - `-U, --Userprofiles`: Collect user profile artifacts
 - `-S, --Splunk`: Export to Splunk
 - `-E, --Elastic`: Export to Elasticsearch
-- `-B, --Brisk`: Quick mode with common options
-- `-X, --eXhaustive`: Comprehensive analysis (all flags)
-- `-q, --quick`: Quick mode (skip hashing/entropy)
 
 ### Non-Interactive Mode (Web/Automation)
 
