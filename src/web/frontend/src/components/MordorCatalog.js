@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { getMordorCatalog, downloadMordorDataset } from '../api';
 
+// Platform icons
+import windowsIcon from '../static/images/windows.png';
+import linuxIcon from '../static/images/linux.png';
+import macosIcon from '../static/images/macos.png';
+import awsIcon from '../static/images/aws.png';
+import azureIcon from '../static/images/azure.png';
+
 const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = false, platform = '', tactic = '', technique = '', selectedDatasets = [], setSelectedDatasets }) => {
   const [datasets, setDatasets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,11 +65,11 @@ const MordorCatalog = ({ onDownloadComplete, search = '', showDownloadedOnly = f
 
   const getPlatformIcon = (platformName) => {
     const platformImages = {
-      'windows': `${process.env.PUBLIC_URL}/images/windows.png`,
-      'linux': `${process.env.PUBLIC_URL}/images/linux.png`,
-      'macos': `${process.env.PUBLIC_URL}/images/macos.png`,
-      'aws': `${process.env.PUBLIC_URL}/images/aws.png`,
-      'azure': `${process.env.PUBLIC_URL}/images/azure.png`,
+      'windows': windowsIcon,
+      'linux': linuxIcon,
+      'macos': macosIcon,
+      'aws': awsIcon,
+      'azure': azureIcon,
     };
 
     const key = platformName?.toLowerCase();

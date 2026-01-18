@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import FileBrowser from './FileBrowser';
 import GandalfJobBrowser from './GandalfJobBrowser';
 import OptionsPanel from './OptionsPanel';
-import { createJob } from '../api';
+import { createJob, getLocalMordorDatasets } from '../api';
 import axios from 'axios';
 
 // File requirements for certain options
@@ -16,7 +16,7 @@ const FILE_REQUIREMENTS = {
 function NewAnalysis() {
   const navigate = useNavigate();
   const [caseNumber, setCaseNumber] = useState('');
-  const [analysisMode, setAnalysisMode] = useState('local'); // 'local', 'gandalf', 'cloud', 'mordor', or 'json'
+  const [analysisMode, setAnalysisMode] = useState(''); // '', 'local', 'gandalf', 'cloud', 'mordor', or 'json'
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [destinationPath, setDestinationPath] = useState('');
   const [options, setOptions] = useState({});
@@ -33,6 +33,12 @@ function NewAnalysis() {
   const fileInputRefs = useRef({});
   const jsonFileInputRef = useRef(null);
   const [loadedConfigName, setLoadedConfigName] = useState(null);
+  // Mordor-specific state
+  const [mordorDatasets, setMordorDatasets] = useState([]);
+  const [selectedMordorDataset, setSelectedMordorDataset] = useState('');
+  const [loadingMordorDatasets, setLoadingMordorDatasets] = useState(false);
+  // Cloud-specific state
+  const [cloudUrl, setCloudUrl] = useState('');
 
   // Clear error when options change
   const handleOptionsChange = (newOptions) => {
@@ -79,6 +85,51 @@ function NewAnalysis() {
         elastic: true,
       }));
     }
+  }, [analysisMode]);
+
+  // Load Mordor datasets when mode is 'mordor'
+  useEffect(() => {
+    if (analysisMode === 'mordor') {
+      const loadMordorDatasets = async () => {
+        setLoadingMordorDatasets(true);
+        try {
+          const result = await getLocalMordorDatasets({ limit: 200 });
+          // Filter to only show downloaded datasets
+          const downloaded = (result.datasets || []).filter(ds => ds.status === 'downloaded');
+          setMordorDatasets(downloaded);
+        } catch (err) {
+          console.error('Failed to load Mordor datasets:', err);
+          setMordorDatasets([]);
+        } finally {
+          setLoadingMordorDatasets(false);
+        }
+      };
+      loadMordorDatasets();
+    }
+  }, [analysisMode]);
+
+  // Update selectedFiles when Mordor dataset is selected
+  useEffect(() => {
+    if (analysisMode === 'mordor' && selectedMordorDataset) {
+      const dataset = mordorDatasets.find(ds => ds.dataset_id === selectedMordorDataset);
+      if (dataset && dataset.local_path) {
+        setSelectedFiles([dataset.local_path]);
+      }
+    }
+  }, [selectedMordorDataset, mordorDatasets, analysisMode]);
+
+  // Update selectedFiles when cloud URL changes
+  useEffect(() => {
+    if (analysisMode === 'cloud' && cloudUrl) {
+      setSelectedFiles([cloudUrl]);
+    }
+  }, [cloudUrl, analysisMode]);
+
+  // Clear selections when mode changes
+  useEffect(() => {
+    setSelectedFiles([]);
+    setSelectedMordorDataset('');
+    setCloudUrl('');
   }, [analysisMode]);
 
   // Validate case number and get validation message
@@ -135,14 +186,19 @@ function NewAnalysis() {
       return;
     }
 
-    if (selectedFiles.length === 0) {
-      setError('Please select at least one disk or memory image');
+    if (!analysisMode) {
+      setError('Please select an evidence source');
       return;
     }
 
-    // Check operation mode is selected (JSON mode bypasses this check as it's pre-configured)
-    if (analysisMode !== 'json' && !options.collect && !options.gandalf) {
-      setError('Please select an operation mode (Collect or Gandalf)');
+    if (selectedFiles.length === 0) {
+      if (analysisMode === 'mordor') {
+        setError('Please select a Mordor dataset');
+      } else if (analysisMode === 'cloud') {
+        setError('Please enter a cloud storage URL');
+      } else {
+        setError('Please select at least one disk or memory image');
+      }
       return;
     }
 
@@ -934,7 +990,7 @@ function NewAnalysis() {
                 </label>
                 <label
                   style={{ display: 'flex', alignItems: 'center', cursor: isCaseNumberValid ? 'pointer' : 'not-allowed', opacity: isCaseNumberValid ? 1 : 0.5, fontSize: '1.2rem', whiteSpace: 'nowrap' }}
-                  title="Aggressive threat-hunting with full SIEM integration"
+                  title="OTRF Security Datasets - Pre-recorded attack simulations"
                 >
                   <input
                     type="radio"
@@ -981,29 +1037,166 @@ function NewAnalysis() {
             </div>
           </div>
 
-          <div className="form-group">
-            <label>
-              {analysisMode === 'gandalf' ? 'Select Gandalf Acquisitions *' : 'Select Disk/Memory Images *'}
-            </label>
-            {!isCaseNumberValid && (
-              <div className="info-message">
-                Please enter a valid case number to continue.
+          {/* Evidence Source Selector - Only show when a source is selected */}
+          {analysisMode && analysisMode !== 'json' && (
+            <div className="form-group">
+              <label>
+                {analysisMode === 'gandalf' && 'Select Gandalf Acquisitions *'}
+                {analysisMode === 'local' && 'Select Disk/Memory Images *'}
+                {analysisMode === 'mordor' && 'Select Mordor Dataset *'}
+                {analysisMode === 'cloud' && 'Cloud Storage URL *'}
+              </label>
+
+              {/* Local: File Browser */}
+              {analysisMode === 'local' && (
+                <FileBrowser
+                  onSelectFiles={setSelectedFiles}
+                  selectedFiles={selectedFiles}
+                  disabled={!isCaseNumberValid}
+                />
+              )}
+
+              {/* Gandalf: Gandalf Job Browser */}
+              {analysisMode === 'gandalf' && (
+                <GandalfJobBrowser
+                  onSelectJobs={setSelectedFiles}
+                  selectedJobs={selectedFiles}
+                  disabled={!isCaseNumberValid}
+                />
+              )}
+
+              {/* Mordor: Dropdown of downloaded datasets */}
+              {analysisMode === 'mordor' && (
+                <div style={{
+                  background: 'rgba(15, 15, 35, 0.6)',
+                  border: '1px solid rgba(240, 219, 165, 0.3)',
+                  borderRadius: '6px',
+                  padding: '1rem'
+                }}>
+                  {loadingMordorDatasets ? (
+                    <div style={{ color: '#888', textAlign: 'center', padding: '1rem' }}>
+                      Loading downloaded datasets...
+                    </div>
+                  ) : mordorDatasets.length === 0 ? (
+                    <div style={{ color: '#f0dba5', textAlign: 'center', padding: '1rem' }}>
+                      <p>No downloaded Mordor datasets found.</p>
+                      <p style={{ color: '#888', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                        Visit the <a href="/mordor" style={{ color: '#66d9ef' }}>Mordor page</a> to download datasets first.
+                      </p>
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedMordorDataset}
+                      onChange={(e) => setSelectedMordorDataset(e.target.value)}
+                      disabled={!isCaseNumberValid}
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        fontSize: '1rem',
+                        background: 'rgba(15, 15, 35, 0.8)',
+                        border: '1px solid rgba(240, 219, 165, 0.3)',
+                        borderRadius: '4px',
+                        color: '#f0dba5'
+                      }}
+                    >
+                      <option value="">-- Select a downloaded dataset --</option>
+                      {mordorDatasets.map(ds => (
+                        <option key={ds.dataset_id} value={ds.dataset_id}>
+                          {ds.title} ({ds.dataset_id}) - {ds.platform}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {selectedMordorDataset && (
+                    <div style={{ marginTop: '0.75rem', color: '#a7db6c', fontSize: '0.9rem' }}>
+                      Selected: {mordorDatasets.find(ds => ds.dataset_id === selectedMordorDataset)?.local_path}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Cloud: URL input for S3/Azure */}
+              {analysisMode === 'cloud' && (
+                <div style={{
+                  background: 'rgba(15, 15, 35, 0.6)',
+                  border: '1px solid rgba(240, 219, 165, 0.3)',
+                  borderRadius: '6px',
+                  padding: '1rem'
+                }}>
+                  <p style={{ color: '#888', marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+                    Enter the URL for your cloud storage location (AWS S3 bucket or Azure Blob container)
+                  </p>
+                  <input
+                    type="text"
+                    value={cloudUrl}
+                    onChange={(e) => setCloudUrl(e.target.value)}
+                    placeholder="s3://bucket-name/path or https://account.blob.core.windows.net/container/path"
+                    disabled={!isCaseNumberValid}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1rem',
+                      background: 'rgba(15, 15, 35, 0.8)',
+                      border: '1px solid rgba(240, 219, 165, 0.3)',
+                      borderRadius: '4px',
+                      color: '#f0dba5'
+                    }}
+                  />
+                  {cloudUrl && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        background: cloudUrl.startsWith('s3://') ? 'rgba(255, 153, 0, 0.2)' :
+                                   cloudUrl.includes('blob.core.windows.net') ? 'rgba(0, 120, 212, 0.2)' :
+                                   'rgba(240, 219, 165, 0.2)',
+                        color: cloudUrl.startsWith('s3://') ? '#ff9900' :
+                               cloudUrl.includes('blob.core.windows.net') ? '#0078d4' :
+                               '#f0dba5'
+                      }}>
+                        {cloudUrl.startsWith('s3://') ? 'AWS S3' :
+                         cloudUrl.includes('blob.core.windows.net') ? 'Azure Blob' :
+                         'Cloud Storage'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* JSON mode shows loaded config info */}
+          {analysisMode === 'json' && loadedConfigName && (
+            <div className="form-group">
+              <label>Loaded Configuration</label>
+              <div style={{
+                background: 'rgba(15, 15, 35, 0.6)',
+                border: '1px solid rgba(167, 219, 108, 0.3)',
+                borderRadius: '6px',
+                padding: '1rem'
+              }}>
+                <div style={{ color: '#a7db6c' }}>
+                  ✓ Configuration loaded from: {loadedConfigName}
+                </div>
+                {selectedFiles.length > 0 && (
+                  <div style={{ marginTop: '0.5rem', color: '#888', fontSize: '0.9rem' }}>
+                    Source paths: {selectedFiles.join(', ')}
+                  </div>
+                )}
               </div>
-            )}
-            {analysisMode === 'gandalf' ? (
-              <GandalfJobBrowser
-                onSelectJobs={setSelectedFiles}
-                selectedJobs={selectedFiles}
-                disabled={!isCaseNumberValid}
-              />
-            ) : (
-              <FileBrowser
-                onSelectFiles={setSelectedFiles}
-                selectedFiles={selectedFiles}
-                disabled={!isCaseNumberValid}
-              />
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Prompt to select evidence source if none selected */}
+          {!analysisMode && isCaseNumberValid && (
+            <div className="form-group">
+              <div className="info-message">
+                Please select an evidence source above to continue.
+              </div>
+            </div>
+          )}
 
           <div className="form-group">
             <label>Processing Options</label>
@@ -1012,15 +1205,24 @@ function NewAnalysis() {
                 Please enter a valid case number to configure processing options.
               </div>
             )}
-            {isCaseNumberValid && selectedFiles.length === 0 && (
+            {isCaseNumberValid && !analysisMode && (
               <div className="info-message">
-                Please select at least one disk or memory image to configure processing options.
+                Please select an evidence source to configure processing options.
+              </div>
+            )}
+            {isCaseNumberValid && analysisMode && selectedFiles.length === 0 && (
+              <div className="info-message">
+                {analysisMode === 'mordor' && 'Please select a Mordor dataset to configure processing options.'}
+                {analysisMode === 'cloud' && 'Please enter a cloud storage URL to configure processing options.'}
+                {analysisMode === 'local' && 'Please select at least one disk or memory image to configure processing options.'}
+                {analysisMode === 'gandalf' && 'Please select a Gandalf acquisition to configure processing options.'}
+                {analysisMode === 'json' && 'Please load a JSON configuration file to configure processing options.'}
               </div>
             )}
             <OptionsPanel
               options={options}
               onChange={handleOptionsChange}
-              disabled={!isCaseNumberValid || selectedFiles.length === 0}
+              disabled={!isCaseNumberValid || selectedFiles.length === 0 || !analysisMode}
               hasImages={selectedFiles.length > 0}
               onSubmit={handleSubmit}
               loading={loading}
