@@ -8,7 +8,7 @@ import os
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy import create_engine, Column, String, Integer, Text, DateTime, Enum as SQLEnum, JSON
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker, declarative_base, defer
 from sqlalchemy.pool import NullPool
 
 try:
@@ -74,7 +74,7 @@ class JobStorage:
         # Create tables if they don't exist
         Base.metadata.create_all(self.engine)
 
-    def _job_model_to_pydantic(self, job_model: JobModel) -> Job:
+    def _job_model_to_pydantic(self, job_model: JobModel, include_log: bool = True) -> Job:
         """Convert SQLAlchemy model to Pydantic model."""
         return Job(
             id=job_model.id,
@@ -84,7 +84,7 @@ class JobStorage:
             options=job_model.options,
             status=JobStatus(job_model.status),
             progress=job_model.progress,
-            log=job_model.log or [],
+            log=job_model.log or [] if include_log else [],
             result=job_model.result,
             error=job_model.error,
             celery_task_id=job_model.celery_task_id,
@@ -190,14 +190,19 @@ class JobStorage:
         """
         session = self.Session()
         try:
-            query = session.query(JobModel).order_by(JobModel.created_at.desc())
+            query = (
+                session.query(JobModel)
+                .options(defer(JobModel.log))  # log can be 10MB+; excluded from list
+                .order_by(JobModel.created_at.desc())
+            )
 
             if status:
                 query = query.filter_by(status=status.value)
 
             job_models = query.offset(offset).limit(limit).all()
 
-            return [self._job_model_to_pydantic(jm) for jm in job_models]
+            # include_log=False: don't touch the deferred log attribute
+            return [self._job_model_to_pydantic(jm, include_log=False) for jm in job_models]
         finally:
             session.close()
 

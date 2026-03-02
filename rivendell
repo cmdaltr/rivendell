@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# rivendell - Manage the Rivendell forensics platform
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# ── Detect docker compose ─────────────────────────────────────────────────────
+if docker compose version &>/dev/null 2>&1; then
+    DC="docker compose"
+elif command -v docker-compose &>/dev/null; then
+    DC="docker-compose"
+else
+    echo "Error: docker compose is not available." >&2
+    exit 1
+fi
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") <command> [options]
+
+Commands:
+  start     Start all services
+  stop      Stop all services
+  restart   Restart all services
+  status    Show service status and health
+
+Options:
+  --testing   Testing mode: skips Splunk/Elastic (optimised for 16GB RAM)
+  --logs      Tail logs after start/restart
+
+Examples:
+  ./rivendell start
+  ./rivendell start --testing --logs
+  ./rivendell restart
+  ./rivendell status
+  ./rivendell stop
+EOF
+}
+
+ensure_docker() {
+    if docker info &>/dev/null 2>&1; then
+        return 0
+    fi
+    echo "Docker is not running."
+    if [[ "$(uname)" == "Darwin" ]]; then
+        # Prefer OrbStack, fall back to Docker Desktop
+        if command -v orb &>/dev/null; then
+            echo "Starting OrbStack..."
+            open -a OrbStack
+        elif open -a OrbStack &>/dev/null 2>&1; then
+            echo "Starting OrbStack..."
+        else
+            echo "Starting Docker Desktop..."
+            open -a Docker
+        fi
+        for i in $(seq 1 60); do
+            sleep 1
+            if docker info &>/dev/null 2>&1; then
+                echo "Docker started."
+                return 0
+            fi
+        done
+        echo "Error: Docker did not start in time. Please start it manually." >&2
+        exit 1
+    else
+        echo "Error: Docker is not running. Start it and retry." >&2
+        exit 1
+    fi
+}
+
+compose_cmd() {
+    $DC $COMPOSE_FILES "$@"
+}
+
+print_urls() {
+    echo ""
+    if $TESTING; then
+        echo "  Frontend:    http://localhost:5687"
+        echo "  Backend API: http://localhost:5688"
+        echo ""
+        echo "  (Splunk, Kibana, Elasticsearch, Navigator disabled in testing mode)"
+    else
+        echo "  Frontend:      http://localhost:5687"
+        echo "  Backend API:   http://localhost:5688"
+        echo "  Splunk:        http://localhost:7755"
+        echo "  Kibana:        http://localhost:5601"
+        echo "  Elasticsearch: http://localhost:9200"
+        echo "  Navigator:     http://localhost:5602"
+    fi
+    echo ""
+    echo "  Credentials:   admin / rivendell"
+    echo ""
+}
+
+# ── Commands ──────────────────────────────────────────────────────────────────
+do_start() {
+    ensure_docker
+    echo "Starting Rivendell..."
+    compose_cmd up -d
+    print_urls
+    if $FOLLOW_LOGS; then
+        compose_cmd logs -f
+    fi
+}
+
+do_stop() {
+    ensure_docker
+    echo "Stopping Rivendell..."
+    compose_cmd down --remove-orphans 2>/dev/null || true
+    echo "Stopped."
+}
+
+do_restart() {
+    do_stop
+    do_start
+}
+
+do_status() {
+    ensure_docker
+    echo "Rivendell service status:"
+    echo ""
+    compose_cmd ps
+}
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+COMMAND=""
+TESTING=false
+FOLLOW_LOGS=false
+
+for arg in "$@"; do
+    case "$arg" in
+        start|stop|restart|status) COMMAND="$arg" ;;
+        --testing) TESTING=true ;;
+        --logs)    FOLLOW_LOGS=true ;;
+        --help|-h) usage; exit 0 ;;
+        *)
+            echo "Error: unknown argument: $arg" >&2
+            echo "" >&2
+            usage >&2
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$COMMAND" ]]; then
+    echo "Error: no command specified." >&2
+    echo "" >&2
+    usage >&2
+    exit 1
+fi
+
+# Build compose file list
+COMPOSE_FILES="-f docker-compose.yml"
+if $TESTING; then
+    COMPOSE_FILES="$COMPOSE_FILES -f tests/docker-compose.testing.yml"
+fi
+
+# ── Dispatch ──────────────────────────────────────────────────────────────────
+case "$COMMAND" in
+    start)   do_start ;;
+    stop)    do_stop ;;
+    restart) do_restart ;;
+    status)  do_status ;;
+esac

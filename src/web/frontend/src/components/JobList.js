@@ -824,7 +824,7 @@ function JobList() {
                     </td>
                     <td>
                       <span className={getStatusClass(job.status)}>
-                        {job.status}
+                        {job.status.replace(/_/g, ' ')}
                       </span>
                     </td>
                     <td>

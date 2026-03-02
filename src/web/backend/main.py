@@ -152,7 +152,10 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
     """
     try:
         # Security: Only allow browsing specific paths
-        path_obj = Path(path).resolve()
+        try:
+            path_obj = Path(path).resolve()
+        except OSError:
+            raise HTTPException(status_code=404, detail="Path not found")
         allowed = any(
             str(path_obj).startswith(allowed_path)
             for allowed_path in settings.allowed_paths
@@ -250,6 +253,10 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
 
     except HTTPException:
         raise
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Path not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
