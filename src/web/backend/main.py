@@ -13,7 +13,8 @@ from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 
 try:
     from .config import settings
@@ -124,7 +125,9 @@ app.include_router(mordor_router)
 
 @app.get("/")
 async def root():
-    """Root endpoint."""
+    _index = Path(__file__).parent.parent / "frontend" / "build" / "index.html"
+    if _index.exists():
+        return FileResponse(str(_index))
     return {
         "name": settings.app_name,
         "version": settings.app_version,
@@ -1195,6 +1198,20 @@ async def upload_required_files_impl(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Serve React frontend build
+_BUILD_DIR = Path(__file__).parent.parent / "frontend" / "build"
+if _BUILD_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(_BUILD_DIR / "static")), name="react-static")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Serve known root-level build assets directly
+        candidate = _BUILD_DIR / full_path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        return FileResponse(str(_BUILD_DIR / "index.html"))
 
 
 if __name__ == "__main__":
