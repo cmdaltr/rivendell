@@ -135,3 +135,8 @@ elastic_credentials.txt
 /tests/temp/
 /tests/results/
 *.test.log
+
+# Security / hygiene (added by FlightDeck)
+*.pem
+secrets.*
+credentials.*
