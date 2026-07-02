@@ -163,10 +163,7 @@ def install_splunk_stack(
         "/" + splunk_install_path + "splunk/etc/system/local/user-seed.conf", "w"
     ) as splunkuserfile:
         splunkuserfile.write(
-            "[user_info]\nUSERNAME = "
-            + requser
-            + "\nHASHED_PASSWORD = "
-            + str(pswdhash)[2:-3]
+            f"[user_info]\nUSERNAME = {requser}\nHASHED_PASSWORD = {str(pswdhash)[2:-3]}"
         )
     subprocess.Popen(
         [

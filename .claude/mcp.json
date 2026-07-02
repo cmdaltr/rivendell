@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GH_PAT_READONLY}"
+      }
+    },
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${PROJECT_ROOT}"],
+      "env": {}
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "DATABASE_URL": "${RIVENDELL_DB_RO_URL}"
+      }
+    }
+  }
+}
+
+// RIVENDELL_DB_RO_URL — read-only Postgres user only.
+// SQLite (default) does not need MCP; enable Postgres MCP only on production deployments.
+// evidence/ directory is write-denied in settings.json — do not add filesystem MCP write access to it.

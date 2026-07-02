@@ -133,7 +133,7 @@ curl -X POST http://localhost:5688/api/auth/register \
   -d '{
     "email": "analyst@company.com",
     "username": "analyst1",
-    "password": "SecurePass123!",
+    "password": "<your-password>",
     "full_name": "Security Analyst"
   }'
 ```
