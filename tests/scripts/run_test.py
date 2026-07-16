@@ -2500,6 +2500,114 @@ def run_tests_by_tags(tags: List[str], api_url: str, wait: bool = False, yes: bo
         print(f"  {r['test']:<30} {status}")
 
 
+def delete_all_jobs(api_url: str):
+    """Delete all completed, failed, and cancelled jobs."""
+    if not HAS_REQUESTS:
+        print("ERROR: 'requests' library required. Install with: pip install requests")
+        sys.exit(1)
+
+    try:
+        response = requests.get(f"{api_url}/api/jobs", timeout=30)
+        response.raise_for_status()
+        jobs = response.json().get("jobs", [])
+
+        to_delete = [
+            job["id"] for job in jobs
+            if job.get("status", "").lower() in ("completed", "failed", "cancelled")
+        ]
+
+        if not to_delete:
+            print("No completed/failed/cancelled jobs to delete.")
+            return
+
+        print(f"Found {len(to_delete)} jobs to delete...")
+        response = requests.post(
+            f"{api_url}/api/jobs/bulk/delete",
+            json=to_delete,
+            headers={"Content-Type": "application/json"},
+            timeout=60,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        deleted = sum(1 for r in result.get("results", []) if r.get("success"))
+        print(f"Successfully deleted {deleted}/{len(to_delete)} jobs.")
+
+        for r in result.get("results", []):
+            if not r.get("success"):
+                print(f"  Failed to delete {r.get('job_id')}: {r.get('error')}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Failed to delete jobs: {e}")
+        sys.exit(1)
+
+
+def rerun_failed_jobs(api_url: str, wait: bool = False):
+    """Restart all failed jobs."""
+    if not HAS_REQUESTS:
+        print("ERROR: 'requests' library required. Install with: pip install requests")
+        sys.exit(1)
+
+    try:
+        response = requests.get(f"{api_url}/api/jobs", timeout=30)
+        response.raise_for_status()
+        jobs = response.json().get("jobs", [])
+
+        to_restart = [
+            job["id"] for job in jobs
+            if job.get("status", "").lower() == "failed"
+        ]
+
+        if not to_restart:
+            print("No failed jobs to restart.")
+            return
+
+        print(f"Found {len(to_restart)} failed jobs to restart...")
+        response = requests.post(
+            f"{api_url}/api/jobs/bulk/restart",
+            json=to_restart,
+            headers={"Content-Type": "application/json"},
+            timeout=60,
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        restarted = sum(1 for r in result.get("results", []) if r.get("success"))
+        print(f"Successfully restarted {restarted}/{len(to_restart)} jobs.")
+
+        for r in result.get("results", []):
+            if not r.get("success"):
+                print(f"  Failed to restart {r.get('job_id')}: {r.get('error')}")
+
+        if wait and restarted > 0:
+            print("\nWaiting for restarted jobs to complete...")
+            _wait_for_jobs(to_restart, api_url)
+
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: Failed to restart jobs: {e}")
+        sys.exit(1)
+
+
+def _wait_for_jobs(job_ids: list, api_url: str):
+    """Poll until all specified jobs reach a terminal state."""
+    import time
+    terminal = {"completed", "failed", "cancelled", "timeout"}
+    pending = set(job_ids)
+    while pending:
+        time.sleep(10)
+        try:
+            response = requests.get(f"{api_url}/api/jobs", timeout=30)
+            response.raise_for_status()
+            jobs = {j["id"]: j for j in response.json().get("jobs", [])}
+        except requests.exceptions.RequestException:
+            continue
+        done = {jid for jid in pending if jobs.get(jid, {}).get("status", "").lower() in terminal}
+        for jid in done:
+            status = jobs[jid].get("status", "?")
+            print(f"  {jid}: {status}")
+        pending -= done
+
+
 def cancel_all_jobs(api_url: str):
     """Cancel all running and pending jobs."""
     if not HAS_REQUESTS:
@@ -2590,12 +2698,22 @@ def main():
     parser.add_argument(
         "--cancel-all", action="store_true", help="Cancel all running and pending jobs"
     )
+    parser.add_argument(
+        "--delete-all", action="store_true", help="Delete all completed/failed/cancelled jobs"
+    )
+    parser.add_argument(
+        "--rerun-failed", action="store_true", help="Restart all failed jobs"
+    )
     parser.add_argument("--api-url", default=API_URL, help=f"API URL (default: {API_URL})")
 
     args = parser.parse_args()
 
     if args.cancel_all:
         cancel_all_jobs(args.api_url)
+    elif args.delete_all:
+        delete_all_jobs(args.api_url)
+    elif args.rerun_failed:
+        rerun_failed_jobs(args.api_url, wait=args.wait)
     elif args.list:
         list_tests(args.tags)
     elif args.generate_jobs:
