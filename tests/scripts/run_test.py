@@ -35,6 +35,7 @@ or defaults to /Volumes/Media5TB/rivendell_imgs/
 import os
 import sys
 import json
+import shutil
 import argparse
 import time
 from dataclasses import dataclass, field, asdict
@@ -2500,8 +2501,14 @@ def run_tests_by_tags(tags: List[str], api_url: str, wait: bool = False, yes: bo
         print(f"  {r['test']:<30} {status}")
 
 
+def _resolve_output_dir(job: dict) -> Optional[str]:
+    """Return the output directory for a job, or None if not set."""
+    result = job.get("result") or {}
+    return result.get("output_directory") or job.get("destination_path")
+
+
 def delete_all_jobs(api_url: str):
-    """Delete all completed, failed, and cancelled jobs."""
+    """Delete all completed, failed, and cancelled jobs from the DB and purge their output dirs."""
     if not HAS_REQUESTS:
         print("ERROR: 'requests' library required. Install with: pip install requests")
         sys.exit(1)
@@ -2511,16 +2518,26 @@ def delete_all_jobs(api_url: str):
         response.raise_for_status()
         jobs = response.json().get("jobs", [])
 
-        to_delete = [
-            job["id"] for job in jobs
+        eligible = [
+            job for job in jobs
             if job.get("status", "").lower() in ("completed", "failed", "cancelled")
         ]
 
-        if not to_delete:
+        if not eligible:
             print("No completed/failed/cancelled jobs to delete.")
             return
 
-        print(f"Found {len(to_delete)} jobs to delete...")
+        print(f"Found {len(eligible)} jobs to delete...")
+
+        # Remove output directories from disk first
+        for job in eligible:
+            output_dir = _resolve_output_dir(job)
+            if output_dir and os.path.isdir(output_dir):
+                print(f"  Purging {output_dir}")
+                shutil.rmtree(output_dir, ignore_errors=True)
+
+        # Remove DB records
+        to_delete = [job["id"] for job in eligible]
         response = requests.post(
             f"{api_url}/api/jobs/bulk/delete",
             json=to_delete,
