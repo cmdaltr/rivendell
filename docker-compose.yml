@@ -130,8 +130,6 @@ services:
       - redis
       - postgres
       - backend
-      - splunk
-      - elastic
     networks:
       - rivendell-network
     restart: unless-stopped
@@ -173,6 +171,7 @@ services:
 
   # Splunk Enterprise
   splunk:
+    profiles: [siem]
     image: splunk/splunk:latest
     platform: linux/amd64
     container_name: rivendell-splunk
@@ -201,6 +200,7 @@ services:
 
   # Elasticsearch
   elastic:
+    profiles: [siem]
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     container_name: rivendell-elastic
     hostname: elastic
@@ -238,6 +238,7 @@ services:
 
   # Elasticsearch setup - initializes passwords for built-in users
   elastic-setup:
+    profiles: [siem]
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
     container_name: rivendell-elastic-setup
     depends_on:
@@ -267,6 +268,7 @@ services:
 
   # Kibana
   kibana:
+    profiles: [siem]
     image: docker.elastic.co/kibana/kibana:8.11.0
     container_name: rivendell-kibana
     hostname: kibana
@@ -301,6 +303,7 @@ services:
 
   # Kibana dashboard setup - imports Rivendell dashboards
   kibana-setup:
+    profiles: [siem]
     image: curlimages/curl:latest
     container_name: rivendell-kibana-setup
     depends_on:
@@ -354,6 +357,7 @@ services:
 
   # ATT&CK Navigator
   navigator:
+    profiles: [siem]
     image: node:18-alpine
     container_name: rivendell-navigator
     hostname: navigator

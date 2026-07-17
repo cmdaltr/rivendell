@@ -9,23 +9,37 @@ Get up and running with Rivendell DF Acceleration Suite in minutes!
 git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 
-# Start all services
-docker-compose up -d
+# Start core services (postgres, redis, backend, celery-worker, frontend)
+docker compose up -d
 
 # Access web interface
-open http://localhost:8000
+open http://localhost:5688
 
 # Access API documentation
-open http://localhost:8000/docs
+open http://localhost:5688/docs
 
 # Check status
-docker-compose ps
+docker compose ps
 
 # View logs
-docker-compose logs -f rivendell
+docker compose logs -f backend
 ```
 
-**That's it!** The web interface is now available at http://localhost:8000
+**That's it!** The web interface is available at http://localhost:5688 (or http://rivendell.lab if using FlightDeck with the local proxy).
+
+SIEM services (Splunk, Elasticsearch, Kibana, ATT&CK Navigator) are optional and gated behind the `siem` profile. Start them separately once the core stack is healthy:
+
+```bash
+docker compose --profile siem up -d
+```
+
+Stop only the SIEM stack without touching the core services:
+
+```bash
+docker compose stop splunk elastic elastic-setup kibana kibana-setup navigator
+```
+
+If you use [FlightDeck](https://github.com/cmdaltr/FlightDeck) to manage your homelab, the equivalent commands are `fd start rivendell` and `fd start rivendell-siem`.
 
 ## 🔧 Quick Start (Local Installation)
 

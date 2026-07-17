@@ -1,161 +1,138 @@
-# Elrond Web Interface - Quick Start Guide
-
-Get up and running with the Elrond Web Interface in 5 minutes!
+# Rivendell Web Interface - Quick Start
 
 ## Prerequisites
 
-- **Docker Desktop** (Recommended) - [Download here](https://www.docker.com/products/docker-desktop)
-- OR Python 3.10+, Node.js 18+, and Redis
+- Docker (OrbStack or Docker Desktop)
+- OR Python 3.10+, Node.js 18+, Redis (for local dev)
 
-## Quick Start with Docker (Easiest)
+## Quick Start (Docker)
 
-### 1. Navigate to the web directory
+From the repo root:
+
 ```bash
-cd elrond/web
+docker compose up -d
 ```
 
-### 2. Run the startup script
+This starts the core stack: postgres, redis, backend (FastAPI), celery-worker, and frontend (React).
+
+Access points:
+- **Web Interface**: http://localhost:5688 (or http://rivendell.lab via FlightDeck local proxy)
+- **API docs**: http://localhost:5688/docs
+- **Frontend (React)**: http://localhost:5687
+
+### Optional: SIEM stack
+
+Splunk, Elasticsearch, Kibana, and ATT&CK Navigator are profile-gated. Start them separately once the core stack is healthy:
+
 ```bash
-./start.sh
+docker compose --profile siem up -d
 ```
 
-That's it! The script will:
-- ✅ Check prerequisites
-- ✅ Create configuration files
-- ✅ Build Docker containers
-- ✅ Start all services
-- ✅ Display access URLs
-
-### 3. Open in your browser
-- **Web Interface**: http://localhost:3000
-- **API Documentation**: http://localhost:5688/docs
-- **Splunk**: http://localhost:7755 (username: admin, password: rivendell)
-- **Kibana**: http://localhost:5601
+SIEM access points once running:
+- **Splunk Web**: http://localhost:7755 (admin / rivendell)
+- **Kibana**: http://localhost:5601 (elastic / rivendell)
 - **Elasticsearch**: http://localhost:9200
+- **ATT&CK Navigator**: http://localhost:5602
 
-## Using the Web Interface
+Stop only the SIEM containers without tearing down the core stack:
 
-### Start Your First Analysis
+```bash
+docker compose stop splunk elastic elastic-setup kibana kibana-setup navigator
+```
 
-1. **Go to "New Analysis"** page
-2. **Enter a Case Number**: e.g., "INC-2025-001"
-3. **Select Images**:
-   - Click through the file browser
-   - Select disk images (.e01, .raw, .dd, .img, etc.)
-   - Multiple selections supported
-4. **Configure Options**:
-   - Browse option categories (Operation, Analysis, Collection, etc.)
-   - Check boxes for desired features
-   - **Required**: Select at least one operation mode (Collect or Gandalf)
-5. **Click "Start Analysis"**
+### FlightDeck shortcuts
 
-### Monitor Progress
+If you use [FlightDeck](https://github.com/cmdaltr/FlightDeck):
 
-1. **Go to "Jobs"** page
-2. View all running and completed analyses
-3. Click on any job to see:
-   - Real-time progress
-   - Live log output
-   - Enabled options
-   - Results when complete
+```bash
+fd start rivendell        # start core stack
+fd start rivendell-siem   # start SIEM stack (core must be running)
+fd stop  rivendell-siem   # stop SIEM stack only
+fd stop  rivendell        # stop core stack
+```
 
 ## Common Commands
 
 ```bash
 # View logs
-docker-compose logs -f
+docker compose logs -f
+
+# View logs for a specific service
+docker compose logs -f backend
 
 # Restart services
-docker-compose restart
+docker compose restart
 
-# Stop everything
-docker-compose down
+# Stop everything (core only)
+docker compose down
 
 # Rebuild after code changes
-docker-compose build
-docker-compose up -d
+docker compose up --build -d
 ```
 
 ## Troubleshooting
 
 ### "Cannot access /mnt or /media directories"
-The Docker container needs access to where your disk images are stored.
 
-**Solution**: Edit `docker-compose.yml` and add your image location:
+The container needs access to where your disk images are stored. Edit `docker-compose.yml` and add a volume mount:
+
 ```yaml
 volumes:
   - /path/to/your/images:/mnt/images:ro
 ```
 
 Then restart:
+
 ```bash
-docker-compose down
-docker-compose up -d
+docker compose down && docker compose up -d
 ```
 
 ### "Redis connection failed"
-**Solution**: Restart the Redis container:
+
 ```bash
-docker-compose restart redis
+docker compose restart redis
 ```
 
-### "Port 3000 or 8000 already in use"
-**Solution**: Change ports in `docker-compose.yml`:
+### "Port already in use"
+
+Change the host-side port in `docker-compose.yml`:
+
 ```yaml
 ports:
-  - "3001:3000"  # Change 3001 to any available port
+  - "5689:5688"  # map to a different host port
 ```
 
 ## File Locations
 
-- **Job Data**: `/tmp/elrond/output/jobs/`
-- **Analysis Output**: `/tmp/elrond/output/`
-- **Configuration**: `backend/.env`
+- **Job output**: `/tmp/rivendell/` (on host)
+- **Uploaded images**: managed via `rivendell_uploads` Docker volume
+- **Backend config**: `src/web/backend/.env`
 
 ## Manual Installation (Without Docker)
 
-If you prefer not to use Docker:
-
-### Backend
 ```bash
-cd backend
+cd src/web/backend
 pip install -r requirements.txt
 cp .env.example .env
 
-# Terminal 1: Start Redis
+# Terminal 1: Redis
 redis-server
 
-# Terminal 2: Start Backend
-uvicorn main:app --reload
+# Terminal 2: Backend
+uvicorn main:app --host 0.0.0.0 --port 5688 --reload
 
-# Terminal 3: Start Celery Worker
-celery -A tasks.celery_app worker --loglevel=info
+# Terminal 3: Celery worker
+celery -A tasks_docker.celery_app worker --loglevel=info
 ```
 
-### Frontend
+Frontend:
+
 ```bash
-cd frontend
+cd src/web/frontend
 npm install
 npm start
 ```
 
-## Next Steps
-
-- 📖 Read the full [README.md](README.md) for detailed documentation
-- 🔧 Customize options in `backend/.env`
-- 🎨 Access API documentation at http://localhost:8000/docs
-- 🐛 Report issues on GitHub
-
-## Quick Tips
-
-💡 **Tip**: Enable "Brisk" mode for balanced speed and analysis depth
-
-💡 **Tip**: Use "Super Quick" mode for rapid initial triage
-
-💡 **Tip**: Jobs auto-refresh, but you can manually refresh anytime
-
-💡 **Tip**: Multiple analyses can run concurrently (default: 3)
-
 ---
 
-**Need Help?** Check the full [README.md](README.md) or open an issue on GitHub.
+For full documentation see [README.md](../../README.md) or the [docs/](../../docs/) directory.
