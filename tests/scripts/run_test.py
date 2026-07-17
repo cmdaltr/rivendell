@@ -2078,7 +2078,7 @@ def list_tests(filter_tags: Optional[List[str]] = None):
 def generate_job_json(test: TestCase, output_dir: str):
     """Generate a job JSON file for the Web UI."""
     job_data = {
-        "case_number": f"TEST_{test.name}",
+        "case_number": f"TEST_{test.name}"[:30],
         "source_paths": [os.path.join(TEST_IMAGES_PATH, img) for img in test.images],
         "destination_path": os.path.join(TEST_OUTPUT_PATH, test.name),
         "options": test.to_job_options(),
@@ -2157,7 +2157,7 @@ def run_test(test: TestCase, api_url: str, wait: bool = False, yes: bool = False
     # Build job payload
     destination_path = os.path.join(TEST_OUTPUT_PATH, test.name)
     job_data = {
-        "case_number": f"TEST_{test.name}",
+        "case_number": f"TEST_{test.name}"[:30],
         "source_paths": [os.path.join(TEST_IMAGES_PATH, img) for img in test.images],
         "destination_path": destination_path,
         "options": test.to_job_options(),
@@ -2333,7 +2333,7 @@ def queue_tests(test_names: List[str], api_url: str, yes: bool = False):
         # Build job payload
         destination_path = os.path.join(TEST_OUTPUT_PATH, test.name)
         job_data = {
-            "case_number": f"TEST_{test.name}",
+            "case_number": f"TEST_{test.name}"[:30],
             "source_paths": [os.path.join(TEST_IMAGES_PATH, img) for img in test.images],
             "destination_path": destination_path,
             "options": test.to_job_options(),
