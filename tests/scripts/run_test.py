@@ -2497,8 +2497,11 @@ def run_tests_by_tags(tags: List[str], api_url: str, wait: bool = False, yes: bo
     print("TEST RUN SUMMARY")
     print("=" * 60)
     for r in results:
-        status = r["result"].get("status", "submitted")
+        result = r["result"] or {}
+        status = result.get("status", "submitted")
         print(f"  {r['test']:<30} {status}")
+
+    return results
 
 
 def _resolve_output_dir(job: dict) -> Optional[str]:
@@ -2766,7 +2769,13 @@ def main():
     elif args.queue:
         queue_tests(args.queue, args.api_url, yes=args.yes)
     elif args.run_tags:
-        run_tests_by_tags(args.run_tags, args.api_url, wait=args.wait, yes=args.yes)
+        _FAILURE_STATUSES = {"failed", "timeout", "connection_error", "http_error"}
+        tag_results = run_tests_by_tags(args.run_tags, args.api_url, wait=args.wait, yes=args.yes)
+        if tag_results and any(
+            (r.get("result") or {}).get("status") in _FAILURE_STATUSES
+            for r in tag_results
+        ):
+            sys.exit(1)
     else:
         parser.print_help()
 
