@@ -1,7 +1,7 @@
 """
-Elrond Web Backend
+Rivendell Web Backend
 
-FastAPI backend for the Elrond web interface.
+FastAPI backend for the Rivendell web interface; drives Elrond analysis jobs.
 """
 
 import os

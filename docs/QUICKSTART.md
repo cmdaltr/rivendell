@@ -13,7 +13,7 @@ cd rivendell
 docker compose up -d
 
 # Access web interface
-open http://localhost:5688
+open http://localhost:5687
 
 # Access API documentation
 open http://localhost:5688/docs
@@ -25,13 +25,15 @@ docker compose ps
 docker compose logs -f backend
 ```
 
-**That's it!** The web interface is available at http://localhost:5688 (or http://rivendell.lab if using FlightDeck with the local proxy).
+**That's it!** The web interface is available at http://localhost:5687 and the API at http://localhost:5688 (or http://rivendell.lab if using FlightDeck with the local proxy).
 
 SIEM services (Splunk, Elasticsearch, Kibana, ATT&CK Navigator) are optional and gated behind the `siem` profile. Start them separately once the core stack is healthy:
 
 ```bash
 docker compose --profile siem up -d
 ```
+
+Analysis jobs that request Splunk or Elastic export (`-S`/`-E`, `"splunk": true`, Threat Hunt or Exhaustive mode) fail immediately if the SIEM stack isn't running, rather than completing with nothing exported.
 
 Stop only the SIEM stack without touching the core services:
 
@@ -68,12 +70,12 @@ pip install -e ".[web]" -r requirements/siem.txt
 
 ```bash
 # Option 1: Using uvicorn directly
-python3 -m uvicorn web.backend.main:app --host 0.0.0.0 --port 8000 --reload
+python3 -m uvicorn web.backend.main:app --host 0.0.0.0 --port 5688 --reload
 
 # Option 2: Using CLI
-python3 cli/rivendell.py web --port 8000 --reload
+python3 cli/rivendell.py web --port 5688 --reload
 
-# Access at http://localhost:8000
+# Access at http://localhost:5688
 ```
 
 ## 📥 Acquire Evidence
@@ -199,7 +201,7 @@ python3 analysis/elrond.py MEM-001 /evidence/memory.mem /output -MP
 
 ```bash
 # Create acquisition job
-curl -X POST http://localhost:8000/api/jobs \
+curl -X POST http://localhost:5688/api/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "case_id": "CASE-001",
@@ -212,7 +214,7 @@ curl -X POST http://localhost:8000/api/jobs \
   }'
 
 # Create analysis job
-curl -X POST http://localhost:8000/api/jobs \
+curl -X POST http://localhost:5688/api/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "case_id": "CASE-001",
@@ -228,15 +230,15 @@ curl -X POST http://localhost:8000/api/jobs \
   }'
 
 # Check job status
-curl http://localhost:8000/api/jobs/JOB-ID
+curl http://localhost:5688/api/jobs/JOB-ID
 
 # List all jobs
-curl http://localhost:8000/api/jobs
+curl http://localhost:5688/api/jobs
 ```
 
 ### Using the Web UI
 
-1. Open browser to `http://localhost:8000`
+1. Open browser to `http://localhost:5687` (Docker) or `http://localhost:5688` (local install with a built frontend)
 2. Click **"New Analysis"**
 3. Fill in case details:
    - Case ID: `CASE-001`
@@ -328,7 +330,7 @@ sudo python3 acquisition/python/gandalf.py Password Remote -h 192.168.1.100 -u a
 python3 analysis/elrond.py CASE-001 /evidence/*.tar.gz /output -CPAS
 
 # 3. View in Splunk
-# Navigate to: http://splunk:8000/en-US/app/rivendell_app/
+# Navigate to: http://localhost:7755/en-US/app/elrond/
 ```
 
 ### Workflow 3: Memory Analysis
@@ -371,20 +373,20 @@ wait
 
 ```bash
 # Restart services
-docker-compose restart
+docker compose restart
 
 # Rebuild images
-docker-compose build --no-cache
+docker compose build --no-cache
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Check container status
-docker-compose ps
+docker compose ps
 
 # Clean up and restart
-docker-compose down -v
-docker-compose up -d
+docker compose down -v
+docker compose up -d
 ```
 
 ### Permission Issues (Acquisition)
@@ -419,13 +421,13 @@ export PYTHONPATH=/path/to/rivendell:$PYTHONPATH
 
 ```bash
 # Check if server is running
-curl http://localhost:8000/health
+curl http://localhost:5688/api/health
 
 # Check ports
-netstat -tuln | grep 8000
+netstat -tuln | grep -E '5687|5688'
 
 # View server logs
-docker-compose logs rivendell
+docker compose logs backend
 
 # Or if running locally
 tail -f /var/log/rivendell/web.log
