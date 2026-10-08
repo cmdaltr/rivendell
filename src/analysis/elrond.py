@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import os
+import sys
 
 # Set TERM environment variable to prevent warnings from subprocess commands
 if 'TERM' not in os.environ:
@@ -11,6 +12,7 @@ from rivendell.main import main
 from rivendell.core.identify import process_deferred_memory, load_memory_profiles
 from rivendell.mount import unmount_images, cleanup_stale_mounts
 from rivendell.post.clean import archive_artefacts
+from rivendell.post.siem import SIEMUnavailableError, ensure_remote_siem_reachable
 
 
 parser = argparse.ArgumentParser()
@@ -481,6 +483,14 @@ if __name__ == "__main__":
         # Mordor input type: Treat like Gandalf (pre-collected artefacts)
         # Mordor datasets are pre-collected attack simulation data from OTRF
         gandalf = True  # Mordor datasets behave like Gandalf-collected artefacts
+
+    # Check SIEM reachability before mounting/processing so a missing SIEM fails
+    # the job up front rather than being swallowed hours later in the export phase
+    try:
+        ensure_remote_siem_reachable(splunk, elastic)
+    except SIEMUnavailableError as e:
+        print(f"\n  Error: {e}\n")
+        sys.exit(1)
 
     # Process mode is always enabled - it's the core analysis functionality
     process = True
