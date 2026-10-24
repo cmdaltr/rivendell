@@ -95,8 +95,10 @@ def search_keywords(
     insert,
     vsstext,
 ):
-    if not os.path.exists(output_directory + img.split("::")[0] + "/analysis/"):
-        os.mkdir(output_directory + img.split("::")[0] + "/analysis/")
+    analysis_dir = output_directory + img.split("::")[0] + "/analysis/"
+    os.makedirs(analysis_dir, exist_ok=True)
+    # Header whenever the CSV is new, not only when analysis/ didn't exist yet.
+    if not os.path.exists(analysis_dir + "keyword_matches.csv"):
         with open(
             output_directory + img.split("::")[0] + "/analysis/keyword_matches.csv",
             "a",
@@ -105,7 +107,13 @@ def search_keywords(
                 "CreationTime,LastAccessTime,LastWriteTime,keyword,Filename,line_number,line_entry\n"
             )
     with open(keywords[0], "r") as keywords_source_file:
-        for eachkeyword in keywords_source_file:
+        # A blank line is "" after strip(), which is "in" every line, so one empty
+        # line in the list matched everything (45 min -> 14.6 h). Skip blanks and
+        # comments.
+        search_terms = [
+            k for k in keywords_source_file if k.strip() and not k.lstrip().startswith("#")
+        ]
+        for eachkeyword in search_terms:
             for keywords_target_file in keywords_target_list:
                 try:
                     encoding_choice = "UTF-8"

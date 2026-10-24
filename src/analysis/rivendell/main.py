@@ -318,7 +318,7 @@ def main(
             )
         )
         sys.exit()
-    elif len(os.listdir(d)) > 0 and (
+    elif not gandalf and len(os.listdir(d)) > 0 and (  # Gandalf directories hold host folders, not images
         ".e01" not in str(os.listdir(d)).lower()
         and ".vmdk" not in str(os.listdir(d)).lower()
         and ".dd" not in str(os.listdir(d)).lower()

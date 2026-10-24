@@ -3,12 +3,32 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 from datetime import datetime
 from zipfile import ZipFile
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.core.identify import identify_gandalf_host
 from rivendell.core.identify import identify_memory_image
+
+
+TARBALL_SUFFIXES = (".tar.gz", ".tgz")
+
+
+def extract_tarball(archive, destination):
+    """Extract a gandalf.sh archive, refusing members that would land outside destination."""
+    with tarfile.open(archive, "r:gz") as tarball:
+        if hasattr(tarfile, "data_filter"):
+            tarball.extractall(destination, filter="data")
+            return
+        root = os.path.realpath(destination)
+        safe = [
+            member
+            for member in tarball.getmembers()
+            if (member.isfile() or member.isdir())
+            and os.path.realpath(os.path.join(root, member.name)).startswith(root + os.sep)
+        ]
+        tarball.extractall(destination, members=safe)
 
 
 def assess_gandalf(
@@ -65,6 +85,8 @@ def assess_gandalf(
         sys.exit()
     for groot, _, gfiles in os.walk(d):
         for gfile in gfiles:
+            if gfile.startswith("._"):  # macOS AppleDouble metadata, not an archive
+                continue
             if gfile.endswith("log.audit"):  # copying gandalf audit file
                 gandalf_audit_source = os.path.join(groot, gfile)
                 gandalf_audit_destination = os.path.join(
@@ -79,6 +101,47 @@ def assess_gandalf(
                     )
                 except:
                     pass
+            if gfile.endswith(".tar.gz.enc"):
+                print(
+                    "   '{}' is encrypted; decrypt it first, e.g.\n     openssl enc -d -aes-256-cbc -pbkdf2 -in {} -out {}{}\n".format(
+                        gfile,
+                        os.path.join(groot, gfile),
+                        os.path.join(groot, gfile[:-4]),
+                        " -pass file:" + os.path.join(groot, gfile[: -len(".tar.gz.enc")] + ".shadowfax.key")
+                        if os.path.exists(os.path.join(groot, gfile[: -len(".tar.gz.enc")] + ".shadowfax.key"))
+                        else "",
+                    )
+                )
+                continue
+            if gfile.endswith(TARBALL_SUFFIXES):  # gandalf.sh
+                source_filepath = os.path.join(output_directory, groot.split("/")[-1])
+                archive_name = gfile[: -len(".tar.gz")] if gfile.endswith(".tar.gz") else gfile[: -len(".tgz")]
+                entry, prnt = (
+                    "LastWriteTime,elrond_host,elrond_stage,elrond_log_entry\n",
+                    " -> {} -> created audit log file for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), archive_name
+                    ),
+                )
+                write_audit_log_entry(verbosity, output_directory, entry, prnt)
+                print("  Extracting artefacts for '{}'...".format(archive_name))
+                os.makedirs(source_filepath, exist_ok=True)
+                try:
+                    extract_tarball(os.path.join(groot, gfile), source_filepath)
+                except (tarfile.TarError, OSError) as error:
+                    print("   Couldn't read '{}' ({}); skipping it\n".format(gfile, error))
+                    continue
+                archived_audit = os.path.join(source_filepath, "log.audit")
+                if os.path.isfile(archived_audit):
+                    shutil.move(archived_audit, os.path.join(source_filepath, "gandalf_log.audit"))
+                host_info = os.path.join(source_filepath, "artefacts", "host.info")
+                if not os.path.isfile(host_info):
+                    print("   No artefacts/host.info in '{}'; skipping it\n".format(gfile))
+                    continue
+                gandalf_host, osplatform = identify_gandalf_host(output_directory, verbosity, host_info)
+                print("   Successfully extracted artefacts for '{}'".format(archive_name))
+                print()
+                allimgs[gandalf_host + "::" + osplatform] = d
+                continue
             if os.path.join(groot, gfile).endswith(".zip") or os.path.join(
                 groot, gfile
             ).endswith(".7z"):

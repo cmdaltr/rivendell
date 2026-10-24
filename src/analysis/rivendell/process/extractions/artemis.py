@@ -12,6 +12,7 @@ Supported artifacts:
 See: https://github.com/puffyCid/artemis
 """
 
+import glob
 import json
 import os
 import subprocess
@@ -141,6 +142,38 @@ ARTEFACT_MITRE_MAPPING = {
 }
 
 
+# Techniques already in each case's mitre_techniques.txt, so every technique is
+# written once rather than once per enriched file.
+_RECORDED_TECHNIQUES: Dict[str, set] = {}
+
+
+def _json_mtimes(directory: str) -> Dict[str, int]:
+    """mtime of each *.json directly in directory."""
+    out = {}
+    for path in glob.glob(os.path.join(directory, "*.json")):
+        try:
+            out[path] = os.stat(path).st_mtime_ns
+        except OSError:
+            pass
+    return out
+
+
+def _record_techniques(techniques_file_path: str, techniques) -> None:
+    """Append techniques not yet listed in the case's mitre_techniques.txt."""
+    seen = _RECORDED_TECHNIQUES.get(techniques_file_path)
+    if seen is None:
+        seen = set()
+        if os.path.exists(techniques_file_path):
+            with open(techniques_file_path, errors="ignore") as f:
+                seen = {line.strip() for line in f if line.strip()}
+        _RECORDED_TECHNIQUES[techniques_file_path] = seen
+    new = sorted(t for t in techniques if t and t not in seen)
+    if new:
+        with open(techniques_file_path, "a") as f:
+            f.write("".join(f"{t}\n" for t in new))
+        seen.update(new)
+
+
 def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
     """
     Fast MITRE enrichment for all artifact files.
@@ -155,10 +188,8 @@ def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
     import re
     import traceback
 
-    print(f"        [DEBUG-ENRICH] ENTERED enrich_with_mitre() for {os.path.basename(json_path)}, artifact_type={artifact_type}", flush=True)
 
     try:
-        print(f"        [DEBUG-ENRICH] Inside try block, about to determine case_dir", flush=True)
         # Determine techniques file path at CASE level
         # json_path example: /output/case/image.E01/artefacts/cooked/browsers/file.json
         # We need: /output/case/mitre_techniques.txt (alongside rivendell_audit.log)
@@ -191,36 +222,27 @@ def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
             case_dir = current_dir
 
         techniques_file_path = os.path.join(case_dir, "mitre_techniques.txt")
-        print(f"        [DEBUG-ENRICH] Determined techniques_file_path: {techniques_file_path}", flush=True)
         os.makedirs(case_dir, exist_ok=True)
 
         # Base technique for artifact type
-        print(f"        [DEBUG-ENRICH] Looking up base technique for artifact_type.lower()='{artifact_type.lower()}'", flush=True)
         base_technique = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower(), {}).get("technique_id")
-        print(f"        [DEBUG-ENRICH] Base technique: {base_technique}", flush=True)
 
         found_techniques = set()
         if base_technique:
             found_techniques.add(base_technique)
 
         # Get artifact-appropriate patterns and field extractors
-        print(f"        [DEBUG-ENRICH] Calling _get_patterns_for_artifact('{artifact_type}')", flush=True)
         patterns, field_pattern = _get_patterns_for_artifact(artifact_type)
-        print(f"        [DEBUG-ENRICH] Got patterns (count={len(patterns) if patterns else 0}), field_pattern={field_pattern if field_pattern else 'None'}", flush=True)
 
         if not patterns:
-            print(f"        [DEBUG-ENRICH] No patterns for this artifact type, writing base technique and returning", flush=True)
             # No specific patterns for this artifact type, just write base technique
             if base_technique:
-                with open(techniques_file_path, 'a') as f:
-                    f.write(f"{base_technique}\n")
+                _record_techniques(techniques_file_path, [base_technique])
             return True
 
-        print(f"        [DEBUG-ENRICH] Compiling field_regex", flush=True)
         field_regex = re.compile(field_pattern, re.IGNORECASE)
 
         lines_processed = 0
-        print(f"        [DEBUG-ENRICH] About to open and read json_path: {json_path}", flush=True)
         try:
             with open(json_path, 'r', errors='ignore') as f:
                 for line in f:
@@ -239,39 +261,26 @@ def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
                                     found_techniques.add(tech_id)
                                     break
 
-            print(f"        [DEBUG-ENRICH] Finished reading {lines_processed} lines, found {len(found_techniques)} techniques", flush=True)
 
-            # Write all found techniques
-            print(f"        [DEBUG-ENRICH] About to write {len(found_techniques)} techniques to {techniques_file_path}", flush=True)
-            with open(techniques_file_path, 'a') as f:
-                for tech_id in found_techniques:
-                    f.write(f"{tech_id}\n")
+            _record_techniques(techniques_file_path, found_techniques)
 
-            print(f"        [DEBUG-ENRICH] Successfully wrote techniques, returning True", flush=True)
             return True
 
         except Exception as e:
-            print(f"        [DEBUG-ENRICH] Inner Exception during fast scan: {e}", flush=True)
             print(f"    WARNING: Error during fast scan: {e}", flush=True)
             if base_technique:
-                with open(techniques_file_path, 'a') as f:
-                    f.write(f"{base_technique}\n")
-            print(f"        [DEBUG-ENRICH] Returning False from inner exception", flush=True)
+                _record_techniques(techniques_file_path, [base_technique])
             return False
 
     except NameError as e:
-        print(f"        [DEBUG-ENRICH] *** OUTER NameError CAUGHT in enrich_with_mitre() ***", flush=True)
         print(f"    *** CRITICAL ERROR: NameError in enrich_with_mitre(): {e}", flush=True)
         print(f"    *** Full traceback:", flush=True)
         traceback.print_exc()
-        print(f"        [DEBUG-ENRICH] Returning False from NameError", flush=True)
         return False
     except Exception as e:
-        print(f"        [DEBUG-ENRICH] *** OUTER Exception CAUGHT in enrich_with_mitre() ***", flush=True)
         print(f"    *** CRITICAL ERROR: Unexpected error in enrich_with_mitre(): {e}", flush=True)
         print(f"    *** Full traceback:", flush=True)
         traceback.print_exc()
-        print(f"        [DEBUG-ENRICH] Returning False from outer exception", flush=True)
         return False
 
 
@@ -916,7 +925,8 @@ def extract_with_artemis(
     else:
         output_name = None
 
-    # Run Artemis
+    # Snapshot cooked_dir so enrichment below only touches what this run writes.
+    before = _json_mtimes(cooked_dir)
     success, error = run_artemis(
         artifact=artifact_type,
         output_dir=cooked_dir,
@@ -938,35 +948,17 @@ def extract_with_artemis(
         )
         return False
 
-    # Fast MITRE enrichment - scan JSON files for artifact-specific patterns
-    import glob
-    import traceback
-    print(f"    [DEBUG] About to enrich MITRE for artifact_type='{artifact_type}'", flush=True)
-    print(f"    [DEBUG] Local variables: {list(locals().keys())}", flush=True)
-    try:
-        for json_file in glob.glob(os.path.join(cooked_dir, "*.json")):
-            print(f"    [DEBUG] Enriching file: {os.path.basename(json_file)}", flush=True)
-            print(f"    [DEBUG] About to call enrich_with_mitre with json_file={json_file}, artifact_type={artifact_type}", flush=True)
-            try:
-                result = enrich_with_mitre(json_file, artifact_type)
-                print(f"    [DEBUG] enrich_with_mitre returned: {result}", flush=True)
-            except Exception as inner_e:
-                print(f"    [DEBUG] *** Exception during enrich_with_mitre call: {type(inner_e).__name__}: {inner_e}", flush=True)
-                print(f"    [DEBUG] *** Full traceback:", flush=True)
-                traceback.print_exc()
-                print(f"    [DEBUG] *** Locals at error: {locals()}", flush=True)
-                raise
-        print(f"    [DEBUG] MITRE enrichment completed successfully", flush=True)
-    except NameError as e:
-        print(f"    [DEBUG] *** NameError caught in extract_with_artemis(): {e}", flush=True)
-        print(f"    [DEBUG] *** Full traceback:", flush=True)
-        traceback.print_exc()
-        print(f"    [DEBUG] *** artifact_type={artifact_type}, cooked_dir={cooked_dir}", flush=True)
-    except Exception as e:
-        print(f"    [DEBUG] *** Exception caught in extract_with_artemis(): {e}", flush=True)
-        traceback.print_exc()
+    # MITRE ATT&CK enrichment of the JSON this Artemis run wrote. Enriching every
+    # JSON in cooked_dir re-read all earlier output after each call, which made
+    # event-log processing quadratic per shadow copy.
+    for json_file, mtime in _json_mtimes(cooked_dir).items():
+        if before.get(json_file) == mtime:
+            continue
+        try:
+            enrich_with_mitre(json_file, artifact_type)
+        except Exception as e:
+            print(f"    WARNING: MITRE enrichment failed for {os.path.basename(json_file)}: {e}", flush=True)
 
-    print(f"    [DEBUG] extract_with_artemis() about to return True", flush=True)
     return True
 
 

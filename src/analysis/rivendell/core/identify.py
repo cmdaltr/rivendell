@@ -1,6 +1,7 @@
 #!/usr/bin/env python3 -tt
 import json
 import os
+import re
 import time
 from datetime import datetime
 
@@ -358,9 +359,31 @@ def process_deferred_memory(
         flags.append("02processing")
 
 
+def parse_gandalf_host_info(first_line):
+    """Host and platform from host.info's first line.
+
+    Current collectors write '<host>::<platform>'. Older gandalf.sh archives hold
+    `uname -a` ('Linux <host> ...') and older gandalf.py ones Python's
+    "uname_result(system='Linux', node='<host>', ...)".
+    """
+    if "::" in first_line:
+        gandalf_host, osplatform = first_line.split("::", 1)
+        return gandalf_host, osplatform
+    match = re.search(r"system='([^']*)', node='([^']*)'", first_line)
+    if match:
+        system, gandalf_host = match.groups()
+    else:
+        fields = first_line.split()
+        if len(fields) < 2:
+            raise ValueError("unrecognised Gandalf host.info: {!r}".format(first_line))
+        system, gandalf_host = fields[0], fields[1]
+    return gandalf_host, "macOS" if system == "Darwin" else system
+
+
 def identify_gandalf_host(output_directory, verbosity, host_info_file):
     time.sleep(2)
     with open(host_info_file) as host_info:
-        gandalf_host, osplatform = host_info.readline().strip().split("::")
+        first_line = host_info.readline().strip()
+    gandalf_host, osplatform = parse_gandalf_host_info(first_line)
     print_identification(verbosity, output_directory, gandalf_host, osplatform)
     return gandalf_host, osplatform

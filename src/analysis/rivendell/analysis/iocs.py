@@ -316,7 +316,7 @@ def compare_iocs(
                                         (
                                             entry,
                                             prnt,
-                                        ) = "{},{},{},IOC '{}' ({}) extracted from '{}'".format(
+                                        ) = "{},{},{},IOC '{}' ({}) extracted from '{}'\n".format(
                                             datetime.now().isoformat(),
                                             img.split("::")[0],
                                             stage,

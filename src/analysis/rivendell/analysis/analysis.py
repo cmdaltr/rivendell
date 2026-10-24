@@ -62,6 +62,25 @@ def _analyse_artemis_mft_from_status_log(ar, f, stage, vssimage, anysd, verbosit
         ))
 
 
+VSS_DIR = re.compile(r"^vss\d+$")
+
+
+def volume_artefact_dirs(artefacts_dir, mnt, vssimage):
+    """[(directory, skip_vss_subdirs)] holding one volume's collected artefacts.
+
+    Shadow copy N's artefacts live under artefacts/raw/vssN and
+    artefacts/cooked/vssN; the live volume's are everything else under raw/ and
+    cooked/ (so its walk skips the vssN directories).
+    """
+    if not os.path.isdir(artefacts_dir):
+        return []
+    match = re.search(r"vss(\d+)$", mnt.rstrip("/")) or re.search(r"shadow copy #(\d+)", vssimage or "")
+    if match:
+        dirs = [os.path.join(artefacts_dir, part, "vss" + match.group(1)) for part in ("raw", "cooked")]
+        return [(d, False) for d in dirs if os.path.isdir(d)]
+    return [(artefacts_dir, True)]
+
+
 def analyse_artefacts(
     verbosity, output_directory, img, mnt, analysis, magicbytes, extractiocs, iocsfile, vssimage
 ):
@@ -458,10 +477,7 @@ def analyse_artefacts(
             for root, _, files in os.walk(mnt):
                 for f in files:
                     try:
-                        if (
-                            os.stat(os.path.join(root, f)).st_size > 0
-                            and os.stat(os.path.join(root, f)).st_size < 10000000
-                        ):  # 10MB
+                        if 0 < os.stat(os.path.join(root, f)).st_size < 10000000:  # 10MB
                             if (
                                 os.path.join(root, f) != "/mnt/elrond_mount/hiberfil.sys"
                                 and os.path.join(root, f)
@@ -517,7 +533,10 @@ def analyse_artefacts(
                             ):
                                 try:
                                     with open(os.path.join(root, f), "rb") as magic_file:
-                                        file_hdr = magic_file.read()
+                                        # The checks below only look at the first
+                                        # few bytes; reading whole files cost
+                                        # 52 min on a Windows volume.
+                                        file_hdr = magic_file.read(16)
                                 except:
                                     file_hdr = "0000000000"
                                 if (
@@ -751,30 +770,17 @@ def analyse_artefacts(
                     datetime.now().isoformat().replace("T", " "), mnt
                 ), flush=True
             )
-        for root, _, files in os.walk(mnt):
-            for f in files:
-                try:
-                    if (
-                        os.stat(os.path.join(root, f)).st_size > 0
-                        and os.stat(os.path.join(root, f)).st_size < 10000000
-                    ):  # 10MB
-                        with open(os.path.join(root, f), "r") as filetest:
-                            filetest.readline()
-                            iocfilelist.append(os.path.join(root, f))
-                except:
-                    pass
-        if os.path.exists(
-            os.path.join(output_directory, img_name, "artefacts")
+        # This volume only: its mount plus its own collected artefacts. Walking the
+        # whole artefacts/ tree rescanned every shadow copy on every copy's pass.
+        for scan_root, skip_vss in [(mnt, False)] + volume_artefact_dirs(
+            os.path.join(output_directory, img_name, "artefacts"), mnt, vssimage
         ):
-            for root, _, files in os.walk(
-                os.path.join(output_directory, img_name, "artefacts")
-            ):
+            for root, dirs, files in os.walk(scan_root):
+                if skip_vss:
+                    dirs[:] = [d for d in dirs if not VSS_DIR.match(d)]
                 for f in files:
                     try:
-                        if (
-                            os.stat(os.path.join(root, f)).st_size > 0
-                            and os.stat(os.path.join(root, f)).st_size < 10000000
-                        ):  # 10MB
+                        if 0 < os.stat(os.path.join(root, f)).st_size < 10000000:  # 10MB
                             with open(os.path.join(root, f), "r") as filetest:
                                 filetest.readline()
                                 iocfilelist.append(os.path.join(root, f))

@@ -12,6 +12,9 @@ def write_audit_log_entry(verbosity, output_directory, entry, prnt):
     # Write audit log at case level (output_directory), not per-image
     audit_log_path = os.path.join(output_directory.rstrip('/'), "rivendell_audit.log")
 
+    # One entry per line, even when a caller forgets the newline.
+    if not entry.endswith("\n"):
+        entry += "\n"
     with open(audit_log_path, writemode) as logentry:
         logentry.write(entry.replace("'", ""))
     if prnt != "":
