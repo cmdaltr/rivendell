@@ -1,0 +1,64 @@
+# Bug Log
+
+Bugs found during the October 2026 E2E matrix and the test-lab build, with their status. **Fixed** means fixed on branch `fix/e2e-findings` and checked as described; **Open** means logged for later, with the reason.
+
+## Platform (backend, worker, test runner)
+
+| ID | Bug | Status |
+|---|---|---|
+| P1 | `tasks_docker.py` saves the whole job row, log included, every 10 lines of Elrond output. `win_full`'s 540k-line log grew the `jobs` table to 126 GB for 38 rows; Postgres stalled and the job failed after 36.7 h. | Fixed: the full log is spooled to `rivendell_job.log` in the job's output directory; the row keeps the last 5,000 lines, and progress saves run every 10 s. Tested: 1,000 lines produce a 101-line row and a complete file. |
+| P2 | When the Celery task dies (here, a lost DB connection) it stops reading Elrond's stdout but leaves `elrond.py` running; Elrond then blocks on the full pipe forever, with the image still mounted. | Fixed: Elrond starts in its own process group; when the task fails, the group gets SIGTERM, then SIGKILL after 30 s. Progress-save errors are logged and retried instead of failing the job, and the final status save retries 5 times. Tested: a group with a TERM-ignoring child is fully stopped. |
+| P3 | Image locks expire after 2 hours (`ex=7200`) while Windows jobs run 7–37 hours, so a second job can take the same image mid-run. | Fixed: locks are refreshed to a 1-hour TTL on every progress save. |
+| P4 | Backend JWT secret defaults to `your-secret-key-change-in-production`, so anyone can mint an admin token. | Fixed: when SECRET_KEY is unset or the default, the backend generates a random key once and keeps it in `data/.jwt_secret` (0600, git-ignored). |
+| P5 | `run_test.py` builds Gandalf and Mordor test paths that don't end in `/acquisitions/`, which Elrond's `--Gandalf` reader requires, so those tests exit immediately. | Fixed: Gandalf paths default to `…/<collector>_collection/acquisitions/`; the 14 Mordor paths end in `/acquisitions/`. |
+| P6 | `src/cli/rivendell.py` puts `src/analysis` first on `sys.path`; its `platform/` package shadows the stdlib `platform` module for anything the CLI imports. | Fixed: `src/analysis` is no longer put on `sys.path`. |
+| P8 | `src/web/backend/data/users.json` (user store with password hashes) is tracked in git. | Fixed: removed from the index and git-ignored. The hash remains in history, so change the admin password. |
+| P9 | The default admin password is in the public source (`config.py`). | Won't fix (Ben: keep the default). |
+| P10 | `rivendell analyze` and `rivendell acquire` were stubs that only printed "Direct integration pending"; `acquire` also passed `-C` where gandalf.py expects `-F`. | Fixed: both run the real script as a subprocess with the correct flags. |
+| P11 | Four Mordor tests use `malware/cobalt_strike`, `malware/emotet` and `malware/trickbot`, which OTRF Security-Datasets doesn't publish, so they can never pass. | Open: drop them, or point them at datasets the lab generates (`mordor-capture`) |
+| P7 | `--cancel-all` and `--cancel` revoke the Celery task but leave `elrond.py` and its tools running with the image mounted. Fixed by the process-group kill on branch `feat/job-pause`. | Open (fix on `feat/job-pause`) |
+
+## Elrond (analysis)
+
+| ID | Bug | Status |
+|---|---|---|
+| E1 | `extract_with_artemis()` re-runs MITRE ATT&CK enrichment over every JSON in the copy's `cooked` folder after each Artemis call: quadratic in event logs, gigabytes re-read per shadow copy. | Fixed: cooked_dir is snapshotted before each Artemis run and only new or changed JSON is enriched. Debug prints removed. Tested: three event logs enrich three files, not six. |
+| E2 | `enrich_with_mitre()` appends to `mitre_techniques.txt` without de-duplicating (77,585 lines, 25 unique in `win_full`). | Fixed: techniques are recorded once per case (seeded from the file on first use). Tested. |
+| E3 | IOC extraction walks the whole `artefacts/` tree on each volume's pass, so every shadow-copy pass rescans every copy and appends duplicates to `iocs.csv`. | Fixed: the IOC pass scans the volume's mount plus only `raw/vssN` and `cooked/vssN` for shadow copy N, or everything except `vssN` for the live volume. Tested on a mock tree. |
+| E4 | Magic-byte check reads each file whole (up to 10 MB) to compare a header, and `stat`s twice. | Fixed: reads 16 header bytes and stats once. |
+| E5 | `analysis/iocs.py` writes IOC audit entries without a trailing newline, gluing thousands of entries onto one line. | Fixed: the IOC entry has its newline, and `write_audit_log_entry` now appends one to any entry missing it. |
+| E6 | `--Mordor` only sets `gandalf = True`; there is no OTRF JSON ingest, so Mordor datasets produce nothing (`win_mordor_mode`, `linux_mordor_mode`: empty output, job COMPLETED). | Open: needs an ingest design |
+| E7 | `--Gandalf` reads `.zip`/`.7z` only; `gandalf.sh` writes `.tar.gz`. | Fixed: `.tar.gz`/`.tgz` are extracted (members outside the destination refused), `log.audit` kept as `gandalf_log.audit`; `.tar.gz.enc` gets the openssl command to decrypt it; macOS `._*` files are skipped, and an unreadable archive is reported, not fatal. Verified in the worker on the four lab archives. |
+| E8 | `carve.py` runs foremost on the E01 container, not the decompressed image (39 files carved). | Open |
+| E9 | Linux unmount leaks loop devices; a later Linux job finds its mount busy and finishes in 20 s with no output. | Open |
+| E10 | Remote Splunk file monitors only watch `/tmp/elrond/output/<case>/`; custom output paths index 0 events while the job reports COMPLETED. | Open |
+| E11 | A blank or `#` line in the keywords file matches every line (45 min → 14.6 h). | Fixed: blank and `#` lines are skipped. |
+| E16 | `keyword_matches.csv` got its header only when `analysis/` didn't exist yet, so it usually had none. | Fixed. |
+| E17 | `main.py` rejects any source directory without disk-image extensions, before the Gandalf reader runs, and exits 0, so every `--Gandalf` job "completes" with nothing. | Fixed: the check is skipped in Gandalf mode. |
+| E18 | `--Gandalf` mode never processes anything: processing only runs under `if collect:`, `--Gandalf` excludes `--Collect`, and `assess_gandalf` keys `allimgs` as `host::platform → dir` (the reverse of the disk path), so no host reaches `imgs`. Gandalf archives also use their own layout (`etc+passwd`, `logs/`, `conf/`), not Elrond's `raw/`. Lab run: 4 hosts identified, 0 processed, 10 s. | Open: needs design (route Gandalf hosts into processing and map the layout; touches the execution graph). High priority: it's why every Gandalf test produces no output. |
+| E19 | The `.zip` branch strips names with `str.strip(".zip")` (a character set, so `zipper.zip` → `per`) and calls `os.makedirs` without `exist_ok`, so a second zip in the same host folder raises. | Open (minor) |
+| E12 | `linux_timeline`: Plaso writes a header-only CSV in 13 s; job COMPLETED. | Open: needs investigation |
+| E13 | `linux_archive`: archiving "completes" without producing a zip. | Open: needs investigation |
+| E14 | Linux memory: Volatility plugins find nothing; `linux_memory` tests pass only the disk image. | Open: needs investigation |
+| E15 | Empty-directory cleanup does three full `os.walk` passes (32 min silent on `win_full`); result statistics `rglob` + `stat` the whole output (33 min). | Open |
+
+## Gandalf (acquisition)
+
+| ID | Bug | Status |
+|---|---|---|
+| G1 | `gandalf.py` copies `shire/collect_artefacts-py`, which lives in `python/`; every run fails with FileNotFoundError. All paths were relative to the working directory. | Fixed: every path is resolved from the script's own directory. Verified in the lab. |
+| G2 | `gandalf.py -O DIR` uses `output_dir[0]`, the first character of the path. | Fixed: `-O DIR` uses the full path. |
+| G3 | `gandalf.py -M` copies `tools/memory/avml-main.zip` and `osxpmem.app.zip`, which aren't in the repo, and crashes. | Fixed: missing memory tools are reported and skipped. |
+| G4 | `gandalf.sh` Remote mode re-runs itself in Local mode on the target, and Local mode's dependency check demanded `ssh`/`scp` there. | Fixed: `ssh`/`scp` are only required in Remote mode, and the check now runs after argument parsing. |
+| G5 | `gandalf.sh` runs under `set -e` and `collect_file` returns 1 for a missing file, so any user without `.bash_history` (the stock `ubuntu` user) aborts the whole acquisition. | Fixed: missing optional files and directories no longer abort; memory failure is a warning. |
+| G6 | `gandalf.sh` needs bash 4 (`${var,,}`, `declare -A`) and `sha256sum`; macOS has bash 3.2 and `shasum`, so it can't run on a Mac target. | Fixed: no bash-4 syntax (`lower()` helper, a here-doc list instead of `declare -A`) and `shasum` fallback. `bash -n` passes under /bin/bash 3.2. |
+| G7 | `gandalf.sh` `create_archive` prints progress on stdout, so `archive_file=$(create_archive …)` captures several lines and encryption gets a bad path. | Fixed: progress goes to stderr. |
+| G8 | `gandalf.sh` banner prints a literal `${VERSION}` (quoted heredoc). | Fixed. |
+| G9 | `Invoke-Gandalf.ps1` checks `$NoPrompt`, which isn't a declared parameter, so prompts can't be suppressed. | Fixed: `-NoPrompt` is declared and also answers the disk-tools question. |
+| G10 | `Invoke-Gandalf.ps1` expects `tools/disk_tools.zip`, which isn't in the repo. | Open |
+| G11 | `gandalf.sh` collects Linux paths only; on macOS it would gather almost nothing (no LaunchAgents, unified logs, zsh history). | Open: feature work |
+| G13 | `Invoke-Gandalf.ps1` must be installed at `C:\TEMP\gandalf\gandalf\`; tool and `disk_tools.zip` paths are hard-coded there. | Open (the lab installs it there) |
+| G14 | `gandalf.sh` and `gandalf.py` write `host.info` as `uname -a` / Python's `uname_result(...)`, but Elrond reads its first line as `<host>::<platform>` (what `Invoke-Gandalf` writes), so Bash and Python acquisitions crash on identification. | Fixed: both now write `<host>::<Linux\|macOS>` first, with the uname line after; Elrond also parses the old formats, so existing archives load. Tested. |
+| G15 | `gandalf.sh` Remote mode with Key encryption generates the key on the target, never retrieves it, then deletes it with `/tmp/gandalf`: the archive can't be decrypted. It also left `/tmp/gandalf_collect.sh` on every target, and everything on a failed run. | Fixed: the key comes back as `<host>.shadowfax.key` next to the archive, and the target is cleaned up whether the run succeeds or fails. Verified in the lab: archive decrypts with the retrieved key, target `/tmp` clean. |
+| G16 | `gandalf.sh` Remote mode with Password encryption runs `openssl` over a non-interactive `ssh`, so there's no terminal for the password prompt. | Open: prompt on the collector side and pass it over stdin, or encrypt after retrieval |
+| G12 | `gandalf.py` writes the encryption object into the generated script as `str(obj)`, which can't work for Key or Password encryption. | Open: needs investigation |
