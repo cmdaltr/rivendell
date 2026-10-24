@@ -144,3 +144,6 @@ elastic_credentials.txt
 *.pem
 secrets.*
 credentials.*
+
+# Test lab: generated per machine
+lab/docker-compose.lab.yml
