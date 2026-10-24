@@ -138,8 +138,12 @@ def cleanup_small_files_and_empty_dirs(output_directory, min_file_size=10):
 
     print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> cleaning up small files and empty directories...")
 
-    # First pass: delete small files and macOS metadata files
+    # First pass: delete small files and macOS metadata files. Collected
+    # artefacts (artefacts/raw/) are left alone: an empty .bash_history is
+    # evidence (T1070.003), not clutter.
     for root, dirs, files in os.walk(output_directory):
+        if "/artefacts/raw" in root.replace(os.sep, "/") + "/":
+            continue
         for filename in files:
             filepath = os.path.join(root, filename)
             try:

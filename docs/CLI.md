@@ -128,7 +128,9 @@ sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 └── log.meta          # acquisition metadata
 ```
 
-Gandalf encrypts with Fernet (AES-128-CBC with HMAC-SHA256). Pass the archive to Elrond with `--Gandalf`.
+Gandalf encrypts with Fernet (AES-128-CBC with HMAC-SHA256); `gandalf.sh` uses OpenSSL AES-256-CBC, and in Key mode the key comes back as `<host>.shadowfax.key` beside the archive. Decrypt before analysis: Elrond reads unencrypted archives only, and prints the `openssl` command for a `.tar.gz.enc`.
+
+Pass the directory holding the archives to Elrond with `--Gandalf`. It must end in `acquisitions/` (subfolders per host are fine). Elrond extracts each archive, maps Gandalf's layout onto its own (`etc+passwd` → `raw/passwd`, `user/<name>/.bash_history` → `raw/user_profiles/<name>+bash_history`, and so on), then runs processing, keyword search and analysis exactly as for a disk image. An archive with a member that points outside it is refused as possible tampering.
 
 ---
 
@@ -159,7 +161,7 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 | Option | Reads |
 |---|---|
 | `--Collect` | Disk and memory images (E01, raw/dd, VMDK, VHD/VHDX); Elrond mounts them and collects artefacts |
-| `--Gandalf` | Archives acquired with Gandalf |
+| `--Gandalf` | Gandalf acquisitions (`.zip`, `.7z`, `.tar.gz`) in a directory ending `acquisitions/`; each host is extracted to `DEST_DIR/<host>/artefacts/raw/` and processed like a collected disk image |
 | `--Mordor` | OTRF Mordor attack-simulation datasets |
 
 ---
@@ -480,8 +482,8 @@ Elrond is configured by its command-line options; there is no config file. The D
 ### Acquire and Analyse a Live Host
 
 ```bash
-cd src/acquisition && sudo python3 python/gandalf.py Key Local -M -O /evidence/CASE-001 && cd -
-python3 src/analysis/elrond.py CASE-001 /evidence/CASE-001 /output/CASE-001 --Gandalf --Process --Analysis --Memory
+cd src/acquisition && sudo python3 python/gandalf.py None Local -M -O /evidence/CASE-001/acquisitions && cd -
+python3 src/analysis/elrond.py CASE-001 /evidence/CASE-001/acquisitions/ /output/CASE-001 --Gandalf --Process --Analysis --Memory
 python3 -m src.analysis.rivendell.ai.cli index CASE-001 /output/CASE-001
 python3 -m src.analysis.rivendell.ai.cli query CASE-001 "What was the initial access vector?"
 ```

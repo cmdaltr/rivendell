@@ -742,7 +742,9 @@ def main(
                     allimgs[memimg] = mempath
                 allimgs = OrderedDict(sorted(allimgs.items(), key=lambda x: x[1]))
                 print()
-    elif gandalf:  # populate allimgs and imgs dictionaries
+    elif gandalf and not (phase in ("collect", "process", "analyse", "index") and mounted_imgs):
+        # Gandalf source node (in place of mount + collect): ingest each acquisition
+        # into <output>/<host>/artefacts/raw/ and register it like a mounted image.
         assess_gandalf(
             auto,
             gandalf,
@@ -788,7 +790,7 @@ def main(
     if phase == "mount":
         return allimgs, imgs, output_directory, partitions
 
-    if collect:  # Collection, Processing, Keyword Searching, Analysis & Timelining
+    if collect or gandalf:  # Collection (disk images only), Processing, Keyword Searching, Analysis & Timelining
         # Determine collect/process phase for core function
         core_phase = None
         if phase == "collect":
@@ -1314,11 +1316,16 @@ def main(
                 doneimgs.append(eachimg.split("::")[0])
     doneimgs = sorted(list(set(doneimgs)))
     unmount_images(elrond_mount, ewf_mount)
-    for eachimg, _ in allimgs.items():
-        img_output_dir = output_directory + str(eachimg.split("::")[0]).split("/")[-1]
+    for eachimg, eachname in allimgs.items():
+        # Gandalf hosts are keyed by their raw/ directory; the host name is the value.
+        img_name = eachname if gandalf else eachimg
+        img_output_dir = output_directory + str(img_name.split("::")[0]).split("/")[-1]
 
-        # First pass: remove small/empty files (JSON with just [] or empty)
-        for doneroot, donedirs, donefiles in os.walk(img_output_dir):
+        # First pass: remove small/empty processed output (JSON with just [] or
+        # empty). Only cooked/ and analysis/: collected artefacts under raw/ (a
+        # short crontab or bash history) are evidence, whatever their size.
+        processed_dirs = [os.path.join(img_output_dir, "artefacts", "cooked"), os.path.join(img_output_dir, "analysis")]
+        for doneroot, donedirs, donefiles in (w for d in processed_dirs for w in os.walk(d)):
             for donefile in donefiles:
                 filepath = os.path.join(doneroot, donefile)
                 if os.path.exists(filepath):

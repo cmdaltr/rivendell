@@ -401,10 +401,12 @@ IMPORT FLOW:
 PROCESSING STAGES:
 ──────────────────
 
-1. IMAGE MOUNTING
-   ├─ Detect image format (.E01, .DD, .IMG, etc.)
-   ├─ Mount using appropriate tool (ewfmount, qemu-nbd)
-   └─ Enumerate partitions
+1. IMAGE MOUNTING (--Collect)            or   GANDALF INGEST (--Gandalf)
+   ├─ Detect image format (.E01, .DD, ...)       ├─ Extract .zip/.7z/.tar.gz per host
+   ├─ Mount using ewfmount, qemu-nbd             ├─ Identify host::platform from host.info
+   └─ Enumerate partitions                       └─ Map Gandalf's layout onto <host>/artefacts/raw/
+   Both register each source as {location: "name::platform"}; from processing
+   on, a Gandalf host goes through the same stages as a collected disk image.
 
 2. FILESYSTEM ANALYSIS
    ├─ Parse MFT/USN Journal (NTFS)

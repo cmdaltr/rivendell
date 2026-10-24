@@ -97,8 +97,6 @@ set -a; . ~/.config/rivendell-lab/rivendell-tests.env; set +a
 python3 tests/scripts/run_test.py --run-tags gandalf
 ```
 
-Elrond's `--Gandalf` mode currently identifies the collected hosts but doesn't process their artefacts (bug E18), so these tests run but produce no analysis yet.
-
 `rivendell-env` also checks that Rivendell's worker can see the lab's data directory. If it can't, it generates `lab/docker-compose.lab.yml` and prints the command to recreate the backend and worker with that extra mount.
 
 ## Settings
