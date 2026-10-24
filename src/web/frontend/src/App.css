@@ -2604,3 +2604,98 @@ select.large-select:disabled {
   transform: none;
   box-shadow: none;
 }
+
+/* Aragorn (Docker administration) */
+.aragorn {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.aragorn-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.aragorn-table th,
+.aragorn-table td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid #2a2a5a;
+  vertical-align: top;
+}
+
+.aragorn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.aragorn-actions button {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.aragorn-flag {
+  margin-left: 0.5rem;
+}
+
+.aragorn-note {
+  color: #a0a0c0;
+  font-size: 0.85rem;
+}
+
+.aragorn-op {
+  color: #ffce54;
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.aragorn-command {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.aragorn-command code {
+  background: #0f0f23;
+  border: 1px solid #2a2a5a;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+}
+
+.aragorn-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.aragorn-modal {
+  background: #1a1a2e;
+  border: 1px solid #2a2a5a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  width: min(1000px, 92vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.aragorn-modal pre {
+  flex: 1;
+  overflow: auto;
+  background: #0f0f23;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0.75rem 0;
+}

@@ -1,0 +1,5 @@
+# Aragorn only needs its package and server; keep the 12 GB+ repo context out.
+*
+!src/common/aragorn/
+!src/web/aragorn/server.py
+**/__pycache__

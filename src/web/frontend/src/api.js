@@ -260,4 +260,33 @@ export const getMordorStats = async () => {
   return response.data;
 };
 
+// ============================================
+// Aragorn (Docker administration) API
+// ============================================
+
+export const getAragornStatus = async () => (await api.get('/api/aragorn/status')).data;
+
+export const listAragornContainers = async () => (await api.get('/api/aragorn/containers')).data;
+
+export const listAragornImages = async () => (await api.get('/api/aragorn/images')).data;
+
+export const getAragornLogs = async (name, tail = 200) =>
+  (await api.get(`/api/aragorn/containers/${encodeURIComponent(name)}/logs`, { params: { tail } })).data;
+
+export const getAragornStats = async (name) =>
+  (await api.get(`/api/aragorn/containers/${encodeURIComponent(name)}/stats`)).data;
+
+export const aragornContainerAction = async (name, action, force = false) =>
+  (await api.post(`/api/aragorn/containers/${encodeURIComponent(name)}/${action}`, { force })).data;
+
+export const aragornPullImage = async (ref) => (await api.post('/api/aragorn/images/pull', { ref })).data;
+
+export const aragornRemoveImage = async (id) => (await api.post('/api/aragorn/images/remove', { id })).data;
+
+export const aragornPruneImages = async () => (await api.post('/api/aragorn/images/prune')).data;
+
+export const getAragornOp = async (opId) => (await api.get(`/api/aragorn/ops/${opId}`)).data;
+
+export const listAragornOps = async () => (await api.get('/api/aragorn/ops')).data;
+
 export default api;

@@ -15,10 +15,11 @@
 4. [Admin Endpoints](#admin-endpoints)
 5. [Job Management](#job-management)
 6. [File System](#file-system)
-7. [Health Check](#health-check)
-8. [Request/Response Formats](#requestresponse-formats)
-9. [Error Handling](#error-handling)
-10. [Code Examples](#code-examples)
+7. [Docker Administration (Aragorn)](#docker-administration-aragorn)
+8. [Health Check](#health-check)
+9. [Request/Response Formats](#requestresponse-formats)
+10. [Error Handling](#error-handling)
+11. [Code Examples](#code-examples)
 
 ---
 
@@ -992,6 +993,43 @@ A bare JSON array of job IDs:
 **Errors:**
 - `403 Forbidden`: Access denied to path
 - `404 Not Found`: Path does not exist
+
+---
+
+## Docker Administration (Aragorn)
+
+**Role Required:** `ADMIN` (except `/status`)
+
+Aragorn manages Rivendell's own containers and images. The backend doesn't hold the Docker socket: these endpoints proxy to the `aragorn` service over the internal `rivendell-aragorn` network. Aragorn only acts on containers that carry the `com.docker.compose.project=rivendell` label and are named `rivendell-*`, and on the images those containers use; anything else returns `403`. The API is off (`503`) until Aragorn is enabled on the host with `rivendell aragorn enable`, and it stays off while the backend uses the default `SECRET_KEY`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/aragorn/status` | Whether Aragorn is usable. No authentication; returns `enabled`, `reason` (`secret_key`, `not_enabled`, `unreachable`) and `enable_command` |
+| `GET` | `/api/aragorn/containers` | Rivendell containers: name, service, image, state, health, upstream or built image |
+| `GET` | `/api/aragorn/images` | Rivendell images: tags, size, whether built locally, which containers use them |
+| `GET` | `/api/aragorn/containers/{name}/logs?tail=200` | Last `tail` log lines (1–5000) |
+| `GET` | `/api/aragorn/containers/{name}/stats` | One CPU, memory, network and block I/O sample |
+| `POST` | `/api/aragorn/containers/{name}/{action}` | `start`, `stop`, `restart`, `update` (pull the upstream image and recreate if newer) or `recreate`. Body: `{"force": false}` |
+| `POST` | `/api/aragorn/images/pull` | Pull a newer version of an upstream image Rivendell uses. Body: `{"ref": "redis:7-alpine"}` |
+| `POST` | `/api/aragorn/images/remove` | Remove an unused Rivendell image (never forced). Body: `{"id": "sha256:..."}` |
+| `POST` | `/api/aragorn/images/prune` | Remove dangling images built for Rivendell |
+| `GET` | `/api/aragorn/ops` | The last 50 operations |
+| `GET` | `/api/aragorn/ops/{id}` | One operation: `status` (`queued`, `running`, `succeeded`, `failed`), `log`, `result` |
+
+Mutating calls return `202 Accepted` with an operation; poll `/ops/{id}` for the outcome. Operations run one at a time.
+
+Stopping, restarting, updating or recreating `celery-worker`, `postgres` or `redis` interrupts analysis jobs, so these return `409 Conflict` while a job is running or an `elrond.py` process is alive. Send `"force": true` to go ahead anyway:
+
+```json
+{
+  "detail": {
+    "message": "Refusing to restart celery-worker while jobs are running: 7c1e...",
+    "busy": true
+  }
+}
+```
+
+Aragorn won't stop, restart or recreate its own container from the API. Use `rivendell aragorn disable` on the host.
 
 ---
 

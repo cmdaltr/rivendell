@@ -56,8 +56,12 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DATABASE_URL=postgresql://rivendell:rivendell@postgres:5432/rivendell
+      # JWT signing key. Docker administration stays disabled until this is changed.
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
+      - ARAGORN_URL=http://aragorn:5690
     volumes:
       - ./src/web/backend:/app
+      - aragorn_token:/run/aragorn:ro # Written by aragorn
       # Platform-specific mounts - uncomment for your OS:
       # - /mnt:/mnt:ro              # Linux: Mount points (read-only)
       # - /media:/media:ro          # Linux: Ubuntu/Debian mounts (read-only)
@@ -72,6 +76,7 @@ services:
       - postgres
     networks:
       - rivendell-network
+      - rivendell-aragorn
     restart: unless-stopped
     command: uvicorn main:app --host 0.0.0.0 --port 5688 --reload
     ulimits:
@@ -82,6 +87,35 @@ services:
       resources:
         limits:
           memory: 256M
+
+  # Aragorn administers Rivendell's own containers and images.
+  # Opt-in: it holds the Docker socket, which is root-equivalent on the Docker
+  # VM. Enable with `rivendell aragorn enable` (or --profile aragorn). It is only
+  # reachable from the backend over the internal rivendell-aragorn network and
+  # refuses anything not labelled com.docker.compose.project=rivendell.
+  aragorn:
+    profiles: [aragorn]
+    build:
+      context: .
+      dockerfile: src/web/aragorn/Dockerfile
+    container_name: rivendell-aragorn
+    environment:
+      - RIVENDELL_COMPOSE_PROJECT=rivendell
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Docker Desktop and OrbStack both expose this path
+      - aragorn_token:/run/aragorn
+    networks:
+      - rivendell-aragorn
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
   # Celery worker for background tasks (forensics-enabled)
   celery-worker:
@@ -411,7 +445,12 @@ volumes:
   splunk_var:
   elastic_data:
   navigator_data:
+  aragorn_token:
 
 networks:
   rivendell-network:
     driver: bridge
+  # Backend <-> aragorn only; no route out and nothing published.
+  rivendell-aragorn:
+    driver: bridge
+    internal: true
