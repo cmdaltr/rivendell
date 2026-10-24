@@ -265,6 +265,9 @@ PENDING    → RUNNING    (Celery picks up task)
 RUNNING    → COMPLETED  (Success)
 RUNNING    → FAILED     (Error)
 RUNNING    → CANCELLED  (User cancels)
+RUNNING    → AWAITING_CONFIRMATION (force_overwrite could not remove the destination)
+AWAITING_CONFIRMATION → PENDING (confirm-sudo: directory removed, task re-queued)
+AWAITING_CONFIRMATION → FAILED  (cancel-sudo: removal declined)
 COMPLETED  → ARCHIVED   (User archives)
 FAILED     → ARCHIVED   (User archives)
 FAILED     → PENDING    (User restarts)
@@ -813,43 +816,36 @@ GET /api/jobs?limit=50&offset=0
 CONTAINER SPECIFICATIONS:
 ──────────────────────────
 
-rivendell-app:
-  Image: rivendell-web:dev
-  Privileged: true
-  Capabilities: SYS_ADMIN, SYS_RESOURCE
-  Devices: /dev/fuse
-  Ports: 5688:8000
+rivendell-backend:
+  Build: src/web/backend (FastAPI, uvicorn --reload on /app)
+  Ports: 5688:5688
+
+rivendell-celery-worker:
+  Build: src/web/backend/Dockerfile.forensics (Elrond baked in at /opt/elrond-src)
+  Privileged: true, cap_add SYS_ADMIN (image mounting)
+  Command: celery -A tasks_docker.celery_app worker
+  Memory: 8 GB limit, 2 GB reserved
+  Broker options: visibility_timeout 24 h, prefetch multiplier 1
+  Run long jobs with --concurrency=1 (jobs share /mnt/elrond_mountNN)
 
 rivendell-frontend:
-  Image: rivendell-frontend:dev
+  Build: src/web/frontend
   Ports: 5687:3000
 
-rivendell-celery:
-  Image: rivendell-web:dev
-  Privileged: true
-  Command: celery worker
-
-rivendell-flower:
-  Image: rivendell-web:dev
-  Ports: 5689:5555
-
 rivendell-postgres:
-  Image: postgres:15-alpine
+  Image: postgres:16-alpine
   Ports: 5432:5432
-  Environment:
-    POSTGRES_DB: rivendell
-    POSTGRES_USER: rivendell
-    POSTGRES_PASSWORD: rivendell
 
 rivendell-redis:
   Image: redis:7-alpine
   Ports: 6379:6379
-  Command: redis-server --appendonly yes
 
-rivendell-nginx:
-  Image: nginx:alpine
-  Ports: 80:80, 443:443
-  Profiles: production
+SIEM profile (docker compose --profile siem up -d):
+  rivendell-splunk      splunk/splunk:latest     8089 API, 7755 web, 9997 forwarder
+  rivendell-elastic     elasticsearch:8.11.0     9200, 9300
+  rivendell-kibana      kibana:8.11.0            5601
+  rivendell-navigator   node:18-alpine           5602
+  rivendell-elastic-setup, rivendell-kibana-setup (one-shot setup)
 ```
 
 ### 8.2 Scaling Strategy

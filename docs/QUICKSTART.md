@@ -45,154 +45,131 @@ If you use [FlightDeck](https://github.com/cmdaltr/FlightDeck) to manage your ho
 
 ## 🔧 Quick Start (Local Installation)
 
+Docker is the supported way to run the web stack: the worker image carries every forensic tool. A local install suits CLI use of Elrond and Gandalf.
+
 ### 1. Install Dependencies
 
 ```bash
-# Clone repository
 git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 
-# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install base dependencies
-pip install -e .
-
-# Install with web interface
-pip install -e ".[web]"
-
-# Install with SIEM support
-pip install -e ".[web]" -r requirements/siem.txt
+pip install -e .                 # base
+pip install -e ".[web]"          # web backend
+pip install -r requirements/siem.txt
 ```
 
-### 2. Start Web Interface
+The forensic tools themselves (Sleuth Kit, libewf, Volatility 3, Plaso, YARA and others) are listed in [CONFIG.md](CONFIG.md).
+
+### 2. Start the Web Backend
+
+The backend needs Postgres and Redis. Point it at them with `DATABASE_URL` and the Redis settings in `src/web/backend/config.py`, then:
 
 ```bash
-# Option 1: Using uvicorn directly
-python3 -m uvicorn web.backend.main:app --host 0.0.0.0 --port 5688 --reload
-
-# Option 2: Using CLI
-python3 cli/rivendell.py web --port 5688 --reload
-
-# Access at http://localhost:5688
+cd src/web/backend
+uvicorn main:app --host 0.0.0.0 --port 5688 --reload
 ```
 
+Jobs also need a Celery worker running `celery -A tasks_docker.celery_app worker --concurrency=1` with the forensic tools installed.
+
 ## 📥 Acquire Evidence
+
+Run Gandalf from `src/acquisition/`; it opens `lists/` and `tools/` relative to the current directory.
 
 ### Local Acquisition (Linux/macOS)
 
 ```bash
-# Basic acquisition with password encryption
-sudo python3 acquisition/python/gandalf.py Password Local -o /evidence
+cd src/acquisition
 
-# With memory dump
-sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence
+# Key-encrypted (recommended)
+sudo python3 python/gandalf.py Key Local -O /evidence
 
-# Using bash version
-sudo bash acquisition/bash/gandalf.sh Password Local -m -o /evidence
+# With a memory dump
+sudo python3 python/gandalf.py Password Local -M -O /evidence
+
+# Bash version
+sudo bash bash/gandalf.sh Password Local -m -o /evidence
 ```
 
 ### Remote Acquisition
 
-```bash
-# From single host
-sudo python3 acquisition/python/gandalf.py Password Remote -h 192.168.1.100 -u analyst -M
+The Python version reads hosts from `lists/hosts.list` and prompts for each host's address and credentials:
 
-# From multiple hosts (using hosts.list)
-echo "192.168.1.100" > acquisition/lists/hosts.list
-echo "192.168.1.101" >> acquisition/lists/hosts.list
-sudo python3 acquisition/python/gandalf.py Password Remote -f acquisition/lists/hosts.list -M
+```bash
+cd src/acquisition
+printf '192.168.1.100\n192.168.1.101\n' > lists/hosts.list
+sudo python3 python/gandalf.py Password Remote -M -O /evidence
+```
+
+The Bash version takes the host on the command line:
+
+```bash
+sudo bash src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst -m
 ```
 
 ### Windows Acquisition
 
 ```powershell
-# Open PowerShell as Administrator
-cd acquisition\windows
-
-# Local acquisition
-.\Invoke-Gandalf.ps1 Password Local -Memory
-
-# Remote acquisition
-.\Invoke-Gandalf.ps1 Password HOSTNAME -Memory -OutputDirectory D:\evidence
+# PowerShell as Administrator
+cd src\acquisition\windows
+.\Invoke-Gandalf.ps1 -EncryptionObject Key -Acquisition Local -OutputDirectory D:\evidence -Memory
 ```
+
+Each acquisition produces `<host>.zip` (or `<host>.zip.enc` when encrypted).
 
 ## 📁 Analysis Files (Keywords, YARA & IOC Watchlists)
 
-To use keyword searching, YARA signature scanning, and IOC watchlist matching, place your files in the `files/` directory:
+Keyword search, YARA scanning and IOC watchlist matching read their input from `fixtures/`, which Docker mounts read-only into the worker at `/tmp/rivendell/fixtures/`:
 
 ```
-files/
-├── keywords.txt           # One keyword per line
-├── iocs.txt               # IOC watchlist (IPs, domains, hashes)
-└── yara_rules/            # YARA rule files
-    ├── malware.yar
-    ├── suspicious.yara
-    └── custom_rules.yar
+fixtures/
+├── keywords.txt     # one keyword per line
+├── iocs.txt         # IOC watchlist (IPs, domains, hashes)
+└── yara_rules/      # .yar / .yara files
 ```
 
-This directory is automatically mounted into the Docker container at `/tmp/rivendell/files/`.
+Keep blank and `#` lines out of `keywords.txt`: Elrond treats them as keywords and matches every line. Lines starting `#` in `iocs.txt` are comments.
 
-**Keywords File Format** (`keywords.txt`):
-```
-password
-secret
-api_key
-credentials
-```
+When creating jobs, use these paths:
 
-**IOC Watchlist Format** (`iocs.txt`):
-```
-# Known malicious IPs
-192.168.1.100
-10.0.0.50
-
-# Malicious domains
-evil-domain.com
-malware-c2.net
-
-# File hashes (MD5, SHA1, SHA256)
-d41d8cd98f00b204e9800998ecf8427e
-```
-
-**YARA Rules**: Place `.yar` or `.yara` files in the `yara_rules/` subdirectory.
-
-When creating analysis jobs, reference these paths:
-- Keywords: `/tmp/rivendell/files/keywords.txt`
-- YARA: `/tmp/rivendell/files/yara_rules/`
-- IOCs: `/tmp/rivendell/files/iocs.txt`
+- Keywords: `/tmp/rivendell/fixtures/keywords.txt`
+- YARA: `/tmp/rivendell/fixtures/yara_rules/`
+- IOCs: `/tmp/rivendell/fixtures/iocs.txt`
 
 ## 🔍 Analyze Evidence
+
+Elrond takes long options only (`--Brisk`, not `-B`) and reads every image in the source directory. See [CLI.md](CLI.md#elrond---analysis) for all options and [PERFORMANCE.md](PERFORMANCE.md) for what each one costs.
 
 ### Quick Analysis
 
 ```bash
-# Brisk mode (quick analysis with common settings)
-python3 analysis/elrond.py CASE-001 /evidence/hostname.tar.gz /output -B
+# Collect, process and analyse a disk image directory
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis
 
-# Full analysis with all phases
-python3 analysis/elrond.py CASE-001 /evidence/hostname.tar.gz /output -CPA
+# Brisk mode (adds IOC extraction, Navigator and user profiles, so not faster)
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Brisk
+
+# A Gandalf acquisition
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Gandalf --Process --Analysis
 ```
 
 ### With SIEM Export
 
 ```bash
-# Export to Splunk
-python3 analysis/elrond.py CASE-001 /evidence /output -CPAS
+docker compose --profile siem up -d
 
-# Export to Elasticsearch
-python3 analysis/elrond.py CASE-001 /evidence /output -CPAE
-
-# Both
-python3 analysis/elrond.py CASE-001 /evidence /output -CPASE
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis --Splunk
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis --Elastic
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis --Splunk --Elastic --Navigator
 ```
 
 ### Memory Analysis
 
 ```bash
-# Analyze memory dump
-python3 analysis/elrond.py MEM-001 /evidence/memory.mem /output -MP
+# Memory image in /evidence/memory
+python3 src/analysis/elrond.py MEM-001 /evidence/memory /output/MEM-001 --Collect --Process --Memory
 ```
 
 ## 🌐 Using the Web Interface
@@ -200,33 +177,14 @@ python3 analysis/elrond.py MEM-001 /evidence/memory.mem /output -MP
 ### Starting Jobs via API
 
 ```bash
-# Create acquisition job
+# Create an analysis job
 curl -X POST http://localhost:5688/api/jobs \
   -H "Content-Type: application/json" \
   -d '{
-    "case_id": "CASE-001",
-    "job_type": "acquisition",
-    "target": "local",
-    "options": {
-      "encryption": "Password",
-      "memory": true
-    }
-  }'
-
-# Create analysis job
-curl -X POST http://localhost:5688/api/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "case_id": "CASE-001",
-    "job_type": "analysis",
-    "evidence_path": "/evidence/hostname.tar.gz",
-    "output_path": "/output",
-    "options": {
-      "collect": true,
-      "process": true,
-      "analyze": true,
-      "splunk": true
-    }
+    "case_number": "CASE-001",
+    "source_paths": ["/Volumes/Evidence/disk.E01"],
+    "destination_path": "/Volumes/Evidence/output/CASE-001",
+    "options": {"analysis": true, "splunk": true, "elastic": true}
   }'
 
 # Check job status
@@ -236,135 +194,76 @@ curl http://localhost:5688/api/jobs/JOB-ID
 curl http://localhost:5688/api/jobs
 ```
 
+Every option is listed under Create Job in [API.md](API.md#create-job). Acquisition is CLI-only; the API runs analysis jobs.
+
 ### Using the Web UI
 
-1. Open browser to `http://localhost:5687` (Docker) or `http://localhost:5688` (local install with a built frontend)
+1. Open `http://localhost:5687`
 2. Click **"New Analysis"**
-3. Fill in case details:
-   - Case ID: `CASE-001`
-   - Evidence Path: `/evidence/hostname.tar.gz`
-   - Output Directory: `/output`
-4. Select analysis options:
-   - ✅ Collection
-   - ✅ Processing
-   - ✅ Analysis
-   - ✅ Splunk Export
+3. Enter the case number, choose the image(s) and an output directory
+4. Select options (Analysis, Splunk, Elastic, Navigator…)
 5. Click **"Start Analysis"**
-6. Monitor progress in **"Job List"**
-7. View results in **"Job Details"**
+6. Follow progress in **"Job List"** and results in **"Job Details"**
 
-## 🔐 SIEM Setup (5-Minute Guide)
+## 🔐 SIEM Setup
 
-### Splunk Setup
+The `siem` Compose profile runs Splunk, Elasticsearch, Kibana and ATT&CK Navigator already wired to the worker:
 
-1. **Install Splunk Enterprise 9.x**:
 ```bash
-wget https://download.splunk.com/products/splunk/releases/9.1.2/linux/splunk-9.1.2-b6436b649711-Linux-x86_64.tgz
-tar xvzf splunk*.tgz -C /opt
-/opt/splunk/bin/splunk start --accept-license
+docker compose --profile siem up -d
 ```
 
-2. **Enable HEC and create token**:
-```bash
-/opt/splunk/bin/splunk http-event-collector enable -auth admin:changeme
-/opt/splunk/bin/splunk http-event-collector create rivendell-token -auth admin:changeme
-```
+| Service | URL |
+|---|---|
+| Splunk web | http://localhost:7755 |
+| Kibana | http://localhost:5601 |
+| Navigator | http://localhost:5602 |
 
-3. **Configure Rivendell** (edit `.env`):
-```bash
-SPLUNK_ENABLED=true
-SPLUNK_HOST=localhost
-SPLUNK_PORT=8088
-SPLUNK_HEC_TOKEN=your-token-here
-```
+Splunk runs under Rosetta on Apple silicon and needs several minutes to start. Give Docker at least 16 GB of memory with the profile up.
 
-### Elasticsearch Setup
+To use an existing Splunk or Elasticsearch instead, set these on the worker:
 
-1. **Install Elasticsearch 8.x**:
-```bash
-wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | sudo gpg --dearmor -o /usr/share/keyrings/elasticsearch-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/elasticsearch-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | sudo tee /etc/apt/sources.list.d/elastic-8.x.list
-sudo apt-get update && sudo apt-get install elasticsearch
-sudo systemctl start elasticsearch
-```
-
-2. **Get credentials** (displayed on first start):
-```bash
-# Or reset password
-/usr/share/elasticsearch/bin/elasticsearch-reset-password -u elastic
-```
-
-3. **Configure Rivendell** (edit `.env`):
-```bash
-ELASTIC_ENABLED=true
-ELASTIC_HOST=localhost
-ELASTIC_PORT=9200
-ELASTIC_SCHEME=https
-ELASTIC_USERNAME=elastic
-ELASTIC_PASSWORD=your-password
-ELASTIC_SSL_VERIFY=false  # Or provide CA cert
-```
+| Variable | Default in Compose |
+|---|---|
+| `SPLUNK_HOST`, `SPLUNK_PORT`, `SPLUNK_USERNAME`, `SPLUNK_PASSWORD` | `splunk`, 8089 (management API) |
+| `ELASTICSEARCH_HOST`, `ELASTICSEARCH_PORT`, `ELASTIC_USERNAME`, `ELASTIC_PASSWORD` | `elastic`, 9200 |
 
 ## 📊 Common Workflows
 
 ### Workflow 1: Quick Triage
 
 ```bash
-# 1. Acquire from suspect system
-sudo python3 acquisition/python/gandalf.py None Local -o /evidence
-
-# 2. Quick analysis (Brisk mode)
-python3 analysis/elrond.py TRIAGE-001 /evidence/*.tar.gz /output -B
-
-# 3. Review IOCs
-cat /output/TRIAGE-001/analysis/iocs.csv
+cd src/acquisition && sudo python3 python/gandalf.py None Local -O /evidence/TRIAGE-001 && cd -
+python3 src/analysis/elrond.py TRIAGE-001 /evidence/TRIAGE-001 /output/TRIAGE-001 --Gandalf --Process --Analysis
+cat /output/TRIAGE-001/*/analysis/analysis.csv
 ```
 
 ### Workflow 2: Full Investigation with SIEM
 
 ```bash
-# 1. Acquire from remote host with memory
-sudo python3 acquisition/python/gandalf.py Password Remote -h 192.168.1.100 -u analyst -M
-
-# 2. Full analysis with Splunk export
-python3 analysis/elrond.py CASE-001 /evidence/*.tar.gz /output -CPAS
-
-# 3. View in Splunk
-# Navigate to: http://localhost:7755/en-US/app/elrond/
+cd src/acquisition && sudo python3 python/gandalf.py Password Remote -M -O /evidence/CASE-001 && cd -
+python3 src/analysis/elrond.py CASE-001 /evidence/CASE-001 /output/CASE-001 \
+  --Gandalf --Process --Analysis --extractIocs --Memory --Splunk --Navigator
+# Splunk: http://localhost:7755/en-US/app/elrond/
 ```
 
 ### Workflow 3: Memory Analysis
 
 ```bash
-# 1. Acquire memory only
-sudo python3 acquisition/python/gandalf.py None Local -M -o /evidence
-
-# 2. Memory analysis with Volatility
-python3 analysis/elrond.py MEM-001 /evidence/*.mem /output -MP
-
-# 3. Review processes
-cat /output/MEM-001/memory/processes.csv
+cd src/acquisition && sudo python3 python/gandalf.py None Local -M -O /evidence/MEM-001 && cd -
+python3 src/analysis/elrond.py MEM-001 /evidence/MEM-001 /output/MEM-001 --Gandalf --Process --Memory
+ls /output/MEM-001/*/   # one JSON file per Volatility 3 plugin
 ```
 
-### Workflow 4: Batch Remote Acquisition
+### Workflow 4: Several Hosts
+
+Acquire them all with one `Remote` run (Workflow 2), then analyse each archive as its own case, one at a time. Parallel runs share mount points and unmount each other's images.
 
 ```bash
-# 1. Create hosts list
-cat > acquisition/lists/hosts.list <<EOF
-192.168.1.100
-192.168.1.101
-192.168.1.102
-EOF
-
-# 2. Acquire from all hosts
-sudo python3 acquisition/python/gandalf.py Password Remote -f acquisition/lists/hosts.list -M
-
-# 3. Batch analyze
-for file in /evidence/*.tar.gz; do
-    hostname=$(basename "$file" .tar.gz)
-    python3 analysis/elrond.py "BATCH-${hostname}" "$file" /output -CPA &
+for dir in /evidence/hosts/*/; do
+  host=$(basename "$dir")
+  python3 src/analysis/elrond.py "CASE-${host}" "$dir" "/output/CASE-${host}" --Gandalf --Process --Analysis
 done
-wait
 ```
 
 ## 🐛 Troubleshooting
@@ -372,117 +271,75 @@ wait
 ### Docker Issues
 
 ```bash
-# Restart services
-docker compose restart
-
-# Rebuild images
-docker compose build --no-cache
-
-# View logs
-docker compose logs -f
-
-# Check container status
 docker compose ps
-
-# Clean up and restart
-docker compose down -v
-docker compose up -d
+docker compose logs -f backend celery-worker
+docker compose restart backend celery-worker
+docker compose build --no-cache celery-worker
 ```
+
+`docker compose down -v` also deletes the Postgres volume and with it every job record.
 
 ### Permission Issues (Acquisition)
 
-```bash
-# Ensure running as root
-sudo -i
-
-# Check file permissions
-ls -la acquisition/
-
-# Make scripts executable
-chmod +x acquisition/bash/gandalf.sh
-chmod +x acquisition/python/gandalf.py
-```
+Gandalf needs root (`sudo`) to read system artefacts and memory. Make the scripts executable with `chmod +x src/acquisition/bash/gandalf.sh src/acquisition/python/gandalf.py`.
 
 ### Import Errors (Analysis)
 
-```bash
-# Check dependencies
-python3 analysis/cli.py --check-dependencies
-
-# Install missing tools
-python3 analysis/cli.py --install
-
-# Verify Python path
-echo $PYTHONPATH
-export PYTHONPATH=/path/to/rivendell:$PYTHONPATH
-```
+Run Python modules from the repository root, never from inside `src/analysis` (see [CLI.md](CLI.md)). `src/analysis/cli.py --check-dependencies` is currently broken (it imports a package that no longer exists); use the Docker worker or check tools against [CONFIG.md](CONFIG.md).
 
 ### Web Interface Not Loading
 
 ```bash
-# Check if server is running
 curl http://localhost:5688/api/health
-
-# Check ports
-netstat -tuln | grep -E '5687|5688'
-
-# View server logs
 docker compose logs backend
-
-# Or if running locally
-tail -f /var/log/rivendell/web.log
+lsof -iTCP:5687 -iTCP:5688 -sTCP:LISTEN
 ```
 
 ## 📚 Next Steps
 
-- **Full Documentation**: See [README.md](README.md)
-- **SIEM Setup**: See [docs/SIEM_SETUP.md](docs/SIEM_SETUP.md)
-- **Configuration**: See [docs/CONFIG.md](docs/CONFIG.md)
-- **Development**: See [docs/CONTRIBUTION.md](docs/CONTRIBUTION.md)
+- **Full documentation**: [README.md](../README.md)
+- **CLI reference**: [CLI.md](CLI.md)
+- **API reference**: [API.md](API.md)
+- **Configuration**: [CONFIG.md](CONFIG.md)
+- **Processing times**: [PERFORMANCE.md](PERFORMANCE.md)
 
 ## 🎯 Example Outputs
 
 ### Acquisition Output
 ```
 /evidence/
-└── hostname.tar.gz
+└── <host>.zip            # <host>.zip.enc when encrypted
     ├── artefacts/
     │   ├── host.info
-    │   ├── memory/hostname.mem
-    │   ├── logs/
-    │   └── browsers/
-    ├── log.audit
+    │   └── <host>.mem    # with -M
+    ├── log.audit         # SHA-256 per file
     └── log.meta
 ```
 
 ### Analysis Output
 ```
 /output/CASE-001/
-├── collected/          # Collected artifacts
-├── processed/          # Parsed data (CSV/JSON)
-│   ├── timeline.csv
-│   ├── registry.csv
-│   └── browsers.csv
-├── analysis/
-│   ├── iocs.csv       # Indicators of Compromise
-│   └── keywords.csv
-└── splunk/            # Splunk-ready events
-    └── events.json
+├── rivendell_audit.log
+├── mitre_techniques.txt
+└── <image>/
+    ├── artefacts/
+    │   ├── raw/          # collected files
+    │   └── cooked/       # parsed artefacts (JSON/CSV)
+    └── analysis/         # analysis.csv, iocs.csv, keyword_matches.csv, yara.csv
 ```
 
 ## 💡 Pro Tips
 
-1. **Use Docker for easiest setup** - handles all dependencies
-2. **Enable memory acquisition** for comprehensive analysis
-3. **Use Brisk mode (-B)** for quick triage
-4. **Export to SIEM** for long-term storage and correlation
-5. **Run acquisition from dedicated forensic workstation**
-6. **Use key-based encryption** for sensitive cases
-7. **Monitor disk space** - evidence can be large
-8. **Review audit logs** after each acquisition
+1. **Use Docker** - the worker image has every tool installed
+2. **Enable memory acquisition** for a fuller picture
+3. **Size the job first** - [PERFORMANCE.md](PERFORMANCE.md) has per-option times; `--Timeline`, `--vss`, `--extractIocs` and carving take hours
+4. **Run one job at a time** on the web stack (worker concurrency 1)
+5. **Use key-based encryption** for sensitive cases
+6. **Monitor disk space** - carving alone can produce tens of thousands of files
+7. **Review `log.audit`** after each acquisition
 
 ---
 
-**Need Help?** Check the [full documentation](README.md) or open an [issue](https://github.com/cmdaltr/rivendell/issues).
+**Need Help?** Check the [full documentation](../README.md) or open an [issue](https://github.com/cmdaltr/rivendell/issues).
 
 Happy Investigating! 🔍🧙‍♂️

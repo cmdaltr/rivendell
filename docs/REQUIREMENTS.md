@@ -264,7 +264,7 @@ git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
 
 # Build and start containers
-docker-compose up -d
+docker compose up -d
 
 # Access web interface
 # http://localhost:5688
@@ -358,10 +358,10 @@ pip install plaso --upgrade
 
 ## 📖 Additional Resources
 
-- **[Installation Guide](docs/INSTALLATION.md)** - Detailed installation instructions
-- **[Tools Documentation](docs/TOOLS.md)** - Complete tool reference
-- **[Configuration](docs/CONFIG.md)** - Configuration options
-- **[Troubleshooting](docs/SUPPORT.md)** - Common issues and solutions
+- **[Installation Guide](../INSTALL.md)** - Detailed installation instructions
+- **[Configuration](CONFIG.md)** - Configuration options and tool installation
+- **[CLI Reference](CLI.md)** - Every command
+- **[Troubleshooting](CLI.md#troubleshooting)** - Common issues and solutions
 
 ---
 

@@ -45,16 +45,15 @@ curl -X POST http://localhost:5688/api/jobs \
     "source_paths": ["/evidence/disk.E01"],
     "destination_path": "/output/CASE-2025-001",
     "options": {
-      "collect": true,
-      "analyze": true,
-      "memory_analysis": false
+      "analysis": true,
+      "memory": false
     }
   }'
 ```
 
 **Via CLI:**
 ```bash
-elrond -C -P -A CASE-2025-001 /evidence/disk.E01 /output/CASE-2025-001
+python3 src/analysis/elrond.py CASE-2025-001 /evidence /output/CASE-2025-001 --Collect --Process --Analysis
 ```
 
 ---
@@ -65,9 +64,9 @@ elrond -C -P -A CASE-2025-001 /evidence/disk.E01 /output/CASE-2025-001
 
 **Step 1: Acquire Evidence** (if needed)
 ```bash
-# Remote acquisition
-python3 acquisition/python/gandalf.py Password 192.168.1.100 \
-  -u admin -M -o /evidence/CASE-001
+# Remote acquisition (hosts from src/acquisition/lists/hosts.list)
+cd src/acquisition
+sudo python3 python/gandalf.py Password Remote -M -O /evidence/CASE-001
 ```
 
 **Step 2: Start Analysis**
@@ -78,7 +77,7 @@ python3 acquisition/python/gandalf.py Password 192.168.1.100 \
 **Step 3: Monitor Progress**
 - View real-time progress in web interface
 - Check logs tab for detailed output
-- Wait for completion (can take hours)
+- Wait for completion. A basic Windows E01 takes about 15 minutes; `vss`, `timeline`, `extract_iocs` and carving add hours (see [PERFORMANCE.md](PERFORMANCE.md))
 
 **Step 4: Review Results**
 - View completed job details
@@ -91,13 +90,13 @@ For rapid initial analysis:
 
 **CLI:**
 ```bash
-elrond -C -P -A -q TRIAGE-001 /evidence/disk.E01 /output/TRIAGE-001
+python3 src/analysis/elrond.py TRIAGE-001 /evidence /output/TRIAGE-001 --Collect --Process --Analysis
 ```
 
 **Web Interface:**
-- Select "Quick" speed mode
-- Disable optional analysis modules
-- Focus on IOC extraction
+- Enable Analysis only
+- Leave Timeline, VSS, IOC extraction and file collection off: they are the slow options
+- Brisk mode is not a quick mode; it adds IOC extraction
 
 ### Memory-Only Analysis
 
@@ -105,7 +104,8 @@ For memory dump analysis only:
 
 **CLI:**
 ```bash
-elrond -M MEMORY-001 /evidence/memory.dmp /output/MEMORY-001
+# memory image in /evidence/memory
+python3 src/analysis/elrond.py MEMORY-001 /evidence/memory /output/MEMORY-001 --Collect --Process --Memory
 ```
 
 **Web Interface:**
@@ -137,6 +137,8 @@ curl -X POST http://localhost:5688/api/auth/register \
     "full_name": "Security Analyst"
   }'
 ```
+
+> MFA, password reset and the admin user screens below depend on `auth/routes.py`, which the backend does not mount in the current build (it uses the simple file-based router). See [API.md](API.md#authentication-status).
 
 ### Enable Multi-Factor Authentication (MFA)
 
@@ -203,9 +205,12 @@ curl -X POST http://localhost:5688/api/jobs/{job_id}/cancel \
 
 **CLI:**
 ```bash
-# Cancel via Celery
-celery -A tasks control revoke {task_id}
+python3 tests/scripts/run_test.py --cancel {job_id}
 ```
+
+Cancelling leaves the tool Elrond was running (foremost, yara, Plaso) alive in the worker, still holding the image mount. See [TEST_RUNNER_GUIDE.md](../tests/docs/TEST_RUNNER_GUIDE.md#cleaning-up-after-a-cancel) for clean-up.
+
+A job in `awaiting_confirmation` can only be cancelled with `POST /api/jobs/{job_id}/cancel-sudo`.
 
 ### Restart Failed Job
 
@@ -226,7 +231,7 @@ curl -X POST http://localhost:5688/api/jobs/{job_id}/restart \
 curl -X POST http://localhost:5688/api/jobs/bulk/archive \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"job_ids": ["uuid1", "uuid2"]}'
+  -d '["uuid1", "uuid2"]'
 ```
 
 ### Delete Jobs
@@ -252,11 +257,10 @@ curl -X DELETE http://localhost:5688/api/jobs/{job_id} \
 - Navigate by clicking folders
 - Select files by clicking checkboxes
 
-**Allowed Directories** (configured in `config.py`):
-- `/tmp/rivendell` (macOS native)
-- `/host/tmp/rivendell` (Docker on Mac)
-- `/mnt`, `/media`, `/Volumes` (Linux/macOS)
-- `C:\Temp\rivendell` (Windows)
+**Allowed Directories** (`allowed_paths` in `src/web/backend/config.py`, chosen by the OS the backend runs on):
+- Docker / Linux: `/Volumes`, `/mnt`, `/media`, `/tmp/rivendell`, `/host/tmp/rivendell`
+- macOS native: `/Volumes`, `/tmp/rivendell`
+- Windows: `C:\Temp\rivendell` (and `D:`–`F:`)
 
 ### Supported Image Formats
 
@@ -277,84 +281,57 @@ curl -X DELETE http://localhost:5688/api/jobs/{job_id} \
 
 ### Access Output Files
 
-**Docker (host machine):**
-```bash
-# Output is in Docker volume
-docker volume inspect rivendell-output
-
-# Copy from container
-docker cp rivendell-app:/output/CASE-001 ./local-output/
-```
-
-**Native Installation:**
-```bash
-# Default output directory
-ls -la /tmp/elrond/output/CASE-001/
-```
+Output goes to the job's `destination_path`. Under Docker on macOS, use a path on `/Volumes` (both containers mount it) and the files appear directly on the host. Output under `/host/tmp/rivendell` in the backend maps to `/tmp/elrond/output` in the worker.
 
 ### Output Structure
 
 ```
-/output/CASE-001/
-├── collected/           # Collected artifacts
-├── processed/           # Parsed data (CSV/JSON)
-├── analysis/            # Analysis results
-├── memory/              # Memory analysis output
-└── logs/                # Execution logs
+<destination>/
+├── rivendell_audit.log        # CSV, one row per finished piece of work (UTC)
+├── mitre_techniques.txt
+├── <case>_navigator.json      # if Navigator enabled
+└── <image>/
+    ├── artefacts/
+    │   ├── raw/               # collected files
+    │   ├── cooked/            # parsed artefacts: registry/, evt/, browsers/, journal_mft.json …
+    │   └── plaso_timeline.csv # if Timeline enabled
+    ├── analysis/              # analysis.csv, iocs.csv, keyword_matches.csv, yara.csv
+    └── carved/                # if carving enabled
 ```
+
+Memory images get one JSON file per Volatility 3 plugin under `<destination>/<memory image>/`.
 
 ### Common Result Files
 
 ```bash
-# Timeline
-cat /output/CASE-001/processed/timeline.csv
-
-# Registry analysis
-cat /output/CASE-001/processed/registry.csv
-
-# Event logs
-cat /output/CASE-001/processed/event_logs.csv
-
-# IOCs
-cat /output/CASE-001/analysis/iocs.csv
-
-# Memory processes
-cat /output/CASE-001/memory/processes.csv
+cat /output/CASE-001/*/analysis/analysis.csv
+cat /output/CASE-001/*/analysis/iocs.csv
+ls  /output/CASE-001/*/artefacts/cooked/registry/
+cat /output/CASE-001/*/artefacts/plaso_timeline.csv | head
 ```
 
 ---
 
 ## Integration Examples
 
-### Export to Splunk
+### Export to Splunk and Elasticsearch
+
+SIEM export runs inside Elrond, not as a separate tool. Enable Splunk, Elastic and Navigator on the job, or re-run the export for a completed job:
 
 ```bash
-python3 -m rivendell.siem.splunk_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --hec-url https://splunk:8088 \
-  --hec-token YOUR_HEC_TOKEN
+curl -X POST http://localhost:5688/api/jobs/{job_id}/export-siem
 ```
 
-### Export to Elasticsearch
-
-```bash
-python3 -m rivendell.siem.elastic_exporter \
-  --case-id CASE-001 \
-  --data-dir /output/CASE-001 \
-  --elastic-url https://elastic:9200 \
-  --index rivendell-case-001
-```
+From the CLI, add `--Splunk --Elastic --Navigator` to the Elrond command. Start the services first with `docker compose --profile siem up -d`.
 
 ### Generate MITRE ATT&CK Mapping
 
 ```bash
-# Map artifacts to techniques
-python3 -m rivendell.mitre.mapper /output/CASE-001
-
-# Generate Navigator layer
-python3 -m rivendell.mitre.navigator /output/CASE-001 -o navigator.json
+python3 -m src.analysis.mitre.cli map powershell_history -c "<command line>"
+python3 -m src.analysis.mitre.coverage_cli dashboard CASE-001 /output/CASE-001 -o coverage.html
 ```
+
+The Navigator layer is written by Elrond (`<case>_navigator.json`) or downloaded with `GET /api/jobs/{job_id}/navigator`.
 
 ---
 
@@ -365,8 +342,7 @@ python3 -m rivendell.mitre.navigator /output/CASE-001 -o navigator.json
 ```bash
 # Login
 TOKEN=$(curl -s -X POST http://localhost:5688/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin@rivendell.app", "password": "IWasThere3000YearsAgo!"}' \
+  -d "username=admin@rivendell.app" --data-urlencode "password=IWasThere3000YearsAgo!" \
   | jq -r '.access_token')
 
 # Use token in requests
@@ -375,6 +351,8 @@ curl http://localhost:5688/api/jobs \
 ```
 
 ### Login with MFA
+
+> Not available in the current build: the mounted auth router has no MFA step.
 
 ```bash
 # Step 1: Login (returns temp_token if MFA enabled)
@@ -407,7 +385,7 @@ TOKEN=$(curl -s -X POST http://localhost:5688/api/auth/mfa/verify \
 ### Performance
 
 1. **Use SSD/NVMe** for evidence and output directories
-2. **Limit concurrent jobs** (default: 3) based on available resources
+2. **Run one job at a time** (worker `--concurrency=1`): concurrent jobs share mount points and unmount each other's images
 3. **Close browser tabs** monitoring jobs to reduce load
 4. **Archive old jobs** to keep database performant
 
@@ -435,13 +413,15 @@ TOKEN=$(curl -s -X POST http://localhost:5688/api/auth/mfa/verify \
 
 **Check Celery worker:**
 ```bash
-docker logs rivendell-celery
+docker logs rivendell-celery-worker --tail 100
 ```
 
 **Restart worker:**
 ```bash
-docker restart rivendell-celery
+docker restart rivendell-celery-worker
 ```
+
+Restarting the worker kills any running job.
 
 ### "Failed to load directory"
 
@@ -455,16 +435,10 @@ ls -la /tmp/rivendell
 
 ### Can't Login
 
-**Reset admin password:**
-```bash
-docker exec -it rivendell-postgres psql -U rivendell -d rivendell \
-  -c "UPDATE users SET hashed_password='NEW_HASH' WHERE email='admin@rivendell.app';"
-```
+Users are stored in the JSON file named by `USERS_FILE` (default `/app/data/users.json` in the backend container). When the file has no users, the next login creates the default admin from `default_admin_email` and `default_admin_password` in `config.py`. Moving the file aside resets it (`/app/data` is `src/web/backend/data` on the host); other accounts are kept in the `.bak` copy:
 
-**Disable MFA (emergency):**
 ```bash
-docker exec -it rivendell-postgres psql -U rivendell -d rivendell \
-  -c "UPDATE users SET mfa_enabled=false WHERE email='user@example.com';"
+docker exec rivendell-backend mv /app/data/users.json /app/data/users.json.bak
 ```
 
 ---
@@ -480,4 +454,4 @@ docker exec -it rivendell-postgres psql -U rivendell -d rivendell \
 ---
 
 **Version:** 2.1.0
-**Last Updated:** 2025-01-15
+**Last Updated:** 2026-10-22

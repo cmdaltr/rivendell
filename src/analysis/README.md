@@ -141,8 +141,8 @@ docker-compose -f docker/docker-compose.yml up
 
 Access the application:
 - **Web Interface**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
-- **API Health**: http://localhost:8000/api/health
+- **API Documentation**: http://localhost:5688/docs
+- **API Health**: http://localhost:5688/api/health
 
 ### Option 2: Native Installation
 

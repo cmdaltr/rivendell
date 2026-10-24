@@ -374,7 +374,7 @@ psql -h localhost -U rivendell -d rivendell
 redis-cli ping
 
 # Check logs
-docker logs rivendell-app
+docker logs rivendell-backend
 
 # Verify dependencies
 pip install -r requirements/web.txt
@@ -428,7 +428,7 @@ ls -la /tmp/rivendell
 chmod 755 /tmp/rivendell
 
 # Check Docker volume mounts
-docker inspect rivendell-app | grep Mounts
+docker inspect rivendell-backend | grep Mounts
 ```
 
 #### Celery Tasks Not Running
@@ -438,13 +438,13 @@ docker inspect rivendell-app | grep Mounts
 **Solutions:**
 ```bash
 # Check Celery worker
-docker logs rivendell-celery
+docker logs rivendell-celery-worker
 
 # Check Redis
 redis-cli ping
 
 # Restart Celery
-docker restart rivendell-celery
+docker restart rivendell-celery-worker
 ```
 
 ### Debug Mode
@@ -462,7 +462,7 @@ export RIVENDELL_DEBUG=1
 
 ### Getting Help
 
-1. Check logs: `docker logs rivendell-app`
+1. Check logs: `docker logs rivendell-backend`
 2. Review [API.md](API.md) for endpoint docs
 3. See [SECURITY.md](SECURITY.md) for security setup
 4. Check GitHub issues: https://github.com/cmdaltr/rivendell/issues

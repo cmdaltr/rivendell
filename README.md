@@ -104,35 +104,35 @@ _1. Acquire evidence from remote system_
   <table><tr><td>
         <img src="./docs/images/readme/python.png" alt="Rivendell - The Last Homely House" width="42"/>
       </td><td>
-        <code>python3 src/acquisition/python/gandalf.py Password 192.168.1.100 -u administrator -M -o /evidence/CASE-001</code>
+        <code>cd src/acquisition && sudo python3 python/gandalf.py Password Remote -M -O /evidence/CASE-001</code>
       </td></tr><tr><td>
         <img src="./docs/images/readme/bash.png" alt="Rivendell - The Last Homely House" width="42"/>
       </td><td>
-        <code>sudo ./scripts/install_macos.sh</code>
+        <code>sudo ./src/acquisition/bash/gandalf.sh Password Remote -h 192.168.1.100 -u administrator -m -o /evidence/CASE-001</code>
       </td></tr><tr><td>
         <img src="./docs/images/readme/powershell.png" alt="Rivendell - The Last Homely House" width="42"/>
       </td><td>
-        <code>.\scripts\install_windows_wsl.ps1</code>
+        <code>.\src\acquisition\windows\Invoke-Gandalf.ps1 -EncryptionObject Password -Acquisition Remote -OutputDirectory D:\evidence\CASE-001 -Memory</code>
   </td></tr></table>
 </div>
 
 _2. Process and analyze evidence_
 
-`elrond -C -c CASE-001 -s /evidence/CASE-001 -m /evidence/CASE-001/memory.dmp -o /cases/CASE-001`
+`python3 src/analysis/elrond.py CASE-001 /evidence/CASE-001 /cases/CASE-001 --Gandalf --Process --Analysis --Memory`
 
 _3. Additional optional features_
   
 &ensp;&ensp;&ensp;Map to MITRE ATT&CK<br>
-&ensp;&ensp;&ensp;`python3 -m rivendell.mitre.mapper /cases/CASE-001`
+&ensp;&ensp;&ensp;`python3 -m src.analysis.mitre.coverage_cli report CASE-001 /cases/CASE-001`
 
 &ensp;&ensp;&ensp;Index for AI analysis<br>
-&ensp;&ensp;&ensp;`rivendell-ai index CASE-001 /cases/CASE-001`
+&ensp;&ensp;&ensp;`python3 -m src.analysis.rivendell.ai.cli index CASE-001 /cases/CASE-001`
 
 &ensp;&ensp;&ensp;Query with natural language<br>
-&ensp;&ensp;&ensp;`rivendell-ai query CASE-001 "What PowerShell commands were executed?"`
+&ensp;&ensp;&ensp;`python3 -m src.analysis.rivendell.ai.cli query CASE-001 "What PowerShell commands were executed?"`
 
 &ensp;&ensp;&ensp;Generate report<br>
-&ensp;&ensp;&ensp;`rivendell-ai summary CASE-001 --format markdown --output report.md`
+&ensp;&ensp;&ensp;`python3 -m src.analysis.rivendell.ai.cli summary CASE-001 --format markdown --output report.md`
 
 ---
 
@@ -198,7 +198,7 @@ Collect forensic artifacts from local and remote systems.
 - Services
 - Memory dumps
 
-[Full Documentation →](docs/gandalf-README.md)
+[Full Documentation →](docs/CLI.md#gandalf---acquisition)
 
 ---
 
@@ -224,7 +224,7 @@ Process and analyze forensic evidence with integrated tools.
 - Bulk Extractor (IOC extraction)
 - 25+ additional forensic utilities
 
-[Full Documentation →](docs/elrond-README.md)
+[Full Documentation →](docs/CLI.md#elrond---analysis)
 
 ---
 
@@ -245,13 +245,13 @@ Automatically map forensic findings to MITRE ATT&CK techniques with comprehensiv
 **Usage:**
 ```bash
 # Update MITRE data
-python3 -m rivendell.mitre.updater
+python3 -m src.analysis.mitre.cli update
 
-# Map artifacts to techniques
-python3 -m rivendell.mitre.mapper /path/to/artifacts
+# Map an artefact to techniques
+python3 -m src.analysis.mitre.cli map powershell_history -c "<command line>"
 
-# Generate Navigator layer
-python3 -m rivendell.mitre.dashboard -o /output/dashboard.html
+# Build dashboards from a mappings file
+python3 -m src.analysis.mitre.cli dashboard -i mappings.json -o /output/dashboards
 ```
 
 **Coverage:**
@@ -260,7 +260,7 @@ python3 -m rivendell.mitre.dashboard -o /output/dashboard.html
 - Content-based pattern matching for accurate detection
 - Evidence source mapping with full metadata
 
-[Full Documentation →](docs/USER_GUIDE.md#feature-1-mitre-attack-integration)
+[Full Documentation →](src/analysis/mitre/README.md)
 
 ---
 
@@ -277,17 +277,15 @@ Real-time MITRE ATT&CK coverage analysis during investigations.
 
 **Usage:**
 ```bash
-# Analyze coverage
-python3 -m rivendell.coverage.analyzer /cases/CASE-001
-
-# Real-time monitoring
-python3 -m rivendell.coverage.monitor --watch /cases
+# Start coverage tracking and report
+python3 -m src.analysis.mitre.coverage_cli init CASE-001 /cases/CASE-001
+python3 -m src.analysis.mitre.coverage_cli report CASE-001 /cases/CASE-001 --detailed
 
 # Generate dashboard
-python3 -m rivendell.coverage.dashboard -o dashboard.html
+python3 -m src.analysis.mitre.coverage_cli dashboard CASE-001 /cases/CASE-001 -o dashboard.html
 ```
 
-[Full Documentation →](docs/USER_GUIDE.md#feature-2-coverage-analysis)
+[Full Documentation →](docs/CLI.md#coverage-analysis-mitrecoverage_cli)
 
 ---
 
@@ -300,19 +298,9 @@ Extended support for Windows, macOS, and Linux artifacts.
 - **macOS**: plists, launch agents/daemons, unified logs, FSEvents
 - **Linux**: systemd services, cron jobs, bash history, auth logs
 
-**Usage:**
-```bash
-# Parse Windows WMI
-python3 -m rivendell.artifacts.windows.wmi /path/to/system
+These parsers run as part of Elrond's processing phase; there is no separate command for each.
 
-# Parse macOS artifacts
-python3 -m rivendell.artifacts.macos.launch_agents /path/to/system
-
-# Parse Linux artifacts
-python3 -m rivendell.artifacts.linux.systemd /path/to/system
-```
-
-[Full Documentation →](docs/ARTIFACTS.md)
+[Full Documentation →](docs/FUNCTIONALITY.md)
 
 ---
 
@@ -330,16 +318,16 @@ Investigate cloud infrastructure across AWS, Azure, and GCP.
 **Usage:**
 ```bash
 # List AWS instances
-python3 -m rivendell.cloud.cli aws list --credentials aws_creds.json
+python3 -m src.analysis.rivendell.cloud.cli aws list --credentials aws_creds.json
 
 # Acquire Azure VM disk
-python3 -m rivendell.cloud.cli azure acquire-disk \
+python3 -m src.analysis.rivendell.cloud.cli azure acquire-disk \
   --instance-id myvm \
   --resource-group mygroup \
   --output ./output
 
 # Analyze CloudTrail logs
-python3 -m rivendell.cloud.cli aws analyze-logs \
+python3 -m src.analysis.rivendell.cloud.cli aws analyze-logs \
   --log-file cloudtrail.json \
   --output ./analysis
 ```
@@ -351,7 +339,7 @@ python3 -m rivendell.cloud.cli aws analyze-logs \
 - T1619 - Cloud Storage Object Discovery
 - And 13+ more cloud-specific techniques
 
-[Full Documentation →](docs/CLOUD.md)
+[Full Documentation →](docs/CLI.md#cloud-forensics)
 
 ---
 
@@ -370,19 +358,19 @@ Query investigation data using natural language with local AI.
 **Usage:**
 ```bash
 # Index case data
-rivendell-ai index CASE-001 /cases/CASE-001
+python3 -m src.analysis.rivendell.ai.cli index CASE-001 /cases/CASE-001
 
 # Query the case
-rivendell-ai query CASE-001 "What PowerShell commands were executed?"
+python3 -m src.analysis.rivendell.ai.cli query CASE-001 "What PowerShell commands were executed?"
 
 # Get investigation suggestions
-rivendell-ai suggest CASE-001
+python3 -m src.analysis.rivendell.ai.cli suggest CASE-001
 
 # Generate case summary
-rivendell-ai summary CASE-001 --format markdown --output summary.md
+python3 -m src.analysis.rivendell.ai.cli summary CASE-001 --format markdown --output summary.md
 
-# Start web interface
-python3 -m rivendell.ai.web_interface
+# Start web interface (port 5687, same as the frontend container; stop that first)
+python3 -m src.analysis.rivendell.ai.web_interface
 # Access at http://localhost:5687/ai/chat/CASE-001
 ```
 
@@ -393,14 +381,14 @@ python3 -m rivendell.ai.web_interface
 - "Summarize the attack timeline"
 - "What persistence mechanisms were found?"
 
-[Full Documentation →](docs/AI_AGENT.md)
+[Full Documentation →](docs/ERU.md)
 
 ---
 
 ## 🛠️ Installation Requirements
 
 **Core Requirements:**
-- Python 3.8+
+- Python 3.12 (`pyproject.toml` allows 3.8+, but the stack is built and tested on 3.12)
 - Volatility 3
 - Plaso/log2timeline
 - 30+ forensic utilities
@@ -410,33 +398,32 @@ python3 -m rivendell.ai.web_interface
 - Docker (for containerized deployment)
 - Splunk/Elasticsearch (for SIEM integration)
 
-**For complete installation guide, see:** [REQUIREMENTS.md](REQUIREMENTS.md)
+**For complete installation guide, see:** [REQUIREMENTS.md](docs/REQUIREMENTS.md)
 
 ---
 
 ## 📚 Documentation
 
 ### Getting Started
-- **[Quick Start](QUICKSTART.md)** - Get started in 5 minutes
-- **[Usage Guide](USAGE.md)** - Complete command reference for all features
-- **[Workflows](WORKFLOWS.md)** - Common investigation workflows
-- **[Requirements](REQUIREMENTS.md)** - Installation requirements and dependencies
+- **[Quick Start](docs/QUICKSTART.md)** - Get started in 5 minutes
+- **[Usage Guide](docs/USAGE.md)** - Web, API and CLI tasks
+- **[CLI Reference](docs/CLI.md)** - Every command, including common workflows
+- **[Requirements](docs/REQUIREMENTS.md)** - Installation requirements and dependencies
+- **[Performance](docs/PERFORMANCE.md)** - How long each option takes
 
 ### User Documentation
-- **[User Guide](docs/USER_GUIDE.md)** - Comprehensive user guide
 - **[Configuration](docs/CONFIG.md)** - Configuration options
-- **[Support](docs/SUPPORT.md)** - Troubleshooting and help
+- **[API Reference](docs/API.md)** - REST API
 
 ### Component Documentation
-- **[Artifacts](docs/ARTIFACTS.md)** - Supported artifact types and parsing
-- **[Cloud Forensics](docs/CLOUD.md)** - AWS, Azure, and GCP investigations
-- **[AI Agent](docs/AI_AGENT.md)** - Natural language analysis
-- **[SIEM Integration](docs/SIEM.md)** - Splunk and Elasticsearch
+- **[Functionality](docs/FUNCTIONALITY.md)** - Supported artefact types and parsing
+- **[Cloud Forensics](docs/CLI.md#cloud-forensics)** - AWS, Azure, and GCP investigations
+- **[Eru](docs/ERU.md)** - AI analyst
+- **[SIEM Integration](docs/CLI.md#siem-integration)** - Splunk and Elasticsearch
 
 ### Technical Documentation
-- **[Tools](docs/TOOLS.md)** - Integrated forensic tools
-- **[Update Guide](docs/UPDATE_GUIDE.md)** - Update procedures
-- **[Contributing](docs/CONTRIBUTION.md)** - Contribution guidelines
+- **[Architecture](docs/ARCHITECTURE.md)** - Components and job flow
+- **[Security](docs/SECURITY.md)** - Security model
 
 ---
 
@@ -447,36 +434,37 @@ python3 -m rivendell.ai.web_interface
 **Incident Response:**
 ```bash
 # Quick triage → Analysis → MITRE mapping → AI query → SIEM export
-python3 acquisition/python/gandalf.py Password 192.168.1.100 -u admin -o /evidence
-elrond -C -c IR-2024-001 -s /evidence -o /cases/IR-2024-001
-python3 -m rivendell.mitre.mapper /cases/IR-2024-001
-rivendell-ai query IR-2024-001 "What lateral movement occurred?"
+(cd src/acquisition && sudo python3 python/gandalf.py Password Remote -O /evidence/IR-2024-001)
+python3 src/analysis/elrond.py IR-2024-001 /evidence/IR-2024-001 /cases/IR-2024-001 --Gandalf --Process --Analysis --Navigator --Splunk
+python3 -m src.analysis.rivendell.ai.cli index IR-2024-001 /cases/IR-2024-001
+python3 -m src.analysis.rivendell.ai.cli query IR-2024-001 "What lateral movement occurred?"
 ```
 
 **Malware Analysis:**
 ```bash
 # Acquire → Memory analysis → IOC extraction → Report
-python3 acquisition/python/gandalf.py Password 192.168.1.50 -M -o /evidence
-elrond -C -c MAL-001 -s /evidence -m /evidence/memory.dmp -o /output
-rivendell-ai query MAL-001 "What IOCs were detected?"
-rivendell-ai summary MAL-001 --format markdown --output report.md
+(cd src/acquisition && sudo python3 python/gandalf.py Password Local -M -O /evidence/MAL-001)
+python3 src/analysis/elrond.py MAL-001 /evidence/MAL-001 /output/MAL-001 --Gandalf --Process --Memory --extractIocs
+python3 -m src.analysis.rivendell.ai.cli index MAL-001 /output/MAL-001
+python3 -m src.analysis.rivendell.ai.cli summary MAL-001 --format markdown --output report.md
 ```
 
 **Cloud Investigation:**
 ```bash
 # Acquire logs → Analyze → Query
-python3 -m rivendell.cloud.cli aws acquire-logs --days 30 --output ./logs
-python3 -m rivendell.cloud.cli aws analyze-logs --log-file ./logs/cloudtrail.json
-rivendell-ai query CLOUD-001 "What suspicious AWS API calls were made?"
+python3 -m src.analysis.rivendell.cloud.cli aws acquire-logs --days 30 --output ./logs
+python3 -m src.analysis.rivendell.cloud.cli aws analyze-logs --log-file ./logs/cloudtrail.json
+python3 -m src.analysis.rivendell.ai.cli index CLOUD-001 ./logs --cloud-logs ./logs/cloudtrail.json --cloud-provider aws
+python3 -m src.analysis.rivendell.ai.cli query CLOUD-001 "What suspicious AWS API calls were made?"
 ```
 
-**For complete workflows, see:** [WORKFLOWS.md](WORKFLOWS.md)
+**For complete workflows, see:** [CLI.md](docs/CLI.md#common-workflows)
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTION.md](docs/CONTRIBUTION.md) for guidelines.
+We welcome contributions! Open an issue or pull request at https://github.com/cmdaltr/rivendell.
 
 **Ways to Contribute:**
 - Report bugs and request features
@@ -505,7 +493,7 @@ Rivendell integrates many excellent open-source forensic tools:
 - **Ollama** - Local LLM inference
 - **LangChain** - AI orchestration
 
-And 25+ additional tools. See [TOOLS.md](docs/TOOLS.md) for the complete list.
+And 25+ additional tools. See [REQUIREMENTS.md](docs/REQUIREMENTS.md) for the complete list.
 
 ---
 
@@ -518,10 +506,10 @@ And 25+ additional tools. See [TOOLS.md](docs/TOOLS.md) for the complete list.
 
 ### Reference
 - **[Docker Installation](scripts/DOCKER_INSTALL.md)** - Docker Desktop and OrbStack setup
-- **[Gandalf Documentation](docs/gandalf-README.md)** - Remote acquisition guide
-- **[Elrond Documentation](docs/elrond-README.md)** - Analysis engine guide
-- **[Tools Reference](docs/TOOLS.md)** - All integrated forensic tools
-- **[Support Guide](docs/SUPPORT.md)** - Troubleshooting and help
+- **[Gandalf Documentation](docs/CLI.md#gandalf---acquisition)** - Remote acquisition guide
+- **[Elrond Documentation](src/analysis/README.md)** - Analysis engine guide
+- **[Tools Reference](docs/REQUIREMENTS.md)** - All integrated forensic tools
+- **[Troubleshooting](docs/CLI.md#troubleshooting)** - Common problems
 
 ---
 

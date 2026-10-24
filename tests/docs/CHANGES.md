@@ -1,3 +1,33 @@
+# Test Runner Changes - October 2026
+
+Changes made during the October 2026 E2E matrix run (uncommitted at 22 Oct).
+
+## Test Tooling
+
+- **`run_test.py --cancel JOB_ID [...]`** cancels specific jobs. A job in `awaiting_confirmation` returns 400 on `/cancel`, so it falls back to `/cancel-sudo`. Exits 1 if any cancel fails.
+- **`run_test.py` image discovery** also searches `/Volumes/*/rivendell` and `/Volumes/*/*/rivendell`.
+- **`tests/scripts/test_timings.py`** (new) extracts per-test and per-stage timings from every `rivendell_audit.log` into JSON, CSV or Markdown. It splits records on timestamps rather than newlines because `iocs.py` writes entries without a trailing newline.
+- **`docs/PERFORMANCE.md`** (new) records what each option costs, measured from this run.
+
+## Worker and Elrond Fixes
+
+- **Celery redelivery** (`tasks_docker.py`): `visibility_timeout` raised to 24 h and `worker_prefetch_multiplier` set to 1. With the 1 h default, a job queued behind one that ran over an hour was delivered again and ran up to three times.
+- **`$I30` walk** (`collect/files/i30.py`): stops once the image is handled. It used to `os.walk` the whole evidence directory, including any test output stored there, adding 11–73 minutes to each Windows run.
+- **Carving** (`collect/files/carve.py`): the per-file logging sleep dropped from 0.5 s to 0.1 s, and foremost's `audit.txt` is kept as the record of what was scanned.
+- **YARA** (`post/yara.py`): `-N` stops `yara -r` following symlinks. On Linux images `/dev/fd -> /proc/self/fd` led back into the mount and the scan never finished.
+- **Splunk healthcheck** (`docker-compose.yml`): a curl check on :8089 replaces the image's own check, which ran as `ansible` and always reported unhealthy.
+
+## Documentation
+
+- `TEST_RUNNER_GUIDE.md` rewritten: current script paths, job control, clean-up after a cancel, silent steps, output layout and timings.
+- `TEST_RESULTS.md` regenerated from the Notion Test Plan.
+- `tests/docs/README.md`: corrected the `run_test.py` path and test count.
+- `docs/CLI.md`, `QUICKSTART.md`, `USAGE.md`, `docs/README.md`, root `README.md`, `src/web/README.md`: replaced commands that don't exist (Elrond short flags, `rivendell-ai`, `rivendell.mitre.*`, `rivendell.siem.*` and similar) with the real entry points, which must run from the repository root. Fixed the Gandalf syntax and output format (zip, not tar.gz), fixture paths, ports and dead links.
+- `docs/API.md`: added an authentication status section (simple file-based router mounted; job endpoints don't check tokens; MFA and admin routes not mounted), form-encoded login, the real job `options`, and endpoints that were missing.
+- `docs/ARCHITECTURE.md`, `ACCESSING-DATA.md`, `CONFIG.md`, `REQUIREMENTS.md`, `INSTALL.md`: current container names, Compose v2 syntax, the `siem` profile and live links.
+
+---
+
 # Test Runner Changes - January 2026
 
 ## Summary

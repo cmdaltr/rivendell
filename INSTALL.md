@@ -370,8 +370,8 @@ For first-time users or systems with 16GB RAM or less, use **Testing Mode**:
 If you have 32GB+ RAM and want all features:
 
 ```bash
-# Start full stack with SIEM integration
-docker-compose up -d
+# Start full stack with SIEM integration (Splunk, Elastic, Kibana, Navigator)
+docker compose --profile siem up -d
 ```
 
 ### Step 7: Wait for Services to Start
@@ -381,7 +381,7 @@ The startup script waits ~15 seconds for services to initialize.
 **Check service status:**
 
 ```bash
-docker-compose ps
+docker compose ps
 ```
 
 **Expected output:**
@@ -516,14 +516,14 @@ sudo systemctl start docker
 **Solution:**
 ```bash
 # Check container logs
-docker-compose logs backend
-docker-compose logs celery-worker
+docker compose logs backend
+docker compose logs celery-worker
 
 # Restart services
-docker-compose restart
+docker compose restart
 
 # Or full restart
-docker-compose down
+docker compose down
 ./scripts/start-testing-mode.sh
 ```
 
@@ -567,8 +567,8 @@ lsof -i :5688
 
 # Kill the process or change Rivendell's port in .env
 # Then restart
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ### Permission Denied
@@ -581,8 +581,8 @@ docker-compose up -d
 sudo chown -R $USER:$USER .
 
 # Docker: Run with current user
-docker-compose down
-docker-compose up -d
+docker compose down
+docker compose up -d
 ```
 
 ### Docker Desktop gVisor Crash
@@ -644,14 +644,14 @@ Or switch to OrbStack on macOS.
 
 ```bash
 # View all logs
-docker-compose logs
+docker compose logs
 
 # View specific service
-docker-compose logs backend
-docker-compose logs celery-worker
+docker compose logs backend
+docker compose logs celery-worker
 
 # Follow logs in real-time
-docker-compose logs -f backend
+docker compose logs -f backend
 ```
 
 ### Manage Image Paths
@@ -684,9 +684,9 @@ nano tests/jobs/win_brisk.json
 If running full stack:
 
 **Splunk:**
-- URL: http://localhost:8000
+- URL: http://localhost:7755
 - User: admin
-- Password: changeme
+- Password: the `SPLUNK_PASSWORD` value in `docker-compose.yml`
 
 **Elasticsearch:**
 - URL: http://localhost:9200
@@ -700,13 +700,13 @@ If running full stack:
 
 ```bash
 # Stop all containers
-docker-compose down
+docker compose down
 
 # Stop and remove volumes (WARNING: deletes all data)
-docker-compose down -v
+docker compose down -v
 
 # Stop specific service
-docker-compose stop backend
+docker compose stop backend
 ```
 
 ---
@@ -718,10 +718,10 @@ docker-compose stop backend
 git pull origin main
 
 # Rebuild containers
-docker-compose build
+docker compose build
 
 # Restart services
-docker-compose down
+docker compose down
 ./scripts/start-testing-mode.sh
 ```
 
@@ -733,7 +733,7 @@ docker-compose down
 
 ```bash
 # Stop all containers
-docker-compose down
+docker compose down
 
 # Remove all Rivendell images
 docker rmi $(docker images | grep rivendell | awk '{print $3}')
@@ -792,10 +792,10 @@ brew uninstall --cask orbstack
 cd tests && ./scripts/run_single_test.sh win_brisk
 
 # Stop Rivendell
-docker-compose down
+docker compose down
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 ```
 
 ### Common File Locations

@@ -237,7 +237,7 @@ Configured paths:
     → /data1 (in container)
 
 ℹ  Restart Rivendell for changes to take effect:
-  docker-compose down
+  docker compose down
   ./scripts/start-testing-mode.sh
 
 Press Enter to continue...
@@ -249,13 +249,13 @@ After updating paths, you must restart Rivendell:
 
 ```bash
 # Stop Rivendell
-docker-compose down
+docker compose down
 
 # Start in testing mode
 ./scripts/start-testing-mode.sh
 
 # Or start full stack
-docker-compose up -d
+docker compose up -d
 ```
 
 ## Common Use Cases
@@ -311,7 +311,7 @@ python3 scripts/image-paths.py
 **Solution:**
 - Restart Rivendell after updating paths:
   ```bash
-  docker-compose down
+  docker compose down
   ./scripts/start-testing-mode.sh
   ```
 

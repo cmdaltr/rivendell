@@ -1,7 +1,7 @@
 # Rivendell Web API Reference
 
 **Version:** 2.1.0
-**Base URL:** `http://localhost:8000/api`
+**Base URL:** `http://localhost:5688/api`
 **Protocol:** REST
 **Authentication:** JWT Bearer Token or HTTP-only Cookie
 
@@ -9,15 +9,24 @@
 
 ## Table of Contents
 
-1. [Authentication](#authentication)
-2. [Multi-Factor Authentication (MFA)](#multi-factor-authentication-mfa)
-3. [Admin Endpoints](#admin-endpoints)
-4. [Job Management](#job-management)
-5. [File System](#file-system)
-6. [Health Check](#health-check)
-7. [Request/Response Formats](#requestresponse-formats)
-8. [Error Handling](#error-handling)
-9. [Code Examples](#code-examples)
+1. [Authentication Status](#authentication-status)
+2. [Authentication](#authentication)
+3. [Multi-Factor Authentication (MFA)](#multi-factor-authentication-mfa)
+4. [Admin Endpoints](#admin-endpoints)
+5. [Job Management](#job-management)
+6. [File System](#file-system)
+7. [Health Check](#health-check)
+8. [Request/Response Formats](#requestresponse-formats)
+9. [Error Handling](#error-handling)
+10. [Code Examples](#code-examples)
+
+---
+
+## Authentication Status
+
+The backend mounts the simple file-based auth router (`src/web/backend/auth/routes_simple.py`, users in `USERS_FILE`, default `/app/data/users.json`). It provides `register`, `login`, `guest`, `logout`, a stub `me` and a stub `forgot-password`. The MFA, password-reset and admin endpoints below are implemented in `auth/routes.py`, which is not mounted.
+
+No job, file-system, AI or Mordor endpoint checks the token or cookie, so anyone who can reach port 5688 can submit, read, cancel and delete jobs. Keep the API on localhost or behind a reverse proxy that authenticates.
 
 ---
 
@@ -75,14 +84,13 @@ All authenticated endpoints require either:
 
 **Endpoint:** `POST /auth/login`
 
-**Description:** Authenticate user and receive access token. Sets HTTP-only cookie.
+**Description:** Authenticate and receive an access token. Also sets an HTTP-only cookie.
 
-**Request Body:**
-```json
-{
-  "username": "user@example.com",  // Username or email
-  "password": "SecurePassword123!"
-}
+**Request Body:** OAuth2 form data (`application/x-www-form-urlencoded`), not JSON. `username` accepts the username or the email address.
+
+```bash
+curl -X POST http://localhost:5688/api/auth/login \
+  -d "username=user@example.com" --data-urlencode "password=<password>"
 ```
 
 **Response:** `200 OK`
@@ -95,22 +103,12 @@ All authenticated endpoints require either:
     "email": "user@example.com",
     "username": "username",
     "full_name": "John Doe",
-    "role": "user",
-    "is_active": true,
-    "created_at": "2025-01-15T10:00:00Z",
-    "last_login": "2025-01-15T12:00:00Z"
-  },
-  "mfa_required": false  // True if MFA is enabled
+    "role": "user"
+  }
 }
 ```
 
-**If MFA Required:** `200 OK`
-```json
-{
-  "mfa_required": true,
-  "temp_token": "temporary_token_for_mfa_verification"
-}
-```
+There is no MFA step in the mounted auth router.
 
 **Errors:**
 - `401 Unauthorized`: Invalid credentials
@@ -168,6 +166,8 @@ All authenticated endpoints require either:
 
 ### Get Current User
 
+> **Stub.** Returns a fixed guest user in the current build.
+
 **Endpoint:** `GET /auth/me`
 
 **Description:** Retrieve current authenticated user information.
@@ -195,6 +195,8 @@ All authenticated endpoints require either:
 
 ### Forgot Password
 
+> **Stub.** Always returns the success message; no email is sent.
+
 **Endpoint:** `POST /auth/forgot-password`
 
 **Description:** Request password reset email (development: token logged to console).
@@ -219,6 +221,8 @@ All authenticated endpoints require either:
 ---
 
 ### Reset Password
+
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
 
 **Endpoint:** `POST /auth/reset-password`
 
@@ -249,6 +253,8 @@ All authenticated endpoints require either:
 
 ### Setup MFA
 
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
+
 **Endpoint:** `POST /auth/mfa/setup`
 
 **Description:** Initialize MFA setup and generate TOTP secret with QR code URI.
@@ -273,6 +279,8 @@ All authenticated endpoints require either:
 ---
 
 ### Enable MFA
+
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
 
 **Endpoint:** `POST /auth/mfa/enable`
 
@@ -302,6 +310,8 @@ All authenticated endpoints require either:
 
 ### Disable MFA
 
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
+
 **Endpoint:** `POST /auth/mfa/disable`
 
 **Description:** Disable MFA for current user.
@@ -325,6 +335,8 @@ All authenticated endpoints require either:
 ---
 
 ### Verify MFA
+
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
 
 **Endpoint:** `POST /auth/mfa/verify`
 
@@ -361,6 +373,8 @@ All authenticated endpoints require either:
 
 ### Regenerate Backup Codes
 
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
+
 **Endpoint:** `POST /auth/mfa/regenerate-backup-codes`
 
 **Description:** Generate new set of backup codes (invalidates old ones).
@@ -393,6 +407,8 @@ All authenticated endpoints require either:
 
 ### Reset User Password (Admin)
 
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
+
 **Endpoint:** `POST /auth/admin/reset-user-password`
 
 **Description:** Admin can reset any user's password (except other admins). Invalidates all user sessions.
@@ -422,6 +438,8 @@ All authenticated endpoints require either:
 
 ### Disable User MFA (Admin)
 
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
+
 **Endpoint:** `POST /auth/admin/disable-user-mfa`
 
 **Description:** Emergency MFA disable for locked-out users.
@@ -449,6 +467,8 @@ All authenticated endpoints require either:
 ---
 
 ### Toggle User Account Status (Admin)
+
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
 
 **Endpoint:** `POST /auth/admin/toggle-user-status`
 
@@ -478,6 +498,8 @@ All authenticated endpoints require either:
 ---
 
 ### List All Users (Admin)
+
+> **Not mounted.** Implemented in `auth/routes.py`; the backend mounts `auth/routes_simple.py`, which does not provide this endpoint.
 
 **Endpoint:** `GET /auth/admin/users`
 
@@ -517,7 +539,7 @@ All authenticated endpoints require either:
 
 **Description:** Create and queue a new forensic analysis job.
 
-**Authentication:** Required (User or Admin role)
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Request Body:**
 ```json
@@ -529,16 +551,29 @@ All authenticated endpoints require either:
   ],
   "destination_path": "/output/CASE-2025-001",
   "options": {
-    "collect": true,
-    "process": true,
-    "analyze": true,
-    "memory_analysis": true,
+    "analysis": true,
+    "memory": true,
     "timeline": true,
     "extract_iocs": true,
-    "speed_mode": "brisk"
+    "force_overwrite": false
   }
 }
 ```
+
+`options` maps onto Elrond's command line (`build_elrond_command` in `tasks_docker.py`). All are optional booleans unless shown otherwise:
+
+| Group | Fields |
+|---|---|
+| Source | `local` (default `true`; collect from images), `gandalf` (pre-collected Gandalf archives) |
+| Modes | `brisk`, `mordor` |
+| Phases | `analysis`, `memory`, `memory_timeline`, `timeline` |
+| Collection | `vss`, `userprofiles`, `collectFiles` + `collectFiles_filter`, `collect_files_all`, `collect_files_archive`, `collect_files_bin`, `collect_files_docs`, `collect_files_hidden`, `collect_files_lnk`, `collect_files_mail`, `collect_files_scripts`, `collect_files_unalloc` (carving), `collect_files_virtual`, `collect_files_web` |
+| Detection | `extract_iocs` + `iocs_file`, `keywords` + `keywords_file`, `yara` + `yara_dir`, `misplaced_binaries`, `masquerading` |
+| Hashing | `hash_collected`, `hash_all`, `nsrl` |
+| Output | `splunk`, `elastic`, `navigator`, `archive`, `delete`, `save_template` |
+| Job control | `force_overwrite` (remove an existing `destination_path`), `debug` (verbose job log) |
+
+Paths are passed to the worker unchanged, except `/host/tmp/rivendell/…`, which becomes `/tmp/elrond/output/…`. Host paths under `/Volumes` work because both containers mount `/Volumes` at the same path.
 
 **Response:** `201 Created`
 ```json
@@ -577,12 +612,12 @@ All authenticated endpoints require either:
 
 **Endpoint:** `GET /api/jobs`
 
-**Description:** List all jobs for current user (admins see all jobs).
+**Description:** List all jobs. Jobs are not filtered by user in the current build.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Query Parameters:**
-- `status` (optional): Filter by status (pending, running, completed, failed, cancelled, archived)
+- `status` (optional): Filter by status (pending, running, awaiting_confirmation, completed, failed, cancelled, archived)
 - `limit` (optional): Number of results (default: 50, max: 100)
 - `offset` (optional): Pagination offset (default: 0)
 - `case_number` (optional): Filter by case number
@@ -615,7 +650,7 @@ All authenticated endpoints require either:
 
 **Description:** Retrieve detailed information about a specific job.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Path Parameters:**
 - `job_id`: UUID of the job
@@ -648,56 +683,21 @@ All authenticated endpoints require either:
 
 ---
 
-### Update Job
-
-**Endpoint:** `PATCH /api/jobs/{job_id}`
-
-**Description:** Update job fields (limited to specific fields).
-
-**Authentication:** Required
-
-**Path Parameters:**
-- `job_id`: UUID of the job
-
-**Request Body:**
-```json
-{
-  "status": "running",  // Optional
-  "progress": 50,        // Optional, 0-100
-  "log": ["New log entry"],  // Optional, appends to log
-  "result": {},          // Optional
-  "error": "Error message"  // Optional
-}
-```
-
-**Response:** `200 OK`
-```json
-{
-  "id": "uuid",
-  "status": "running",
-  "progress": 50,
-  ...
-}
-```
-
-**Errors:**
-- `404 Not Found`: Job not found
-- `400 Bad Request`: Invalid update data
-
----
-
 ### Delete Job
 
 **Endpoint:** `DELETE /api/jobs/{job_id}`
 
-**Description:** Permanently delete a job. Cannot delete running jobs (cancel first).
+**Description:** Permanently delete a job. Cannot delete pending or running jobs (cancel first).
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Path Parameters:**
 - `job_id`: UUID of the job
 
-**Response:** `204 No Content`
+**Response:** `200 OK`
+```json
+{"message": "Job deleted successfully"}
+```
 
 **Errors:**
 - `400 Bad Request`: Cannot delete running job
@@ -709,24 +709,45 @@ All authenticated endpoints require either:
 
 **Endpoint:** `POST /api/jobs/{job_id}/cancel`
 
-**Description:** Cancel a running or pending job. Terminates Celery task.
+**Description:** Cancel a pending or running job. Revokes the Celery task with `SIGKILL` and releases the job's image locks. Child processes started by Elrond (foremost, yara, log2timeline) are not killed and keep the image mounted; see `tests/docs/TEST_RUNNER_GUIDE.md` for clean-up.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Path Parameters:**
 - `job_id`: UUID of the job
 
-**Response:** `200 OK`
-```json
-{
-  "id": "uuid",
-  "status": "cancelled",
-  "message": "Job cancelled successfully"
-}
-```
+**Response:** `200 OK` with the updated job object (`"status": "cancelled"`).
 
 **Errors:**
-- `400 Bad Request`: Job not in running/pending state
+- `400 Bad Request`: Job is not pending or running. A job in `awaiting_confirmation` must be cancelled with `cancel-sudo`.
+- `404 Not Found`: Job not found
+
+---
+
+### Confirm Directory Removal
+
+**Endpoint:** `POST /api/jobs/{job_id}/confirm-sudo`
+
+**Description:** When a job is submitted with `force_overwrite` and the worker cannot remove the existing destination directory (error or timeout), the job stops in `awaiting_confirmation`. Confirming removes the directory with sudo and starts the job again as a new Celery task.
+
+**Response:** `200 OK` with the updated job object.
+
+**Errors:**
+- `400 Bad Request`: Job is not awaiting confirmation
+- `404 Not Found`: Job not found
+
+---
+
+### Cancel Directory Removal
+
+**Endpoint:** `POST /api/jobs/{job_id}/cancel-sudo`
+
+**Description:** Decline the directory removal for a job in `awaiting_confirmation`. The job is marked failed with "Directory removal cancelled by user". This is the only way to cancel a job in that state.
+
+**Response:** `200 OK` with the updated job object.
+
+**Errors:**
+- `400 Bad Request`: Job is not awaiting confirmation
 - `404 Not Found`: Job not found
 
 ---
@@ -737,7 +758,7 @@ All authenticated endpoints require either:
 
 **Description:** Restart a failed or cancelled job. Creates new Celery task.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Path Parameters:**
 - `job_id`: UUID of the job
@@ -764,7 +785,7 @@ All authenticated endpoints require either:
 
 **Description:** Archive a completed or failed job. Preserves original status for restoration.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Path Parameters:**
 - `job_id`: UUID of the job
@@ -791,7 +812,7 @@ All authenticated endpoints require either:
 
 **Description:** Restore archived job to original status (completed/failed).
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Path Parameters:**
 - `job_id`: UUID of the job
@@ -812,19 +833,64 @@ All authenticated endpoints require either:
 
 ---
 
+### Bulk Restart Jobs
+
+**Endpoint:** `POST /api/jobs/bulk/restart`
+
+**Description:** Restart failed, cancelled or completed jobs. Takes a bare JSON array of job IDs and returns a result per job.
+
+---
+
+### Export Job to SIEM
+
+**Endpoint:** `POST /api/jobs/{job_id}/export-siem`
+
+**Description:** Run, or re-run, the SIEM export for a completed job.
+
+---
+
+### Get Navigator Layer
+
+**Endpoint:** `GET /api/jobs/{job_id}/navigator`
+
+**Description:** Download the job's MITRE ATT&CK Navigator JSON layer.
+
+---
+
+### Validate Case ID
+
+**Endpoint:** `GET /api/validate/case-id/{case_id}`
+
+**Description:** Check whether a case ID is already in use.
+
+**Response:** `200 OK`
+```json
+{"exists": true, "jobs": ["uuid1"]}
+```
+
+---
+
+### Check and Upload Required Files
+
+**Endpoints:** `POST /api/check-required-files`, `POST /api/upload-required-files`
+
+**Description:** Keyword, YARA and collect-files options need input files. `check-required-files` takes `{"options": ["keywords", "yara", "collectFiles"]}` and returns `{"missing": [...], "found": [...]}`. `upload-required-files` takes multipart fields `keywords`, `yara` and `collectFiles`.
+
+---
+
 ### Bulk Cancel Jobs
 
 **Endpoint:** `POST /api/jobs/bulk/cancel`
 
 **Description:** Cancel multiple jobs at once.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Request Body:**
+A bare JSON array of job IDs:
+
 ```json
-{
-  "job_ids": ["uuid1", "uuid2", "uuid3"]
-}
+["uuid1", "uuid2", "uuid3"]
 ```
 
 **Response:** `200 OK`
@@ -844,13 +910,13 @@ All authenticated endpoints require either:
 
 **Description:** Delete multiple jobs at once.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Request Body:**
+A bare JSON array of job IDs:
+
 ```json
-{
-  "job_ids": ["uuid1", "uuid2", "uuid3"]
-}
+["uuid1", "uuid2", "uuid3"]
 ```
 
 **Response:** `200 OK`
@@ -870,13 +936,13 @@ All authenticated endpoints require either:
 
 **Description:** Archive multiple jobs at once.
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Request Body:**
+A bare JSON array of job IDs:
+
 ```json
-{
-  "job_ids": ["uuid1", "uuid2", "uuid3"]
-}
+["uuid1", "uuid2", "uuid3"]
 ```
 
 **Response:** `200 OK`
@@ -898,7 +964,7 @@ All authenticated endpoints require either:
 
 **Description:** Browse server filesystem (limited to configured allowed paths).
 
-**Authentication:** Required
+**Authentication:** Not enforced in the current build (see [Authentication Status](#authentication-status))
 
 **Query Parameters:**
 - `path` (optional): Path to browse (default: "/")
@@ -1018,10 +1084,10 @@ All authenticated endpoints require either:
 ```python
 import requests
 
-BASE_URL = "http://localhost:8000/api"
+BASE_URL = "http://localhost:5688/api"
 
 # Login
-response = requests.post(f"{BASE_URL}/auth/login", json={
+response = requests.post(f"{BASE_URL}/auth/login", data={
     "username": "user@example.com",
     "password": "password"
 })
@@ -1037,7 +1103,7 @@ job_response = requests.post(
         "case_number": "CASE-001",
         "source_paths": ["/evidence/disk.E01"],
         "destination_path": "/output/CASE-001",
-        "options": {"collect": True, "analyze": True}
+        "options": {"analysis": True}
     }
 )
 job = job_response.json()
@@ -1054,14 +1120,14 @@ print(f"Job status: {status_response.json()['status']}")
 ```javascript
 const axios = require('axios');
 
-const BASE_URL = 'http://localhost:8000/api';
+const BASE_URL = 'http://localhost:5688/api';
 
 async function main() {
   // Login
-  const loginResponse = await axios.post(`${BASE_URL}/auth/login`, {
-    username: 'user@example.com',
-    password: 'password'
-  });
+  const loginResponse = await axios.post(
+    `${BASE_URL}/auth/login`,
+    new URLSearchParams({ username: 'user@example.com', password: 'password' })
+  );
 
   const token = loginResponse.data.access_token;
 
@@ -1072,7 +1138,7 @@ async function main() {
       case_number: 'CASE-001',
       source_paths: ['/evidence/disk.E01'],
       destination_path: '/output/CASE-001',
-      options: { collect: true, analyze: true }
+      options: { analysis: true }
     },
     {
       headers: { Authorization: `Bearer ${token}` }
@@ -1098,30 +1164,29 @@ main();
 
 ```bash
 # Login
-curl -X POST http://localhost:8000/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "user@example.com", "password": "password"}' \
+curl -s -X POST http://localhost:5688/api/auth/login \
+  -d "username=user@example.com" -d "password=password" \
   | jq -r '.access_token' > token.txt
 
 TOKEN=$(cat token.txt)
 
 # Create job
-curl -X POST http://localhost:8000/api/jobs \
+curl -X POST http://localhost:5688/api/jobs \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "case_number": "CASE-001",
     "source_paths": ["/evidence/disk.E01"],
     "destination_path": "/output/CASE-001",
-    "options": {"collect": true, "analyze": true}
+    "options": {"analysis": true}
   }'
 
 # List jobs
-curl -X GET "http://localhost:8000/api/jobs?status=running" \
+curl -X GET "http://localhost:5688/api/jobs?status=running" \
   -H "Authorization: Bearer $TOKEN"
 
 # Cancel job
-curl -X POST "http://localhost:8000/api/jobs/{job_id}/cancel" \
+curl -X POST "http://localhost:5688/api/jobs/{job_id}/cancel" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -1178,7 +1243,7 @@ GET /api/jobs?limit=20&offset=40
 Real-time job progress updates via WebSocket:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/jobs/{job_id}');
+const ws = new WebSocket('ws://localhost:5688/ws/jobs/{job_id}');
 
 ws.onmessage = (event) => {
   const update = JSON.parse(event.data);
@@ -1190,12 +1255,12 @@ ws.onmessage = (event) => {
 ---
 
 **For additional support, see:**
-- [SECURITY.md](/docs/SECURITY.md) - Security implementation details
-- [QUICKSTART.md](/docs/QUICKSTART.md) - Getting started guide
-- [USER_GUIDE.md](/docs/USER_GUIDE.md) - Complete user documentation
+- [SECURITY.md](SECURITY.md) - Security implementation details
+- [QUICKSTART.md](QUICKSTART.md) - Getting started guide
+- [USAGE.md](USAGE.md) - Complete user documentation
 
 ---
 
 **Version:** 2.1.0
-**Last Updated:** 2025-01-15
+**Last Updated:** 2026-10-22
 **License:** See LICENSE file

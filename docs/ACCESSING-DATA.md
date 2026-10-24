@@ -78,14 +78,14 @@ If you need to copy data from other container locations:
 
 ```bash
 # Copy from backend container
-docker cp rivendell-app:/path/in/container ~/Desktop/
+docker cp rivendell-backend:/path/in/container ~/Desktop/
 
 # Copy from Celery worker
-docker cp rivendell-celery:/path/in/container ~/Desktop/
+docker cp rivendell-celery-worker:/path/in/container ~/Desktop/
 
 # Examples:
-docker cp rivendell-celery:/tmp/elrond/output/CASE-ID ~/Desktop/
-docker cp rivendell-app:/app/backend/logs ~/Desktop/rivendell-logs/
+docker cp rivendell-celery-worker:/tmp/elrond/output/CASE-ID ~/Desktop/
+docker logs rivendell-backend > ~/Desktop/rivendell-backend.log 2>&1
 ```
 
 ## Method 3: Browse Container Filesystem
@@ -94,13 +94,13 @@ Explore what's available in containers:
 
 ```bash
 # List files in backend container
-docker exec rivendell-app ls -la /tmp/elrond/output/
+docker exec rivendell-backend ls -la /tmp/elrond/output/
 
 # List files in Celery worker
-docker exec rivendell-celery ls -la /tmp/elrond/output/
+docker exec rivendell-celery-worker ls -la /tmp/elrond/output/
 
 # Interactive shell (advanced)
-docker exec -it rivendell-celery bash
+docker exec -it rivendell-celery-worker bash
 # Now you can navigate and use commands like ls, cat, find, etc.
 # Type 'exit' to leave
 ```
@@ -111,10 +111,10 @@ Create a compressed archive for easy transfer:
 
 ```bash
 # Create tar.gz of all outputs
-docker exec rivendell-celery tar czf /tmp/rivendell-export.tar.gz /tmp/elrond/output/
+docker exec rivendell-celery-worker tar czf /tmp/rivendell-export.tar.gz /tmp/elrond/output/
 
 # Copy to your machine
-docker cp rivendell-celery:/tmp/rivendell-export.tar.gz ~/Desktop/
+docker cp rivendell-celery-worker:/tmp/rivendell-export.tar.gz ~/Desktop/
 
 # Extract on your machine
 cd ~/Desktop
@@ -164,7 +164,7 @@ sudo chmod 755 /tmp/rivendell
 
 ```bash
 # Check what's in the container
-docker exec rivendell-celery ls -la /tmp/elrond/output/
+docker exec rivendell-celery-worker ls -la /tmp/elrond/output/
 
 # Check running jobs
 docker ps | grep rivendell
@@ -177,11 +177,11 @@ docker ps | grep rivendell
 
 ```bash
 # Restart containers to apply volume mounts
-docker restart rivendell-app rivendell-celery
+docker restart rivendell-backend rivendell-celery-worker
 
 # Or restart all services
 cd /path/to/rivendell/src/web
-docker-compose restart
+docker compose restart
 ```
 
 ## Best Practices
@@ -248,10 +248,10 @@ ls -la /tmp/rivendell/
 cp -R /tmp/rivendell/CASE-ID ~/Desktop/
 
 # Browse container files
-docker exec rivendell-celery ls -la /tmp/elrond/output/
+docker exec rivendell-celery-worker ls -la /tmp/elrond/output/
 
 # Copy from container
-docker cp rivendell-celery:/tmp/elrond/output/CASE-ID ~/Desktop/
+docker cp rivendell-celery-worker:/tmp/elrond/output/CASE-ID ~/Desktop/
 
 # Check disk usage
 du -sh /tmp/rivendell/*

@@ -19,7 +19,7 @@ A modern web application for the Elrond Digital Forensics Acceleration Suite. Th
 - **Memory**: Volatility analysis, memory timelines
 - **Security**: ClamAV scanning, YARA signatures
 - **Output**: Splunk, Elastic, MITRE ATT&CK Navigator
-- **Performance**: Brisk, Quick, Super Quick, Exhaustive modes
+- **Modes**: Brisk, Threat Hunt, Exhaustive
 
 ## Architecture
 
@@ -43,15 +43,12 @@ elrond-web/
 ## Quick Start
 
 ### Prerequisites
-- Docker and Docker Compose
-- Or: Python 3.10+, Node.js 18+, Redis
+- Docker and Docker Compose v2
+- Or: Python 3.12, Node.js 18+, Redis, PostgreSQL
 
 ### Option 1: Docker Compose (Recommended)
 
-1. **Clone and navigate to the web directory**:
-   ```bash
-   cd elrond/web
-   ```
+1. **Work from the repository root.** The maintained stack is the root `docker-compose.yml` (backend, Celery worker, Postgres, Redis, frontend, plus the `siem` profile). `src/web/docker-compose.yml` is an older copy without Postgres and won't run the current backend.
 
 2. **Configure environment** (optional):
    ```bash
@@ -61,11 +58,12 @@ elrond-web/
 
 3. **Start all services**:
    ```bash
-   docker-compose up -d
+   docker compose up -d                     # core stack
+   docker compose --profile siem up -d      # add Splunk, Elastic, Kibana, Navigator
    ```
 
 4. **Access the application**:
-   - Frontend: http://localhost:3000
+   - Frontend: http://localhost:5687
    - Backend API: http://localhost:5688
    - API Docs: http://localhost:5688/docs
    - Splunk: http://localhost:7755 (username: admin, password: rivendell)
@@ -74,12 +72,12 @@ elrond-web/
 
 5. **View logs**:
    ```bash
-   docker-compose logs -f
+   docker compose logs -f
    ```
 
 6. **Stop services**:
    ```bash
-   docker-compose down
+   docker compose down
    ```
 
 ### Option 2: Manual Setup
@@ -109,13 +107,13 @@ elrond-web/
 
 4. **Start the backend**:
    ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+   uvicorn main:app --host 0.0.0.0 --port 5688 --reload
    ```
 
 5. **Start Celery worker** (in a new terminal):
    ```bash
    cd backend
-   celery -A tasks.celery_app worker --loglevel=info
+   celery -A tasks_docker.celery_app worker --loglevel=info --concurrency=1
    ```
 
 #### Frontend Setup
@@ -128,7 +126,7 @@ elrond-web/
 
 2. **Configure API URL** (optional):
    ```bash
-   echo "REACT_APP_API_URL=http://localhost:8000" > .env
+   echo "REACT_APP_API_URL=http://localhost:5688" > .env
    ```
 
 3. **Start the frontend**:
@@ -196,7 +194,7 @@ When SIEM export options (Splunk, Elastic, Navigator) are enabled:
 ## API Documentation
 
 ### Interactive API Docs
-Visit http://localhost:8000/docs for interactive Swagger UI documentation.
+Visit http://localhost:5688/docs for interactive Swagger UI documentation.
 
 ### Key Endpoints
 
@@ -207,20 +205,18 @@ Visit http://localhost:8000/docs for interactive Swagger UI documentation.
 - `POST /api/jobs` - Create new analysis job
 - `GET /api/jobs` - List all jobs
 - `GET /api/jobs/{job_id}` - Get job details
-- `PATCH /api/jobs/{job_id}` - Update job
 - `POST /api/jobs/{job_id}/cancel` - Cancel job
 - `DELETE /api/jobs/{job_id}` - Delete job
 
 ### Example: Create Job via API
 
 ```bash
-curl -X POST http://localhost:8000/api/jobs \
+curl -X POST http://localhost:5688/api/jobs \
   -H "Content-Type: application/json" \
   -d '{
     "case_number": "INC-2025-001",
     "source_paths": ["/mnt/evidence/image.e01"],
     "options": {
-      "collect": true,
       "analysis": true,
       "userprofiles": true,
       "brisk": true
@@ -270,7 +266,7 @@ redis-cli ping
 # Should return: PONG
 
 # Start Redis if needed
-docker-compose up -d redis
+docker compose up -d redis
 ```
 
 **Problem**: Cannot browse directories
@@ -281,10 +277,10 @@ docker-compose up -d redis
 **Problem**: Jobs not processing
 ```bash
 # Check Celery worker logs
-docker-compose logs celery-worker
+docker compose logs celery-worker
 
 # Restart worker
-docker-compose restart celery-worker
+docker compose restart celery-worker
 ```
 
 **Problem**: SIEM export not working
@@ -293,10 +289,10 @@ docker-compose restart celery-worker
 docker ps | grep -E "splunk|elastic|kibana"
 
 # Restart SIEM services
-docker-compose restart splunk elasticsearch kibana
+docker compose restart splunk elastic kibana
 
 # Check SIEM export logs
-docker-compose logs celery-worker | grep -i siem
+docker compose logs celery-worker | grep -i siem
 ```
 
 **Problem**: Cannot access Splunk/Kibana
@@ -309,7 +305,7 @@ docker-compose logs celery-worker | grep -i siem
 ### Frontend Issues
 
 **Problem**: Cannot connect to backend
-- Verify backend is running: `curl http://localhost:8000/api/health`
+- Verify backend is running: `curl http://localhost:5688/api/health`
 - Check `REACT_APP_API_URL` in frontend `.env`
 - Review CORS settings in backend
 
@@ -393,7 +389,7 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://localhost:8000;
+        proxy_pass http://localhost:5688;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }

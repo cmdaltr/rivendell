@@ -283,7 +283,7 @@ sleep 5
 curl http://localhost:5688/api/jobs
 
 # If still not working, restart all containers
-docker-compose restart
+docker compose restart
 ```
 
 ---

@@ -11,6 +11,7 @@
 - **[QUICKSTART.md](QUICKSTART.md)** - Get up and running in 5 minutes
 - **[USAGE.md](USAGE.md)** - Common tasks and workflows quick reference
 - **[CONFIG.md](CONFIG.md)** - Configuration, setup, and troubleshooting
+- **[PERFORMANCE.md](PERFORMANCE.md)** - Processing time per option, image type and size
 
 ### 🔧 Technical References
 
@@ -97,11 +98,11 @@ Password: IWasThere3000YearsAgo!
 ```bash
 # Via API
 curl -X POST http://localhost:5688/api/jobs \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"case_number": "CASE-001", "source_paths": ["/evidence/disk.E01"]}'
+  -H "Content-Type: application/json" \
+  -d '{"case_number": "CASE-001", "source_paths": ["/Volumes/Evidence/disk.E01"], "options": {"analysis": true}}'
 
 # Via CLI
-elrond -C -P -A CASE-001 /evidence/disk.E01 /output/CASE-001
+python3 src/analysis/elrond.py CASE-001 /evidence /output/CASE-001 --Collect --Process --Analysis
 ```
 
 See [USAGE.md](USAGE.md) for more examples.
@@ -121,4 +122,4 @@ See [USAGE.md](USAGE.md) for more examples.
 ---
 
 **Documentation Version:** 2.1.0
-**Last Updated:** 2025-01-15
+**Last Updated:** 2026-10-22

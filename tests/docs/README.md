@@ -6,13 +6,13 @@ This directory contains test definitions and tooling for validating Rivendell's 
 
 ```bash
 # List all available tests
-python3 tests/run_test.py --list
+python3 tests/scripts/run_test.py --list
 
 # Run a specific test
-python3 tests/run_test.py --run win_basic
+python3 tests/scripts/run_test.py --run win_brisk
 
 # Generate JSON files for Web UI
-python3 tests/run_test.py --generate-jobs
+python3 tests/scripts/run_test.py --generate-jobs
 ```
 
 ## Prerequisites
@@ -27,51 +27,51 @@ pip install requests
 ### List Tests
 
 ```bash
-# List all 74 test cases
-python3 tests/run_test.py --list
+# List all 120 test cases
+python3 tests/scripts/run_test.py --list
 
 # Filter by tags
-python3 tests/run_test.py --list --tags windows
-python3 tests/run_test.py --list --tags memory quick
+python3 tests/scripts/run_test.py --list --tags windows
+python3 tests/scripts/run_test.py --list --tags memory quick
 ```
 
 ### Show Test Details
 
 ```bash
-python3 tests/run_test.py --show win_vss
+python3 tests/scripts/run_test.py --show win_vss
 ```
 
 ### Run Tests via API
 
 ```bash
 # Run a single test (submits job and returns immediately)
-python3 tests/run_test.py --run win_basic
+python3 tests/scripts/run_test.py --run win_brisk
 
 # Run and wait for completion
-python3 tests/run_test.py --run win_basic --wait
+python3 tests/scripts/run_test.py --run win_brisk --wait
 
 # Run all tests matching tags
-python3 tests/run_test.py --run-tags windows quick
+python3 tests/scripts/run_test.py --run-tags windows quick
 
 # Use custom API URL
-python3 tests/run_test.py --run win_analysis --api-url http://192.168.1.100:5688
+python3 tests/scripts/run_test.py --run win_brisk --api-url http://192.168.1.100:5688
 ```
 
 ### Generate Job JSON Files
 
 ```bash
 # Generate to default directory (tests/jobs/)
-python3 tests/run_test.py --generate-jobs
+python3 tests/scripts/run_test.py --generate-jobs
 
 # Generate to custom directory
-python3 tests/run_test.py --generate-jobs --output-dir /path/to/jobs
+python3 tests/scripts/run_test.py --generate-jobs --output-dir /path/to/jobs
 ```
 
 ### Validate Test Images
 
 ```bash
 # Check if test images exist on disk
-python3 tests/run_test.py --validate
+python3 tests/scripts/run_test.py --validate
 ```
 
 ## Using JSON Files in Web UI
@@ -80,7 +80,7 @@ The Web UI supports loading test configurations from JSON files:
 
 1. **Generate JSON files:**
    ```bash
-   python3 tests/run_test.py --generate-jobs
+   python3 tests/scripts/run_test.py --generate-jobs
    ```
 
 2. **Open Web UI:** Navigate to http://localhost:5687
@@ -222,12 +222,12 @@ Tests are tagged for easy filtering:
 
 Example: Find all quick Windows tests:
 ```bash
-python3 tests/run_test.py --list --tags windows quick
+python3 tests/scripts/run_test.py --list --tags windows quick
 ```
 
 ## Adding New Tests
 
-Edit `tests/run_test.py` and add a new `TestCase` to the appropriate list:
+Edit `tests/scripts/run_test.py` and add a new `TestCase` to the appropriate list:
 
 ```python
 TestCase(
