@@ -290,3 +290,14 @@ export const getAragornOp = async (opId) => (await api.get(`/api/aragorn/ops/${o
 export const listAragornOps = async () => (await api.get('/api/aragorn/ops')).data;
 
 export default api;
+
+// Test lab API (proxied to the lab agent on the host)
+export const getLabStatus = async () => (await api.get('/api/lab/status')).data;
+export const getLabState = async () => (await api.get('/api/lab/state')).data;
+export const saveLabConfig = async (settings) => (await api.put('/api/lab/config', { settings })).data;
+export const setLabPassword = async (password) => (await api.put('/api/lab/password', { password })).data;
+export const runLabCommand = async (command, args = []) => (await api.post('/api/lab/run', { command, args })).data;
+export const listLabRuns = async () => (await api.get('/api/lab/runs')).data;
+export const getLabRun = async (runId, offset = 0) =>
+  (await api.get(`/api/lab/runs/${runId}`, { params: { offset } })).data;
+export const cancelLabRun = async (runId) => (await api.post(`/api/lab/runs/${runId}/cancel`)).data;

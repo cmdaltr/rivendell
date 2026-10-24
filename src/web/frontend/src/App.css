@@ -2699,3 +2699,95 @@ select.large-select:disabled {
   word-break: break-all;
   margin: 0.75rem 0;
 }
+
+/* Test lab */
+.lab {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.lab-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.lab-table th,
+.lab-table td {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 1px solid #2a2a5a;
+  vertical-align: top;
+}
+
+.lab-table input[type='text'] {
+  width: 100%;
+}
+
+.lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+
+.lab-actions button {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.lab-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.lab-note {
+  color: #a0a0c0;
+  font-size: 0.85rem;
+}
+
+.lab-command code {
+  display: inline-block;
+  background: #0f0f23;
+  border: 1px solid #2a2a5a;
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.lab-run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.lab-output {
+  background: #0f0f23;
+  padding: 0.75rem;
+  font-size: 0.8rem;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.lab-status {
+  font-size: 0.8rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 4px;
+  background: #2a2a5a;
+}
+
+.lab-status-running { color: #ffce54; }
+.lab-status-succeeded { color: #8cc152; }
+.lab-status-failed,
+.lab-status-cancelled { color: #ed5565; }
+
+.lab-error { border-color: #ed5565; }
+.lab-message { border-color: #8cc152; }

@@ -16,6 +16,7 @@ import JobDetails from './components/JobDetails';
 import Archive from './components/Archive';
 import AccountPage from './components/AccountPage';
 import Aragorn from './components/Aragorn';
+import Lab from './components/Lab';
 import './App.css';
 
 function Navigation() {
@@ -40,6 +41,7 @@ function Navigation() {
         <Link to="/jobs">Jobs</Link>
         <Link to="/ai">Ask Eru</Link>
         {user?.role === 'admin' && <Link to="/aragorn">Aragorn</Link>}
+        {user?.role === 'admin' && <Link to="/lab">Lab</Link>}
         <Link to="/help">About</Link>
         <button
           onClick={isAuthenticated ? handleLogout : undefined}
@@ -96,6 +98,7 @@ function AppContent() {
             <Route path="/archive" element={<Archive />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/aragorn" element={<Aragorn />} />
+            <Route path="/lab" element={<Lab />} />
           </Routes>
         </main>
 

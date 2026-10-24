@@ -1,0 +1,69 @@
+# Rivendell lab VMs for x86-64 hosts (Intel Macs, Linux) on VirtualBox. Driven by ./lab.sh, which sets
+# the environment below; don't run `vagrant up` by hand without it.
+#
+#   win    Windows 11 x64 (Gandalf PowerShell target + Mordor sensor). x64 so
+#          DumpIt memory acquisition works.
+#   linux  Ubuntu 24.04 with a real kernel and systemd (memory acquisition,
+#          journal), seeded like the container targets.
+#
+# Both sit on the VirtualBox host-only network 192.168.56.0/24 and forward SSH
+# or WinRM to the host only (loopback, or docker0 on Linux). Nothing is exposed
+# beyond this machine.
+
+REPO_ROOT    = ENV.fetch("REPO_ROOT")
+ACQ_ROOT     = ENV.fetch("ACQ_ROOT")
+MORDOR_ROOT  = ENV.fetch("MORDOR_ROOT")
+LAB_PASSWORD = ENV.fetch("LAB_PASSWORD", "")
+WIN_BOX      = ENV.fetch("WINDOWS_BOX", "gusztavvargadr/windows-11")
+LINUX_BOX    = ENV.fetch("LINUX_BOX", "bento/ubuntu-24.04")
+WIN_MEM      = Integer(ENV.fetch("WINDOWS_VM_MEMORY_MB", "6144"))
+WIN_CPUS     = Integer(ENV.fetch("WINDOWS_VM_CPUS", "2"))
+LINUX_MEM    = Integer(ENV.fetch("LINUX_VM_MEMORY_MB", "2048"))
+# 127.0.0.1 on macOS; the docker0 gateway on Linux so the collector container can reach it.
+FWD_IP       = ENV.fetch("LAB_FORWARD_IP", "127.0.0.1")
+
+Vagrant.configure("2") do |config|
+  config.vm.define "win", autostart: false do |w|
+    w.vm.box = WIN_BOX
+    w.vm.hostname = "lab-win11"
+    w.vm.communicator = "winrm"
+    w.vm.boot_timeout = 1800
+    w.vm.network "private_network", ip: "192.168.56.20"
+    w.vm.network "forwarded_port", guest: 5985, host: 55985, host_ip: FWD_IP, id: "winrm", auto_correct: true
+    w.vm.synced_folder ".", "/vagrant", disabled: true
+    w.vm.synced_folder File.join(REPO_ROOT, "src", "acquisition"), "C:/lab/gandalf-src"
+    w.vm.synced_folder File.join(REPO_ROOT, "lab", "windows"), "C:/lab/scripts"
+    w.vm.synced_folder ACQ_ROOT, "C:/lab/acquisitions"
+    w.vm.synced_folder MORDOR_ROOT, "C:/lab/mordor"
+    w.vm.provider "virtualbox" do |vb|
+      vb.name = "rivendell-lab-win11"
+      vb.memory = WIN_MEM
+      vb.cpus = WIN_CPUS
+      vb.gui = false
+      vb.customize ["modifyvm", :id, "--clipboard-mode", "bidirectional"]
+    end
+    w.vm.provision "gandalf-target", type: "shell", path: File.join(REPO_ROOT, "lab", "windows", "Provision-GandalfTarget.ps1"),
+                   env: { "LAB_PASSWORD" => LAB_PASSWORD }, privileged: true
+  end
+
+  config.vm.define "linux", autostart: false do |l|
+    l.vm.box = LINUX_BOX
+    l.vm.hostname = "lab-linuxvm"
+    l.vm.network "private_network", ip: "192.168.56.21"
+    l.vm.network "forwarded_port", guest: 22, host: 2230, host_ip: FWD_IP, id: "ssh-lab"
+    l.vm.synced_folder ".", "/vagrant", disabled: true
+    l.vm.synced_folder File.join(REPO_ROOT, "lab", "linux-targets"), "/lab", type: "rsync"
+    l.vm.provider "virtualbox" do |vb|
+      vb.name = "rivendell-lab-linux"
+      vb.memory = LINUX_MEM
+      vb.cpus = 2
+    end
+    l.vm.provision "gandalf-target", type: "shell", env: { "LAB_PASSWORD" => LAB_PASSWORD }, inline: <<-SHELL
+      set -e
+      id gandalf >/dev/null 2>&1 || sh /lab/setup.sh
+      sh /lab/seed/seed-artefacts.sh
+      echo "gandalf:${LAB_PASSWORD}" | chpasswd
+      systemctl restart ssh || systemctl restart sshd
+    SHELL
+  end
+end

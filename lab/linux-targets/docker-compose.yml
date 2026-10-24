@@ -1,0 +1,75 @@
+# Gandalf test targets and the collector that runs against them.
+# Compose project 'rivendell-lab' (set by lab.sh), so Rivendell's own tooling
+# (including Aragorn) never treats these as Rivendell containers.
+#
+# Targets are reached by hostname on the private lab network, so this works the
+# same on Docker Desktop and OrbStack, Intel and Apple silicon. Each target's SSH
+# is also published on 127.0.0.1 only, for manual poking.
+
+x-target: &target
+  build:
+    context: .
+  environment:
+    - LAB_PASSWORD # passed through from lab.sh (macOS Keychain), never stored
+  networks: [lab]
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        memory: 256M
+
+services:
+  ubuntu:
+    <<: *target
+    build: { context: ., args: { BASE: "ubuntu:24.04" } }
+    image: rivendell-lab-target:ubuntu
+    hostname: lab-ubuntu
+    container_name: lab-ubuntu
+    ports: ["127.0.0.1:2221:22"]
+
+  debian:
+    <<: *target
+    build: { context: ., args: { BASE: "debian:12" } }
+    image: rivendell-lab-target:debian
+    hostname: lab-debian
+    container_name: lab-debian
+    ports: ["127.0.0.1:2222:22"]
+
+  rocky:
+    <<: *target
+    build: { context: ., args: { BASE: "rockylinux:9" } }
+    image: rivendell-lab-target:rocky
+    hostname: lab-rocky
+    container_name: lab-rocky
+    ports: ["127.0.0.1:2223:22"]
+
+  alpine:
+    <<: *target
+    build: { context: ., args: { BASE: "alpine:3.20" } }
+    image: rivendell-lab-target:alpine
+    hostname: lab-alpine
+    container_name: lab-alpine
+    ports: ["127.0.0.1:2224:22"]
+
+  # Runs gandalf.py and gandalf.sh against the targets. Started on demand by
+  # `./lab.sh gandalf-collect`, never left running.
+  controller:
+    profiles: [controller]
+    build:
+      context: ../controller
+    image: rivendell-lab-controller
+    container_name: lab-controller
+    environment:
+      - LAB_PASSWORD
+      - GANDALF_ENCRYPTION
+    volumes:
+      - ${REPO_ROOT}/src/acquisition:/gandalf-src:ro
+      - ${ACQ_ROOT}:/acquisitions
+      - ../controller:/lab:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # VM targets via the Mac's loopback forwards
+    networks: [lab]
+
+networks:
+  lab:
+    name: rivendell-lab

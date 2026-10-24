@@ -22,6 +22,7 @@ try:
     from .ai_routes import router as ai_router  # AI assistant routes
     from .mordor_routes import router as mordor_router  # Mordor dataset management
     from .aragorn_routes import router as aragorn_router  # Aragorn Docker administration
+    from .lab_routes import router as lab_router  # Test lab, via the host's lab agent
     from .models.job import (
         Job,
         JobCreate,
@@ -39,6 +40,7 @@ except ImportError:
     from ai_routes import router as ai_router  # AI assistant routes
     from mordor_routes import router as mordor_router  # Mordor dataset management
     from aragorn_routes import router as aragorn_router  # Aragorn Docker administration
+    from lab_routes import router as lab_router  # Test lab, via the host's lab agent
     from models.job import (
         Job,
         JobCreate,
@@ -123,6 +125,7 @@ app.include_router(ai_router)
 
 # Include Mordor dataset management routes
 app.include_router(mordor_router)
+app.include_router(lab_router)
 
 # Include Aragorn (Docker administration) routes
 app.include_router(aragorn_router)

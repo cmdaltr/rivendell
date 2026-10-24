@@ -1,0 +1,17 @@
+#!/usr/bin/expect -f
+# Drives gandalf.py's interactive Remote flow: confirms no encryption, then
+# answers IP / Username / Password for each host in lists/hosts.list.
+set timeout 1800
+set hosts $argv
+spawn python3 python/gandalf.py None Remote
+expect {
+  -re {Are you sure you want to proceed.*:} { send "y\r"; exp_continue }
+  -re {Connecting to '([^']+)'} { set current $expect_out(1,string); exp_continue }
+  -re {IP address:} { send "$current\r"; exp_continue }
+  -re {Username:} { send "gandalf\r"; exp_continue }
+  -re {Password:} { send "$env(LAB_PASSWORD)\r"; exp_continue }
+  -re {Collected\? \[Yes\]} { send "\r"; exp_continue }
+  eof
+}
+catch wait result
+exit [lindex $result 3]
