@@ -14,6 +14,7 @@ class JobStatus(str, Enum):
     """Job status enumeration."""
     PENDING = "pending"
     RUNNING = "running"
+    PAUSED = "paused"  # Elrond process group stopped with SIGSTOP
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"

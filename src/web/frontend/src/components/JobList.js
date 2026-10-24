@@ -26,6 +26,7 @@ function JobList() {
   const statusPriority = {
     'awaiting_confirmation': 0,
     'running': 1,
+    'paused': 1,
     'failed': 2,
     'pending': 3,
     'cancelled': 4,
@@ -108,7 +109,7 @@ function JobList() {
   const handleBulkDelete = async () => {
     // Check if any selected jobs can actually be deleted
     const selectedJobData = jobs.filter(job => selectedJobs.includes(job.id));
-    const deletableJobs = selectedJobData.filter(job => job.status !== 'pending' && job.status !== 'running');
+    const deletableJobs = selectedJobData.filter(job => job.status !== 'pending' && job.status !== 'running' && job.status !== 'paused');
 
     if (deletableJobs.length === 0) {
       setErrorModalData({
@@ -206,7 +207,7 @@ function JobList() {
   const handleBulkArchive = async () => {
     // Check if any selected jobs can actually be archived
     const selectedJobData = jobs.filter(job => selectedJobs.includes(job.id));
-    const archivableJobs = selectedJobData.filter(job => job.status !== 'pending' && job.status !== 'running' && job.status !== 'archived');
+    const archivableJobs = selectedJobData.filter(job => job.status !== 'pending' && job.status !== 'running' && job.status !== 'paused' && job.status !== 'archived');
 
     if (archivableJobs.length === 0) {
       setErrorModalData({
@@ -306,7 +307,7 @@ function JobList() {
   const handleBulkStop = async () => {
     // Check if any selected jobs can actually be stopped
     const selectedJobData = jobs.filter(job => selectedJobs.includes(job.id));
-    const stoppableJobs = selectedJobData.filter(job => job.status === 'pending' || job.status === 'running');
+    const stoppableJobs = selectedJobData.filter(job => job.status === 'pending' || job.status === 'running' || job.status === 'paused');
 
     if (stoppableJobs.length === 0) {
       setErrorModalData({
@@ -599,6 +600,7 @@ function JobList() {
               <option value="">All</option>
               <option value="pending">Pending</option>
               <option value="running">Running</option>
+              <option value="paused">Paused</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
               <option value="cancelled">Cancelled</option>

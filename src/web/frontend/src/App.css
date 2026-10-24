@@ -451,6 +451,11 @@ small {
   box-shadow: 0 0 8px #ff3333;
 }
 
+.status-paused {
+  background: rgba(102, 217, 239, 0.2);
+  color: #66d9ef;
+}
+
 .status-completed {
   background: rgba(166, 226, 46, 0.2);
   color: #a6e22e;

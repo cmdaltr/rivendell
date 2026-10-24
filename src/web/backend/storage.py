@@ -150,6 +150,28 @@ class JobStorage:
         finally:
             session.close()
 
+    def set_status(self, job_id: str, status: JobStatus) -> None:
+        """
+        Update only a job's status.
+
+        The worker saves the whole row from its in-memory copy, so a full
+        save_job from the API would overwrite the worker's latest log and
+        progress with a stale read.
+
+        Args:
+            job_id: Job ID
+            status: New status
+        """
+        session = self.Session()
+        try:
+            session.query(JobModel).filter_by(id=job_id).update({"status": status.value})
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def get_job(self, job_id: str) -> Optional[Job]:
         """
         Get job from storage.

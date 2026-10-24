@@ -534,7 +534,7 @@ async def delete_job(job_id: str):
             raise HTTPException(status_code=404, detail="Job not found")
 
         # Only allow deleting completed/failed/cancelled jobs
-        if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+        if job.status in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED]:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot delete running or pending job",
@@ -577,9 +577,11 @@ async def bulk_cancel_jobs(job_ids: list[str]):
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
                 continue
 
-            if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
+            if job.status not in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED]:
                 results.append({"job_id": job_id, "success": False, "error": f"Job already {job.status.value}"})
                 continue
+
+            _kill_job_process_group(job_id)
 
             # Revoke Celery task if it exists
             if job.celery_task_id:
@@ -627,7 +629,7 @@ async def bulk_delete_jobs(job_ids: list[str]):
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
                 continue
 
-            if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+            if job.status in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED]:
                 results.append({"job_id": job_id, "success": False, "error": "Cannot delete running job"})
                 continue
 
@@ -661,7 +663,7 @@ async def bulk_archive_jobs(job_ids: list[str]):
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
                 continue
 
-            if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+            if job.status in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED]:
                 results.append({"job_id": job_id, "success": False, "error": "Cannot archive running job"})
                 continue
 
@@ -748,11 +750,13 @@ async def cancel_job(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        if job.status not in [JobStatus.PENDING, JobStatus.RUNNING]:
+        if job.status not in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Job already {job.status.value} - can only cancel pending or running jobs",
+                detail=f"Job already {job.status.value} - can only cancel pending, running or paused jobs",
             )
+
+        _kill_job_process_group(job_id)
 
         # Revoke Celery task if it exists
         if job.celery_task_id:
@@ -779,6 +783,72 @@ async def cancel_job(job_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _kill_job_process_group(job_id: str) -> None:
+    """Best-effort SIGKILL of a job's Elrond process group before revoking it."""
+    try:
+        from tasks_docker import send_job_signal, _clear_job_process
+        result = send_job_signal(job_id, "kill")
+        if result.get("ok"):
+            _clear_job_process(job_id)
+        else:
+            logger.info(f"Job {job_id}: no process group killed ({result.get('error')})")
+    except Exception as e:
+        logger.warning(f"Failed to kill process group for job {job_id}: {e}")
+
+
+def _signal_job(job_id: str, action: str, required: JobStatus, new_status: JobStatus):
+    job = job_storage.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status != required:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job is {job.status.value} - can only {action} a {required.value} job",
+        )
+
+    from tasks_docker import send_job_signal
+    result = send_job_signal(job_id, action)
+    if not result.get("ok"):
+        raise HTTPException(status_code=409, detail=f"Could not {action} job: {result.get('error')}")
+
+    # The worker records the event in the job log itself (see
+    # tasks_docker._drain_job_events); only the status is written here.
+    job_storage.set_status(job_id, new_status)
+    return job_storage.get_job(job_id)
+
+
+@app.post("/api/jobs/{job_id}/pause")
+async def pause_job(job_id: str):
+    """
+    Pause a running job by sending SIGSTOP to its Elrond process group.
+
+    Image mounts stay up and the image lock stays held. Wall-clock timeouts
+    inside Elrond keep counting while it is stopped, so a tool call paused
+    for longer than its timeout fails on resume.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    return _signal_job(job_id, "pause", JobStatus.RUNNING, JobStatus.PAUSED)
+
+
+@app.post("/api/jobs/{job_id}/resume")
+async def resume_job(job_id: str):
+    """
+    Resume a paused job by sending SIGCONT to its Elrond process group.
+
+    Args:
+        job_id: Job ID
+
+    Returns:
+        Updated job
+    """
+    return _signal_job(job_id, "resume", JobStatus.PAUSED, JobStatus.RUNNING)
 
 
 @app.post("/api/jobs/{job_id}/restart")
@@ -926,7 +996,7 @@ async def archive_job(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        if job.status in [JobStatus.PENDING, JobStatus.RUNNING]:
+        if job.status in [JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED]:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot archive pending or running jobs",

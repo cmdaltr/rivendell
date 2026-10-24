@@ -8,6 +8,8 @@ Each test case specifies source images and processing options to validate.
 Usage:
     python tests/run_test.py --list                    # List all test cases
     python tests/run_test.py --status                  # Show job status (running/pending/completed/failed)
+    python tests/run_test.py --pause <job_id>          # SIGSTOP a running job's Elrond process group
+    python tests/run_test.py --resume <job_id>         # SIGCONT a paused job
     python tests/run_test.py --run <name>              # Run specific test
     python tests/run_test.py --run <name> -y           # Run and auto-confirm overwrite
     python tests/run_test.py --run <name> --wait       # Run and wait for completion
@@ -2411,13 +2413,14 @@ def show_job_status(api_url: str):
     # Group jobs by status
     pending = [j for j in jobs if j.get("status") == "pending"]
     running = [j for j in jobs if j.get("status") == "running"]
+    paused = [j for j in jobs if j.get("status") == "paused"]
     completed = [j for j in jobs if j.get("status") == "completed"]
     failed = [j for j in jobs if j.get("status") == "failed"]
 
     print(f"\n{'='*70}")
     print(f"  JOB STATUS SUMMARY")
     print(f"{'='*70}")
-    print(f"  Running: {len(running)}  |  Pending: {len(pending)}  |  Completed: {len(completed)}  |  Failed: {len(failed)}")
+    print(f"  Running: {len(running)}  |  Paused: {len(paused)}  |  Pending: {len(pending)}  |  Completed: {len(completed)}  |  Failed: {len(failed)}")
     print(f"{'='*70}\n")
 
     def format_duration(job):
@@ -2439,7 +2442,15 @@ def show_job_status(api_url: str):
         for job in running:
             case = job.get("case_number", "Unknown")
             progress = format_progress(job)
-            print(f"    🔄 {case:<35} {progress:>6}")
+            print(f"    🔄 {case:<35} {progress:>6}  {job.get('id', '')}")
+        print()
+
+    if paused:
+        print("  PAUSED:")
+        for job in paused:
+            case = job.get("case_number", "Unknown")
+            progress = format_progress(job)
+            print(f"    ⏸️  {case:<35} {progress:>6}  {job.get('id', '')}")
         print()
 
     # Show pending jobs
@@ -2646,7 +2657,7 @@ def cancel_all_jobs(api_url: str):
         # Filter for running and pending jobs
         to_cancel = [
             job["id"] for job in jobs
-            if job.get("status", "").lower() in ("running", "pending")
+            if job.get("status", "").lower() in ("running", "paused", "pending")
         ]
 
         if not to_cancel:
@@ -2703,6 +2714,30 @@ def cancel_jobs(api_url: str, job_ids: List[str]):
         sys.exit(1)
 
 
+def signal_jobs(api_url: str, job_ids: List[str], action: str):
+    """Pause or resume specific jobs by ID."""
+    if not HAS_REQUESTS:
+        print("ERROR: 'requests' library required. Install with: pip install requests")
+        sys.exit(1)
+
+    failed = 0
+    for job_id in job_ids:
+        try:
+            response = requests.post(f"{api_url}/api/jobs/{job_id}/{action}", timeout=30)
+            detail = "" if response.ok else f" - {response.json().get('detail', response.text)}"
+            print(f"  {job_id}: HTTP {response.status_code}{detail}")
+            if not response.ok:
+                failed += 1
+        except (requests.exceptions.RequestException, ValueError) as e:
+            print(f"  {job_id}: ERROR {e}")
+            failed += 1
+
+    verb = "Paused" if action == "pause" else "Resumed"
+    print(f"{verb} {len(job_ids) - failed}/{len(job_ids)} jobs.")
+    if failed:
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Rivendell Image Combination Tests",
@@ -2750,6 +2785,12 @@ def main():
         "--cancel", nargs="+", metavar="JOB_ID", help="Cancel only the given job IDs"
     )
     parser.add_argument(
+        "--pause", nargs="+", metavar="JOB_ID", help="Pause the given running jobs (SIGSTOP)"
+    )
+    parser.add_argument(
+        "--resume", nargs="+", metavar="JOB_ID", help="Resume the given paused jobs (SIGCONT)"
+    )
+    parser.add_argument(
         "--delete-all", action="store_true", help="Delete all completed/failed/cancelled jobs"
     )
     parser.add_argument(
@@ -2763,6 +2804,10 @@ def main():
         cancel_all_jobs(args.api_url)
     elif args.cancel:
         cancel_jobs(args.api_url, args.cancel)
+    elif args.pause:
+        signal_jobs(args.api_url, args.pause, "pause")
+    elif args.resume:
+        signal_jobs(args.api_url, args.resume, "resume")
     elif args.delete_all:
         delete_all_jobs(args.api_url)
     elif args.rerun_failed:

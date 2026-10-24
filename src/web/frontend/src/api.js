@@ -74,6 +74,16 @@ export const cancelJob = async (jobId) => {
   return response.data;
 };
 
+export const pauseJob = async (jobId) => {
+  const response = await api.post(`/api/jobs/${jobId}/pause`);
+  return response.data;
+};
+
+export const resumeJob = async (jobId) => {
+  const response = await api.post(`/api/jobs/${jobId}/resume`);
+  return response.data;
+};
+
 export const restartJob = async (jobId) => {
   const response = await api.post(`/api/jobs/${jobId}/restart`);
   return response.data;

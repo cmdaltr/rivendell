@@ -12,11 +12,14 @@ import re
 import json
 import time
 import hashlib
+import signal
+import threading
 from datetime import datetime
 from pathlib import Path
 
 from celery import Celery
 from celery.utils.log import get_task_logger
+from celery.worker.control import control_command
 import redis
 
 from config import settings
@@ -164,6 +167,131 @@ def release_image_locks_for_job(job_id: str, source_paths: list):
         except Exception as e:
             logger.warning(f"Error releasing lock for {image_path}: {e}")
 
+
+
+# =====================================================
+# PAUSE / RESUME / KILL OF THE ELROND PROCESS GROUP
+# =====================================================
+# Elrond runs in its own session (start_new_session=True), so one killpg
+# reaches it and every tool it spawns (yara, foremost, log2timeline...).
+# The FUSE daemons (ewfmount, vshadowmount, ntfs-3g) setsid themselves and
+# are not in the group, so the mounts stay serviceable while it is stopped.
+#
+# The backend runs in a different container (separate PID namespace), so it
+# cannot signal Elrond itself. It broadcasts the rivendell_signal_job control
+# command to the worker that owns the job; that runs in the worker's main
+# process, which shares Elrond's PID namespace.
+
+_JOB_SIGNALS = {
+    "pause": signal.SIGSTOP,
+    "resume": signal.SIGCONT,
+    "kill": signal.SIGKILL,
+}
+
+
+def _job_process_key(job_id: str) -> str:
+    """Redis key holding the worker hostname and Elrond PGID for a job."""
+    return f"rivendell:job_process:{job_id}"
+
+
+def _job_events_key(job_id: str) -> str:
+    """Redis list of pause/resume events waiting for the task to record."""
+    return f"rivendell:job_events:{job_id}"
+
+
+def _register_job_process(job_id: str, hostname: str, pgid: int) -> None:
+    get_redis_client().set(_job_process_key(job_id), json.dumps({"hostname": hostname, "pgid": pgid}))
+
+
+def _clear_job_process(job_id: str) -> None:
+    get_redis_client().delete(_job_process_key(job_id), _job_events_key(job_id))
+
+
+def _get_job_process(job_id: str) -> dict | None:
+    raw = get_redis_client().get(_job_process_key(job_id))
+    return json.loads(raw) if raw else None
+
+
+def _drain_job_events(job) -> None:
+    """
+    Apply pause/resume events recorded by the control command to the task's
+    in-memory job, so its next save does not overwrite PAUSED with RUNNING.
+    Events carry their own timestamps, so the log shows when the pause
+    actually happened even if Elrond was silent afterwards.
+    """
+    redis_client = get_redis_client()
+    while True:
+        raw = redis_client.lpop(_job_events_key(job.id))
+        if raw is None:
+            return
+        event = json.loads(raw)
+        if event["action"] == "pause":
+            job.status = JobStatus.PAUSED
+            job.log.append(f"[{event['at']}] -> Job paused")
+        elif event["action"] == "resume":
+            job.status = JobStatus.RUNNING
+            job.log.append(f"[{event['at']}] -> Job resumed")
+
+
+@control_command(
+    args=[("job_id", str), ("action", str)],
+    signature="<job_id> <pause|resume|kill>",
+)
+def rivendell_signal_job(state, job_id: str, action: str) -> dict:
+    """Celery remote control command: signal a job's Elrond process group."""
+    if action not in _JOB_SIGNALS:
+        return {"ok": False, "error": f"unknown action '{action}'"}
+
+    process = _get_job_process(job_id)
+    if not process:
+        return {"ok": False, "error": "job has no running Elrond process"}
+    # Guard against PID reuse across containers: a PGID is only meaningful
+    # in the namespace of the worker that started it.
+    if process["hostname"] != state.consumer.hostname:
+        return {"ok": False, "error": f"job belongs to {process['hostname']}"}
+
+    pgid = process["pgid"]
+    try:
+        os.killpg(pgid, _JOB_SIGNALS[action])
+    except ProcessLookupError:
+        _clear_job_process(job_id)
+        return {"ok": False, "error": "Elrond process group no longer exists"}
+    except PermissionError as e:
+        return {"ok": False, "error": f"cannot signal process group {pgid}: {e}"}
+
+    if action in ("pause", "resume"):
+        get_redis_client().rpush(
+            _job_events_key(job_id),
+            json.dumps({"action": action, "at": datetime.now().isoformat().replace("T", " ")}),
+        )
+    logger.info(f"Job {job_id}: sent {_JOB_SIGNALS[action].name} to process group {pgid}")
+    return {"ok": True, "pgid": pgid}
+
+
+def send_job_signal(job_id: str, action: str, timeout: float = 5.0) -> dict:
+    """
+    Ask the worker that owns a job to pause, resume or kill its Elrond
+    process group. Called from the backend.
+
+    Returns:
+        {"ok": True, "pgid": ...} or {"ok": False, "error": ...}
+    """
+    process = _get_job_process(job_id)
+    if not process:
+        return {"ok": False, "error": "job has no running Elrond process"}
+
+    replies = celery_app.control.broadcast(
+        "rivendell_signal_job",
+        arguments={"job_id": job_id, "action": action},
+        destination=[process["hostname"]],
+        reply=True,
+        limit=1,
+        timeout=timeout,
+    )
+    for reply in replies or []:
+        for _, result in reply.items():
+            return result
+    return {"ok": False, "error": f"worker {process['hostname']} did not reply within {timeout}s"}
 
 def _request_sudo_confirmation(job, target_path: str, reason: str):
     """Set job to awaiting confirmation status for sudo directory removal."""
@@ -365,6 +493,22 @@ def _safe_save(job):
         return False
 
 
+def _start_lock_heartbeat(lock_keys, interval=300):
+    """
+    Keep image locks alive on a timer. Progress saves can't do it alone: a
+    paused job (or a silent stage) writes no output, and the locks would
+    expire under it. Returns the event that stops the heartbeat.
+    """
+    stop = threading.Event()
+
+    def beat():
+        while not stop.wait(interval):
+            _refresh_image_locks(lock_keys)
+
+    threading.Thread(target=beat, name="image-lock-heartbeat", daemon=True).start()
+    return stop
+
+
 def _refresh_image_locks(lock_keys):
     try:
         client = get_redis_client()
@@ -378,10 +522,11 @@ def _stop_process_group(process, grace=30):
     """SIGTERM Elrond's process group, then SIGKILL whatever is left."""
     if process is None or process.poll() is not None:
         return
-    import signal
     try:
         pgid = os.getpgid(process.pid)
         os.killpg(pgid, signal.SIGTERM)
+        # A paused (SIGSTOPped) job only acts on SIGTERM once it is continued.
+        os.killpg(pgid, signal.SIGCONT)
         try:
             process.wait(timeout=grace)
         except subprocess.TimeoutExpired:
@@ -415,6 +560,7 @@ def start_analysis(self, job_id: str):
     acquired_lock_keys = []
     process = None
     spool = None
+    lock_heartbeat = None
 
     try:
         # Acquire locks on all source images before starting
@@ -435,6 +581,8 @@ def start_analysis(self, job_id: str):
                 job.completed_at = datetime.now()
                 job_storage.save_job(job)
                 return
+
+            lock_heartbeat = _start_lock_heartbeat(acquired_lock_keys)
 
         # Update job status
         job.status = JobStatus.RUNNING
@@ -566,8 +714,12 @@ def start_analysis(self, job_id: str):
             bufsize=1,  # Line buffering to get output in real-time
             cwd=dest_dir_str,
             env=env,
-            start_new_session=True,  # own process group, so a failed task can stop Elrond and its tools
+            # Own process group, so pause/resume/cancel can signal Elrond and its
+            # tools together without touching the Celery worker, and a failed task
+            # can stop them.
+            start_new_session=True,
         )
+        _register_job_process(job_id, self.request.hostname, process.pid)
         spool = JobLogSpool(os.path.join(dest_dir_str, "rivendell_job.log"))
         last_save = time.monotonic()
 
@@ -612,6 +764,7 @@ def start_analysis(self, job_id: str):
         analysis_phase_started = False
 
         for line in iter(process.stdout.readline, ""):
+            _drain_job_events(job)
             line = line.strip()
             if line:
                 # Strip ANSI color codes
@@ -880,13 +1033,13 @@ def start_analysis(self, job_id: str):
                 if time.monotonic() - last_save >= JOB_SAVE_INTERVAL:
                     spool.sync(job)
                     _safe_save(job)
-                    _refresh_image_locks(acquired_lock_keys)
                     last_save = time.monotonic()
 
                 logger.info(line)
 
         # Wait for completion
         return_code = process.wait()
+        _drain_job_events(job)
 
         # Close verbose log file if it was opened
         if verbose_log_file:
@@ -1009,6 +1162,13 @@ def start_analysis(self, job_id: str):
             _stop_process_group(process)
 
     finally:
+        if lock_heartbeat:
+            lock_heartbeat.set()
+        try:
+            _clear_job_process(job_id)
+        except Exception as e:
+            logger.warning(f"Job {job_id}: could not clear its process record: {e}")
+
         # Release image locks
         if acquired_lock_keys:
             release_image_locks(acquired_lock_keys)

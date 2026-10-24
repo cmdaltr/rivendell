@@ -16,7 +16,7 @@ Bugs found during the October 2026 E2E matrix and the test-lab build, with their
 | P9 | The default admin password is in the public source (`config.py`). | Won't fix (Ben: keep the default). |
 | P10 | `rivendell analyze` and `rivendell acquire` were stubs that only printed "Direct integration pending"; `acquire` also passed `-C` where gandalf.py expects `-F`. | Fixed: both run the real script as a subprocess with the correct flags. |
 | P11 | Four Mordor tests use `malware/cobalt_strike`, `malware/emotet` and `malware/trickbot`, which OTRF Security-Datasets doesn't publish, so they can never pass. | Open: drop them, or point them at datasets the lab generates (`mordor-capture`) |
-| P7 | `--cancel-all` and `--cancel` revoke the Celery task but leave `elrond.py` and its tools running with the image mounted. Fixed by the process-group kill on branch `feat/job-pause`. | Open (fix on `feat/job-pause`) |
+| P7 | `--cancel-all` and `--cancel` revoke the Celery task but leave `elrond.py` and its tools running with the image mounted. | Fixed: cancel kills Elrond's process group through a worker control command (the backend can't signal across containers); jobs can also be paused and resumed (SIGSTOP/SIGCONT). Image locks are kept alive by a heartbeat, so a long pause doesn't release the image. Tested. |
 
 ## Elrond (analysis)
 

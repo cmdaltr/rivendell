@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { getJob, cancelJob, deleteJob, restartJob, exportSiem, confirmSudo, cancelSudo } from '../api';
+import { getJob, cancelJob, pauseJob, resumeJob, deleteJob, restartJob, exportSiem, confirmSudo, cancelSudo } from '../api';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 
@@ -80,6 +80,22 @@ function JobDetails() {
       navigate('/jobs');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to delete job');
+      setActionLoading(false);
+    }
+  };
+
+  const handlePauseResume = async () => {
+    setActionLoading(true);
+    try {
+      if (job.status === 'paused') {
+        await resumeJob(jobId);
+      } else {
+        await pauseJob(jobId);
+      }
+      await loadJob();
+    } catch (err) {
+      setError(err.response?.data?.detail || `Failed to ${job.status === 'paused' ? 'resume' : 'pause'} job`);
+    } finally {
       setActionLoading(false);
     }
   };
@@ -696,7 +712,17 @@ function JobDetails() {
             <div className="job-id">ID: {job.id}</div>
           </div>
           <div className="job-actions">
-            {(job.status === 'pending' || job.status === 'running') && (
+            {(job.status === 'running' || job.status === 'paused') && (
+              <button
+                className="secondary"
+                onClick={handlePauseResume}
+                disabled={actionLoading}
+                title="Paused jobs keep their image mounted and locked"
+              >
+                {job.status === 'paused' ? 'Resume Job' : 'Pause Job'}
+              </button>
+            )}
+            {(job.status === 'pending' || job.status === 'running' || job.status === 'paused') && (
               <button
                 className="secondary"
                 onClick={handleCancel}
