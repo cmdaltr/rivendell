@@ -56,7 +56,7 @@ def _find_images_path():
     """Find the first existing test images path that contains actual forensic images.
 
     Checks platform-specific locations:
-    - macOS: /Volumes/*/rivendell_imgs (external drives)
+    - macOS: /Volumes/*/rivendell_imgs, /Volumes/*/rivendell, /Volumes/*/*/rivendell (external drives)
     - Linux: /mnt/*/rivendell_imgs, /media/*/rivendell_imgs (mount points)
     - Windows: [A-Z]:/rivendell_imgs (drive letters)
     - All: /tmp/rivendell (fallback)
@@ -74,6 +74,8 @@ def _find_images_path():
     if system == "Darwin":  # macOS
         search_patterns.extend([
             "/Volumes/*/rivendell_imgs",  # External drives
+            "/Volumes/*/rivendell",
+            "/Volumes/*/*/rivendell",     # e.g. /Volumes/Portable6TB/Data/rivendell
             "/tmp/rivendell",
         ])
     elif system == "Linux":
@@ -2675,6 +2677,31 @@ def cancel_all_jobs(api_url: str):
         sys.exit(1)
 
 
+def cancel_jobs(api_url: str, job_ids: List[str]):
+    """Cancel specific jobs by ID, leaving every other job untouched."""
+    if not HAS_REQUESTS:
+        print("ERROR: 'requests' library required. Install with: pip install requests")
+        sys.exit(1)
+
+    failed = 0
+    for job_id in job_ids:
+        try:
+            response = requests.post(f"{api_url}/api/jobs/{job_id}/cancel", timeout=30)
+            if response.status_code == 400:
+                # Jobs parked on a sudo prompt only accept /cancel-sudo
+                response = requests.post(f"{api_url}/api/jobs/{job_id}/cancel-sudo", timeout=30)
+            print(f"  {job_id}: HTTP {response.status_code}")
+            if not response.ok:
+                failed += 1
+        except requests.exceptions.RequestException as e:
+            print(f"  {job_id}: ERROR {e}")
+            failed += 1
+
+    print(f"Cancelled {len(job_ids) - failed}/{len(job_ids)} jobs.")
+    if failed:
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Rivendell Image Combination Tests",
@@ -2719,6 +2746,9 @@ def main():
         "--cancel-all", action="store_true", help="Cancel all running and pending jobs"
     )
     parser.add_argument(
+        "--cancel", nargs="+", metavar="JOB_ID", help="Cancel only the given job IDs"
+    )
+    parser.add_argument(
         "--delete-all", action="store_true", help="Delete all completed/failed/cancelled jobs"
     )
     parser.add_argument(
@@ -2730,6 +2760,8 @@ def main():
 
     if args.cancel_all:
         cancel_all_jobs(args.api_url)
+    elif args.cancel:
+        cancel_jobs(args.api_url, args.cancel)
     elif args.delete_all:
         delete_all_jobs(args.api_url)
     elif args.rerun_failed:

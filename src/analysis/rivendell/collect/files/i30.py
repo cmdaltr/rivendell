@@ -51,6 +51,9 @@ def extract_i30(
             os.listdir(output_directory + img.split("::")[0] + "/" + "artefacts")
         )
     ):
+        # Stop once the image is handled: d is the evidence directory and may hold
+        # large output trees (e.g. a case output under the image folder).
+        i30_done = False
         for image_root, _, image_files in os.walk(d):
             for image_file in image_files:
                 if (
@@ -157,3 +160,6 @@ def extract_i30(
                         stderr=subprocess.PIPE,
                     ).communicate()
                     shutil.rmtree("/mnt/i30_{}".format(img.split("::")[0]))
+                    i30_done = True
+            if i30_done:
+                break

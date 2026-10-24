@@ -29,6 +29,10 @@ celery_app = Celery(
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
 )
+# Jobs run for hours. Redis re-delivers any unacked (prefetched) message after
+# visibility_timeout (default 1 h), which re-ran the same job back to back.
+celery_app.conf.broker_transport_options = {"visibility_timeout": 86400}
+celery_app.conf.worker_prefetch_multiplier = 1
 
 logger = get_task_logger(__name__)
 job_storage = JobStorage()

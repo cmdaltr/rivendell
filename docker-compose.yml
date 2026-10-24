@@ -191,6 +191,14 @@ services:
     networks:
       - rivendell-network
     restart: unless-stopped
+    # The image's checkstate.sh runs as 'ansible', which can't read splunk-owned
+    # /opt/splunk/var/log, so it reports unhealthy while splunkd is fine.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -skf -o /dev/null -u admin:$$SPLUNK_PASSWORD https://localhost:8089/services/server/health/splunkd || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
     deploy:
       resources:
         limits:

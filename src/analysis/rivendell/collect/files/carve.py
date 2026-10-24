@@ -23,9 +23,11 @@ def carve_files(output_directory, verbosity, d, artefact_directory, img, vssimag
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     ).communicate()
-    if os.path.exists(artefact_directory + "/carved/audit.txt"):
-        os.remove(artefact_directory + "/carved/audit.txt")
+    # foremost's audit.txt is kept: it records the input foremost scanned and
+    # per-type counts, which is the only evidence of what carving covered.
     for eachdir in os.listdir(artefact_directory + "/carved"):
+        if not os.path.isdir(artefact_directory + "/carved/" + eachdir):
+            continue
         for eachfile in os.listdir(artefact_directory + "/carved/" + eachdir):
             print("     Successfully carved '{}' from {}".format(eachfile, vssimage))
             entry, prnt = "{},{},{},'{}'\n".format(
@@ -40,7 +42,7 @@ def carve_files(output_directory, verbosity, d, artefact_directory, img, vssimag
                 vssimage,
             )
             write_audit_log_entry(verbosity, output_directory, entry, prnt)
-            time.sleep(0.5)
+            time.sleep(0.1)
 
     entry, prnt = "{},{},{},completed\n".format(
         datetime.now().isoformat(), vssimage.replace("'", ""), "carving"

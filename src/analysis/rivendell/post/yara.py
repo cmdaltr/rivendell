@@ -34,10 +34,11 @@ def invoke_yara(verbosity, output_directory, img, yara_file, binary_dir):
 
     print(f"      Invoking '{yara_rule_name}' against '{img_name}', please stand by...")
 
-    # Run YARA scan
+    # Run YARA scan. -N: Linux images contain /dev/fd -> /proc/self/fd, which
+    # resolves to yara's own fds (including the mount) and recurses forever.
     scan_dir = "/" + binary_dir.strip("/")
     result = subprocess.run(
-        ["yara", "-r", "-s", "-w", yara_file, scan_dir],
+        ["yara", "-r", "-N", "-s", "-w", yara_file, scan_dir],
         capture_output=True,
         text=True,
     )
