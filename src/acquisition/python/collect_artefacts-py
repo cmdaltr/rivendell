@@ -194,10 +194,12 @@ def acquire_memory(mem_tool, command_params, gandalf_host):
 
 def collect_volatile_data(gandalf_artefact_destination):
     os_platform = str(platform.uname())
+    # First line is what Elrond reads: <host>::<Linux|macOS>
+    elrond_platform = "macOS" if platform.system() == "Darwin" else platform.system()
     with open(
         os.path.join(gandalf_artefact_destination, "host.info"), "w"
     ) as platform_info:
-        platform_info.write(os_platform)
+        platform_info.write("{}::{}\n{}\n".format(platform.node(), elrond_platform, os_platform))
     processes = str(
         subprocess.Popen(
             ["ps", "aux"],

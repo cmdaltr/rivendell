@@ -40,7 +40,10 @@ Param(
     [Parameter(Position = 2)][string]$OutputDirectory,
     [Parameter(Position = 3)][switch]$Memory,
     [Parameter(Position = 4)][switch]$ShowProgress,
-    [Parameter(Position = 5)][switch]$CollectFiles
+    [Parameter(Position = 5)][switch]$CollectFiles,
+    # Accept the defaults for every question (no encryption confirmation,
+    # overwrite the output directory, continue without disk_tools.zip).
+    [Parameter(Position = 6)][switch]$NoPrompt
 )
 
 function Format-Art {
@@ -313,7 +316,7 @@ else {
 if (-Not (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip")) {
     Clear-Host
     Write-Host "`n`n`n`n      WARNING: 'C:\TEMP\gandalf\gandalf\tools\disk_tools.zip' does not exist." -Foreground Yellow; Write-Host "       As a result, some disk artefacts (inc. the `$MFT will not be collected." -Foreground White
-    $ContinueWithoutDiskTools = Read-Host "      Do you wish to continue? y/N [N] "
+    if ($NoPrompt) { $ContinueWithoutDiskTools = "y" } else { $ContinueWithoutDiskTools = Read-Host "      Do you wish to continue? y/N [N] " }
     if ($ContinueWithoutDiskTools -ne "y") {
         Write-Host "`n`n       Read the " -NoNewLine; Write-Host "Configuration" -Foreground Grey -NoNewLine; Write-Host " section in the README.md before trying again.`n`n"
         Exit

@@ -38,6 +38,20 @@ REMOTE_USER=""
 REMOTE_HOST=""
 WORK_DIR="/tmp/gandalf"
 
+# Lowercase without bash 4's ${var,,} (macOS ships bash 3.2)
+lower() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
+
+# SHA-256 of a file: sha256sum on Linux, shasum on macOS
+sha256_of() {
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
 # Banner function
 print_banner() {
     cat << "EOF"
@@ -48,9 +62,9 @@ print_banner() {
    \____|\__,_|_| |_|\__,_|\__,_|/_/\_\ | |
                                          /_/
    Bash Edition - Remote Forensic Acquisition
-   Version ${VERSION}
-
 EOF
+    echo "   Version ${VERSION}"
+    echo
     local quotes=(
         "You shall pass... your artifacts to the analyst!"
         "A forensic analyst is never late, nor is he early..."
@@ -104,11 +118,17 @@ check_root() {
 check_dependencies() {
     local missing_deps=()
 
-    for cmd in tar gzip ssh scp hostname date sha256sum; do
+    local cmds="tar gzip hostname date"
+    # Only Remote mode needs an SSH client; Local runs on the target itself.
+    [ "$(lower "$ACQUISITION_MODE")" = "remote" ] && cmds="$cmds ssh scp"
+    for cmd in $cmds; do
         if ! command -v "$cmd" &> /dev/null; then
             missing_deps+=("$cmd")
         fi
     done
+    if ! command -v sha256sum &> /dev/null && ! command -v shasum &> /dev/null; then
+        missing_deps+=("sha256sum")
+    fi
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
         echo -e "${RED}[ERROR]${NC} Missing required dependencies: ${missing_deps[*]}"
@@ -128,7 +148,7 @@ parse_args() {
     shift 2
 
     # Validate encryption method
-    case "${ENCRYPTION_METHOD,,}" in
+    case "$(lower "$ENCRYPTION_METHOD")" in
         key|password|none)
             ;;
         *)
@@ -138,7 +158,7 @@ parse_args() {
     esac
 
     # Validate acquisition mode
-    case "${ACQUISITION_MODE,,}" in
+    case "$(lower "$ACQUISITION_MODE")" in
         local|remote)
             ;;
         *)
@@ -209,7 +229,7 @@ collect_file() {
         cp -p "$source" "$dest" 2>/dev/null || return 1
 
         # Calculate hash
-        local hash=$(sha256sum "$dest" | awk '{print $1}')
+        local hash=$(sha256_of "$dest")
 
         # Log to metadata
         echo "${hostname},${source},${hash}" >> "$meta_log"
@@ -228,7 +248,10 @@ collect_volatile() {
     echo -e "${BLUE}[*]${NC} Collecting volatile data..."
 
     # Platform information
-    uname -a > "${acq_dir}/artefacts/host.info" 2>/dev/null || true
+    # First line is what Elrond reads: <host>::<Linux|macOS>
+    local platform="Linux"
+    [ "$(uname -s)" = "Darwin" ] && platform="macOS"
+    { echo "${hostname}::${platform}"; uname -a; } > "${acq_dir}/artefacts/host.info" 2>/dev/null || true
     log_audit "$audit_log" "$hostname" "host.info"
 
     # Process list
@@ -269,7 +292,7 @@ collect_memory() {
     if command -v avml &> /dev/null; then
         avml "${acq_dir}/artefacts/memory/${hostname}.mem" 2>/dev/null || {
             echo -e "${YELLOW}[!]${NC} Memory acquisition failed"
-            return 1
+            return 0
         }
         log_audit "$audit_log" "$hostname" "memory/${hostname}.mem"
         echo -e "${GREEN}[+]${NC} Memory dump acquired"
@@ -287,52 +310,33 @@ collect_artifacts() {
 
     echo -e "${BLUE}[*]${NC} Collecting filesystem artifacts..."
 
-    # Define artifact mappings
-    declare -A artifacts=(
-        # Configuration files
-        ["/etc/passwd"]="etc+passwd"
-        ["/etc/shadow"]="etc+shadow"
-        ["/etc/group"]="etc+group"
-        ["/etc/hosts"]="etc+hosts"
-        ["/etc/hostname"]="etc+hostname"
-        ["/etc/fstab"]="etc+fstab"
-        ["/etc/sudoers"]="conf/etc+sudoers"
-        ["/etc/ssh/sshd_config"]="conf/etc+ssh+sshd_config"
-
-        # Cron jobs
-        ["/etc/crontab"]="cron/etc+crontab"
-
-        # Logs (will collect directory)
-
-        # System files
-        ["/etc/timezone"]="etc+timezone"
-        ["/etc/os-release"]="etc+os-release"
-    )
-
-    # Collect individual files
-    for source in "${!artifacts[@]}"; do
-        local dest_name="${artifacts[$source]}"
-        if [ -n "$dest_name" ]; then
-            # Has subdirectory
-            if [[ "$dest_name" == *"/"* ]]; then
-                local dest="${acq_dir}/artefacts/${dest_name}"
-            else
-                local dest="${acq_dir}/artefacts/${dest_name}"
-            fi
-        else
-            # No subdirectory, just filename
-            local dest="${acq_dir}/artefacts/$(basename $source)"
-        fi
-
+    # Artefact mappings: source|destination under artefacts/ (a plain list, as
+    # bash 3.2 has no associative arrays)
+    local mapping source dest_name dest
+    while IFS='|' read -r source dest_name; do
+        [ -n "$source" ] || continue
+        dest="${acq_dir}/artefacts/${dest_name:-$(basename "$source")}"
         if collect_file "$source" "$dest" "$hostname" "$meta_log"; then
             log_audit "$audit_log" "$hostname" "$source"
         fi
-    done
+    done <<'MAP'
+/etc/passwd|etc+passwd
+/etc/shadow|etc+shadow
+/etc/group|etc+group
+/etc/hosts|etc+hosts
+/etc/hostname|etc+hostname
+/etc/fstab|etc+fstab
+/etc/sudoers|conf/etc+sudoers
+/etc/ssh/sshd_config|conf/etc+ssh+sshd_config
+/etc/crontab|cron/etc+crontab
+/etc/timezone|etc+timezone
+/etc/os-release|etc+os-release
+MAP
 
     # Collect directories
-    collect_directory "/var/log" "${acq_dir}/artefacts/logs" "$hostname" "$audit_log" "$meta_log"
-    collect_directory "/etc/cron.d" "${acq_dir}/artefacts/cron" "$hostname" "$audit_log" "$meta_log"
-    collect_directory "/etc/systemd" "${acq_dir}/artefacts/conf" "$hostname" "$audit_log" "$meta_log"
+    collect_directory "/var/log" "${acq_dir}/artefacts/logs" "$hostname" "$audit_log" "$meta_log" || true
+    collect_directory "/etc/cron.d" "${acq_dir}/artefacts/cron" "$hostname" "$audit_log" "$meta_log" || true
+    collect_directory "/etc/systemd" "${acq_dir}/artefacts/conf" "$hostname" "$audit_log" "$meta_log" || true
 
     # User directories (limited to key files)
     for user_home in /home/* /root; do
@@ -382,13 +386,13 @@ collect_user_artifacts() {
     mkdir -p "$user_dir"
 
     # Bash history
-    collect_file "${user_home}/.bash_history" "${user_dir}/.bash_history" "$hostname" "$meta_log"
-    collect_file "${user_home}/.bashrc" "${user_dir}/.bashrc" "$hostname" "$meta_log"
-    collect_file "${user_home}/.profile" "${user_dir}/.profile" "$hostname" "$meta_log"
+    collect_file "${user_home}/.bash_history" "${user_dir}/.bash_history" "$hostname" "$meta_log" || true
+    collect_file "${user_home}/.bashrc" "${user_dir}/.bashrc" "$hostname" "$meta_log" || true
+    collect_file "${user_home}/.profile" "${user_dir}/.profile" "$hostname" "$meta_log" || true
 
     # SSH keys and config
     if [ -d "${user_home}/.ssh" ]; then
-        collect_directory "${user_home}/.ssh" "${user_dir}/ssh" "$hostname" "$audit_log" "$meta_log" 1
+        collect_directory "${user_home}/.ssh" "${user_dir}/ssh" "$hostname" "$audit_log" "$meta_log" 1 || true
     fi
 
     # Browser artifacts
@@ -419,7 +423,7 @@ collect_browser_artifacts() {
 
             for file in "History" "Bookmarks" "Preferences" "Web Data" "Cookies"; do
                 if [ -f "${chrome_path}/${file}" ]; then
-                    collect_file "${chrome_path}/${file}" "${chrome_dest}/${username}+${file}" "$hostname" "$meta_log"
+                    collect_file "${chrome_path}/${file}" "${chrome_dest}/${username}+${file}" "$hostname" "$meta_log" || true
                     log_audit "$audit_log" "$hostname" "${chrome_path}/${file}"
                 fi
             done
@@ -436,7 +440,7 @@ collect_browser_artifacts() {
 
                 for file in "places.sqlite" "favicons.sqlite" "cookies.sqlite" "prefs.js"; do
                     if [ -f "${profile}/${file}" ]; then
-                        collect_file "${profile}/${file}" "${firefox_dest}/${username}+${file}" "$hostname" "$meta_log"
+                        collect_file "${profile}/${file}" "${firefox_dest}/${username}+${file}" "$hostname" "$meta_log" || true
                         log_audit "$audit_log" "$hostname" "${profile}/${file}"
                     fi
                 done
@@ -451,14 +455,14 @@ create_archive() {
     local hostname="$2"
     local output_file="${OUTPUT_DIR}/${hostname}.tar.gz"
 
-    echo -e "${BLUE}[*]${NC} Creating archive..."
+    echo -e "${BLUE}[*]${NC} Creating archive..." >&2
 
     tar -czf "$output_file" -C "${acq_dir}" . 2>/dev/null || {
-        echo -e "${RED}[ERROR]${NC} Failed to create archive"
+        echo -e "${RED}[ERROR]${NC} Failed to create archive" >&2
         return 1
     }
 
-    echo -e "${GREEN}[+]${NC} Archive created: $output_file"
+    echo -e "${GREEN}[+]${NC} Archive created: $output_file" >&2
     echo "$output_file"
 }
 
@@ -467,14 +471,14 @@ encrypt_archive() {
     local archive_file="$1"
     local hostname="$2"
 
-    case "${ENCRYPTION_METHOD,,}" in
+    case "$(lower "$ENCRYPTION_METHOD")" in
         none)
             return 0
             ;;
         key|password)
             echo -e "${YELLOW}[!]${NC} Encryption with openssl (AES-256-CBC)"
 
-            if [ "${ENCRYPTION_METHOD,,}" = "key" ]; then
+            if [ "$(lower "$ENCRYPTION_METHOD")" = "key" ]; then
                 # Generate random key
                 local key_file="${OUTPUT_DIR}/shadowfax.key"
                 openssl rand -base64 32 > "$key_file"
@@ -571,26 +575,31 @@ acquire_remote() {
         }
 
         # Execute remotely
-        ssh "${REMOTE_USER}@${host}" "sudo bash ${remote_script} ${ENCRYPTION_METHOD} Local -o /tmp/gandalf/acquisitions ${MEMORY_DUMP:+-m}" || {
+        if ! ssh "${REMOTE_USER}@${host}" "sudo bash ${remote_script} ${ENCRYPTION_METHOD} Local -o /tmp/gandalf/acquisitions ${MEMORY_DUMP:+-m}"; then
             echo -e "${RED}[ERROR]${NC} Remote execution failed on $host"
+            ssh "${REMOTE_USER}@${host}" "sudo rm -rf /tmp/gandalf ${remote_script}" || true
             continue
-        }
+        fi
 
-        # Retrieve archive
+        # Retrieve archive (and, with Key encryption, the key: it is generated on the target)
         local remote_file=$(ssh "${REMOTE_USER}@${host}" "ls -1 /tmp/gandalf/acquisitions/*.tar.gz* | head -1")
         if [ -n "$remote_file" ]; then
-            scp "${REMOTE_USER}@${host}:${remote_file}" "${OUTPUT_DIR}/" || {
+            if scp "${REMOTE_USER}@${host}:${remote_file}" "${OUTPUT_DIR}/"; then
+                if [ "$(lower "$ENCRYPTION_METHOD")" = "key" ]; then
+                    scp "${REMOTE_USER}@${host}:/tmp/gandalf/acquisitions/shadowfax.key" "${OUTPUT_DIR}/${host}.shadowfax.key" \
+                        && echo -e "${GREEN}[+]${NC} Encryption key saved: ${OUTPUT_DIR}/${host}.shadowfax.key" \
+                        || echo -e "${RED}[ERROR]${NC} Failed to retrieve the encryption key from $host"
+                fi
+                echo -e "${GREEN}[+]${NC} Successfully acquired from $host"
+            else
                 echo -e "${RED}[ERROR]${NC} Failed to retrieve archive from $host"
-                continue
-            }
-
-            # Cleanup remote
-            ssh "${REMOTE_USER}@${host}" "sudo rm -rf /tmp/gandalf" || true
-
-            echo -e "${GREEN}[+]${NC} Successfully acquired from $host"
+            fi
         else
             echo -e "${RED}[ERROR]${NC} No archive found on $host"
         fi
+
+        # Leave nothing of Gandalf's on the target
+        ssh "${REMOTE_USER}@${host}" "sudo rm -rf /tmp/gandalf ${remote_script}" || true
     done
 }
 
@@ -598,13 +607,13 @@ acquire_remote() {
 main() {
     print_banner
     check_root
-    check_dependencies
     parse_args "$@"
+    check_dependencies
 
     # Create output directory
     mkdir -p "$OUTPUT_DIR"
 
-    case "${ACQUISITION_MODE,,}" in
+    case "$(lower "$ACQUISITION_MODE")" in
         local)
             acquire_local
             ;;

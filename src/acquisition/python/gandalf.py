@@ -15,6 +15,16 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from scp import SCPClient
 
+# Resolve Gandalf's files from this script's location, not the working directory:
+# python/collect_artefacts-py is the template, tools/ and lists/ sit beside python/.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+GANDALF_HOME = os.path.dirname(SCRIPT_DIR)
+TOOLS_DIR = os.path.join(GANDALF_HOME, "tools")
+LISTS_DIR = os.path.join(GANDALF_HOME, "lists")
+ACQUIRE_TEMPLATE = os.path.join(SCRIPT_DIR, "collect_artefacts-py")
+ACQUIRE_SCRIPT = os.path.join(TOOLS_DIR, "acquire_artefacts.py")
+MEMORY_TOOLS = [os.path.join(TOOLS_DIR, "memory", "avml-main.zip"), os.path.join(TOOLS_DIR, "memory", "osxpmem.app.zip")]
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -209,8 +219,8 @@ quotes = [
 ]
 gandalf_root = "/tmp/gandalf"
 gandalf_directory = os.path.join(gandalf_root, "gandalf", "acquisitions")
-if output_dir != False:
-    output_directory = output_dir[0]
+if isinstance(output_dir, str):  # -O DIR (a bare -O gives True: use the default)
+    output_directory = output_dir
 else:
     output_directory = gandalf_directory
 if mem != False:
@@ -267,6 +277,15 @@ def generate_cipher():
     return cipher
 
 
+def available_memory_tools():
+    """Memory tools present in tools/memory; warn about any that are missing."""
+    present = [t for t in MEMORY_TOOLS if os.path.exists(t)]
+    for t in MEMORY_TOOLS:
+        if t not in present:
+            print("     \033[1;33m{} not found; memory acquisition with it is skipped\033[1;m".format(os.path.basename(t)))
+    return present
+
+
 def configure_acquisition(
     encryption_method,
     system_artefacts,
@@ -278,8 +297,8 @@ def configure_acquisition(
     gandalf_directory,
     gandalf_host,
 ):
-    shutil.copy2("shire/collect_artefacts-py", "tools/acquire_artefacts.py")
-    with open("tools/acquire_artefacts.py", "a") as acquire_artefacts:
+    shutil.copy2(ACQUIRE_TEMPLATE, ACQUIRE_SCRIPT)
+    with open(ACQUIRE_SCRIPT, "a") as acquire_artefacts:
         acquire_artefacts.write(
             '\n\nacquire_artefacts(\n    "{}",\n    {},\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n)\n'.format(
                 encryption_method,
@@ -293,7 +312,7 @@ def configure_acquisition(
                 gandalf_host,
             )
         )
-    os.chmod("tools/acquire_artefacts.py", 0o755)
+    os.chmod(ACQUIRE_SCRIPT, 0o755)
 
 
 def main():
@@ -304,11 +323,11 @@ def main():
         """
     \n\n
          \033[1;35m____                      .___        .__    _____  
-        / ___\ _____     ____    __| _/_____   |  | _/ ____\ 
-       / /_/  >\__  \   /    \  / __ | \__  \  |  | \   __\  
-       \___  /  / __ \_|   |  \/ /_/ |  / __ \_|  |__|  |    
-      /_____/  (____  /|___|  /\____ | (____  /|____/|__|    
-                    \/      \/      \/      \/               \n\n{}\033[1;m
+        / ___\\ _____     ____    __| _/_____   |  | _/ ____\\ 
+       / /_/  >\\__  \\   /    \\  / __ | \\__  \\  |  | \\   __\\  
+       \\___  /  / __ \\_|   |  \\/ /_/ |  / __ \\_|  |__|  |    
+      /_____/  (____  /|___|  /\\____ | (____  /|____/|__|    
+                    \\/      \\/      \\/      \\/               \n\n{}\033[1;m
     """.format(
             random.choice(quotes)
         )
@@ -387,16 +406,10 @@ def main():
             os.path.join(gandalf_directory, hostlist[0]),
         )
         if memory:
-            shutil.copy2(
-                os.path.join("tools", "memory", "avml-main.zip"), "/tmp/gandalf/"
-            )
-            shutil.copy2(
-                os.path.join("tools", "memory", "osxpmem.app.zip"), "/tmp/gandalf/"
-            )
-        else:
-            pass
+            for tool in available_memory_tools():
+                shutil.copy2(tool, "/tmp/gandalf/")
         subprocess.Popen(
-            ["sudo", "python3", "tools/acquire_artefacts.py"]
+            ["sudo", "python3", ACQUIRE_SCRIPT]
         ).communicate()
         if output_directory != gandalf_directory:
             if os.path.exists(
@@ -428,7 +441,7 @@ def main():
             time.sleep(4)
             input("      Collected? [Yes] ")
             shutil.rmtree("/tmp/gandalf/")
-        os.remove("tools/acquire_artefacts.py")
+        os.remove(ACQUIRE_SCRIPT)
     else:  # Remote
         if encryption_object == None:
             confirm_encryption = input(
@@ -444,7 +457,7 @@ def main():
         else:
             pass
         ssh = paramiko.client.SSHClient()
-        with open(os.path.join("lists", "hosts.list")) as host_list:
+        with open(os.path.join(LISTS_DIR, "hosts.list")) as host_list:
             for each_host in host_list:
                 if not each_host.startswith("#"):
                     hostlist.append(each_host.strip())
@@ -478,18 +491,10 @@ def main():
                 )  # making gandalf directories
                 scp = SCPClient(ssh.get_transport())
                 if memory:  # sending memory dump tools
-                    scp.put(
-                        os.path.join("tools", "memory", "avml-main.zip"),
-                        "/tmp/gandalf/",
-                    )
-                    scp.put(
-                        os.path.join("tools", "memory", "osxpmem.app.zip"),
-                        "/tmp/gandalf/",
-                    )
-                else:
-                    pass
+                    for tool in available_memory_tools():
+                        scp.put(tool, "/tmp/gandalf/")
                 scp.put(
-                    os.path.join("tools", "acquire_artefacts.py"),
+                    ACQUIRE_SCRIPT,
                     "/tmp/gandalf/acquire_artefacts.py",
                 )  # sending gandalf acquisition script
                 acquire_in, acquire_out, acquire_err = ssh.exec_command(
