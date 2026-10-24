@@ -119,6 +119,40 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+DEFAULT_SECRET_KEY = "your-secret-key-change-in-production"
+
+
+def _persistent_secret_key() -> str:
+    """A random JWT secret kept beside the user store, created on first start.
+
+    The built-in default is public, so anyone could sign an admin token with it.
+    Setting SECRET_KEY in the environment still takes precedence.
+    """
+    import os
+    import secrets
+
+    path = Path(os.environ.get("SECRET_KEY_FILE", "/app/data/.jwt_secret"))
+    try:
+        if path.exists():
+            key = path.read_text().strip()
+            if key:
+                return key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        key = secrets.token_urlsafe(48)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(key)
+        return key
+    except FileExistsError:
+        return path.read_text().strip()  # another worker created it first
+    except OSError:
+        # Unwritable data directory: a per-process key still beats the public default.
+        return secrets.token_urlsafe(48)
+
+
+if settings.secret_key in ("", DEFAULT_SECRET_KEY):
+    settings.secret_key = _persistent_secret_key()
+
 # Create necessary directories
 settings.upload_dir.mkdir(parents=True, exist_ok=True)
 settings.output_dir.mkdir(parents=True, exist_ok=True)

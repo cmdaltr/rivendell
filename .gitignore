@@ -125,6 +125,10 @@ config/secrets.yml
 .env.local
 .env.*.local
 
+# Backend user store and generated JWT secret
+src/web/backend/data/users.json
+src/web/backend/data/.jwt_secret
+
 # SIEM credentials
 splunk_credentials.txt
 elastic_credentials.txt

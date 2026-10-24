@@ -12,14 +12,15 @@ Usage:
 """
 
 import argparse
-import sys
 import os
+import subprocess
+import sys
 from pathlib import Path
 
-# Add parent directory to path for imports
-RIVENDELL_ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(RIVENDELL_ROOT / "analysis"))
-sys.path.insert(0, str(RIVENDELL_ROOT / "acquisition" / "python"))
+# Gandalf and Elrond both parse arguments at import time, so they run as
+# subprocesses. src/analysis is deliberately kept off sys.path: its platform/
+# package would shadow the stdlib module of the same name.
+RIVENDELL_ROOT = Path(__file__).resolve().parent.parent
 
 VERSION = "2.0.0"
 
@@ -45,72 +46,49 @@ def cmd_acquire(args):
     """Run Gandalf acquisition"""
     print("[*] Starting Gandalf acquisition module...")
 
-    # Import gandalf
-    try:
-        import gandalf
-        # Pass through to gandalf's main
-        gandalf_args = [args.encryption, args.mode]
-        if args.output:
-            gandalf_args.extend(['-O', args.output])
-        if args.memory:
-            gandalf_args.append('-M')
-        if args.access_times:
-            gandalf_args.append('-A')
-        if args.collect_files:
-            gandalf_args.append('-C')
-
-        # TODO: Call gandalf main with args
-        print(f"[*] Would execute: gandalf {' '.join(gandalf_args)}")
-        print("[!] Direct integration pending - use acquisition/python/gandalf.py for now")
-
-    except ImportError:
-        print("[ERROR] Gandalf module not found")
-        print("[*] Use: python3 acquisition/python/gandalf.py")
+    # gandalf.py parses its arguments at import time, so run it as its own process.
+    gandalf_py = RIVENDELL_ROOT / "acquisition" / "python" / "gandalf.py"
+    if not gandalf_py.exists():
+        print(f"[ERROR] Gandalf not found at {gandalf_py}")
         return 1
-
-    return 0
+    cmd = [sys.executable, str(gandalf_py), args.encryption, args.mode]
+    if args.output:
+        cmd.extend(["-O", args.output])
+    if args.memory:
+        cmd.append("-M")
+    if args.access_times:
+        cmd.append("-A")
+    if args.collect_files:
+        cmd.append("-F")  # gandalf.py's flag for --CollectFiles
+    print(f"[*] {' '.join(cmd)}")
+    return subprocess.call(cmd, cwd=str(gandalf_py.parent))
 
 
 def cmd_analyze(args):
     """Run Elrond analysis"""
     print("[*] Starting Elrond analysis module...")
 
-    # Import elrond
-    try:
-        from analysis import elrond
-        # Pass through to elrond's main
-        elrond_args = [args.case_id, args.evidence_path]
-        if args.output:
-            elrond_args.append(args.output)
-
-        # Build flag string
-        flags = []
-        if args.collect:
-            flags.append('-C')
-        if args.process:
-            flags.append('-P')
-        if args.analyze:
-            flags.append('-A')
-        if args.splunk:
-            flags.append('-S')
-        if args.elastic:
-            flags.append('-E')
-        if args.brisk:
-            flags.append('-B')
-
-        if flags:
-            elrond_args.append(''.join(flags))
-
-        # TODO: Call elrond main with args
-        print(f"[*] Would execute: elrond {' '.join(elrond_args)}")
-        print("[!] Direct integration pending - use analysis/elrond.py for now")
-
-    except ImportError:
-        print("[ERROR] Elrond module not found")
-        print("[*] Use: python3 analysis/elrond.py")
+    # Elrond parses its arguments at import time, so run it as its own process
+    # (which also keeps the analysis tools behind a subprocess boundary).
+    elrond_py = RIVENDELL_ROOT / "analysis" / "elrond.py"
+    if not elrond_py.exists():
+        print(f"[ERROR] Elrond not found at {elrond_py}")
         return 1
-
-    return 0
+    cmd = [sys.executable, str(elrond_py), args.case_id, args.evidence_path]
+    if args.output:
+        cmd.append(args.output)
+    for enabled, flag in (
+        (args.collect, "--Collect"),
+        (args.process, "--Process"),
+        (args.analyze, "--Analysis"),
+        (args.splunk, "--Splunk"),
+        (args.elastic, "--Elastic"),
+        (args.brisk, "--Brisk"),
+    ):
+        if enabled:
+            cmd.append(flag)
+    print(f"[*] {' '.join(cmd)}")
+    return subprocess.call(cmd, cwd=str(RIVENDELL_ROOT / "analysis"))
 
 
 def cmd_web(args):

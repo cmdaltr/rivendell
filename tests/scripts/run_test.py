@@ -138,16 +138,17 @@ SAMPLE_KEYWORDS_FILE = f"{CONTAINER_FILES_PATH}/keywords.txt"
 SAMPLE_YARA_DIR = f"{CONTAINER_FILES_PATH}/yara_rules"
 SAMPLE_IOCS_FILE = f"{CONTAINER_FILES_PATH}/iocs.txt"
 
-# Gandalf pre-collected artifacts paths (override with env vars)
-# These point to directories containing artifacts collected by various collectors
+# Gandalf pre-collected artifacts paths (override with env vars). Elrond's
+# --Gandalf reader requires the path to end in /acquisitions/ (lab/lab.sh lays
+# collections out that way).
 GANDALF_POWERSHELL_PATH = os.environ.get(
-    "GANDALF_POWERSHELL_PATH", f"{TEST_IMAGES_PATH}/gandalf/powershell_collection"
+    "GANDALF_POWERSHELL_PATH", f"{TEST_IMAGES_PATH}/gandalf/powershell_collection/acquisitions/"
 )
 GANDALF_PYTHON_PATH = os.environ.get(
-    "GANDALF_PYTHON_PATH", f"{TEST_IMAGES_PATH}/gandalf/python_collection"
+    "GANDALF_PYTHON_PATH", f"{TEST_IMAGES_PATH}/gandalf/python_collection/acquisitions/"
 )
 GANDALF_BASH_PATH = os.environ.get(
-    "GANDALF_BASH_PATH", f"{TEST_IMAGES_PATH}/gandalf/bash_collection"
+    "GANDALF_BASH_PATH", f"{TEST_IMAGES_PATH}/gandalf/bash_collection/acquisitions/"
 )
 
 # Cloud-hosted image paths (override with env vars)
@@ -1883,7 +1884,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_apt29_day1",
         description="Mordor - APT29 Day 1 simulation dataset analysis",
-        images=[f"{MORDOR_DATASETS_PATH}/apt29/day1"],
+        images=[f"{MORDOR_DATASETS_PATH}/apt29/day1/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1895,7 +1896,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_apt29_day2",
         description="Mordor - APT29 Day 2 simulation dataset analysis",
-        images=[f"{MORDOR_DATASETS_PATH}/apt29/day2"],
+        images=[f"{MORDOR_DATASETS_PATH}/apt29/day2/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1907,7 +1908,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_apt29_full",
         description="Mordor - APT29 full simulation (Day 1 + Day 2) with SIEM",
-        images=[f"{MORDOR_DATASETS_PATH}/apt29/day1", f"{MORDOR_DATASETS_PATH}/apt29/day2"],
+        images=[f"{MORDOR_DATASETS_PATH}/apt29/day1/acquisitions/", f"{MORDOR_DATASETS_PATH}/apt29/day2/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1922,7 +1923,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_atomic_cred_access",
         description="Mordor - Atomic Red Team credential access techniques",
-        images=[f"{MORDOR_DATASETS_PATH}/atomic/credential_access"],
+        images=[f"{MORDOR_DATASETS_PATH}/atomic/credential_access/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1934,7 +1935,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_atomic_defense_evasion",
         description="Mordor - Atomic Red Team defense evasion techniques",
-        images=[f"{MORDOR_DATASETS_PATH}/atomic/defense_evasion"],
+        images=[f"{MORDOR_DATASETS_PATH}/atomic/defense_evasion/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1946,7 +1947,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_atomic_lateral_movement",
         description="Mordor - Atomic Red Team lateral movement techniques",
-        images=[f"{MORDOR_DATASETS_PATH}/atomic/lateral_movement"],
+        images=[f"{MORDOR_DATASETS_PATH}/atomic/lateral_movement/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1958,7 +1959,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_atomic_persistence",
         description="Mordor - Atomic Red Team persistence techniques",
-        images=[f"{MORDOR_DATASETS_PATH}/atomic/persistence"],
+        images=[f"{MORDOR_DATASETS_PATH}/atomic/persistence/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -1971,9 +1972,9 @@ MORDOR_TESTS = [
         name="mordor_full_detection_test",
         description="Mordor - Full detection capability test with all SIEM outputs",
         images=[
-            f"{MORDOR_DATASETS_PATH}/apt29/day1",
-            f"{MORDOR_DATASETS_PATH}/atomic/credential_access",
-            f"{MORDOR_DATASETS_PATH}/malware/emotet",
+            f"{MORDOR_DATASETS_PATH}/apt29/day1/acquisitions/",
+            f"{MORDOR_DATASETS_PATH}/atomic/credential_access/acquisitions/",
+            f"{MORDOR_DATASETS_PATH}/malware/emotet/acquisitions/",
         ],
         options={
             "gandalf": True,
@@ -1991,7 +1992,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_malware_cobalt_strike",
         description="Mordor - Cobalt Strike beacon analysis dataset",
-        images=[f"{MORDOR_DATASETS_PATH}/malware/cobalt_strike"],
+        images=[f"{MORDOR_DATASETS_PATH}/malware/cobalt_strike/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -2004,7 +2005,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_malware_emotet",
         description="Mordor - Emotet malware analysis dataset",
-        images=[f"{MORDOR_DATASETS_PATH}/malware/emotet"],
+        images=[f"{MORDOR_DATASETS_PATH}/malware/emotet/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,
@@ -2017,7 +2018,7 @@ MORDOR_TESTS = [
     TestCase(
         name="mordor_malware_trickbot",
         description="Mordor - TrickBot malware analysis dataset",
-        images=[f"{MORDOR_DATASETS_PATH}/malware/trickbot"],
+        images=[f"{MORDOR_DATASETS_PATH}/malware/trickbot/acquisitions/"],
         options={
             "gandalf": True,
             "analysis": True,

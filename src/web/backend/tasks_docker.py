@@ -315,6 +315,85 @@ def _resolve_destination(job) -> Path:
     return Path(settings.output_dir) / job.case_number
 
 
+# The job row is rewritten on every save, log included, so keep only the tail of
+# the log there and spool the full log to the job's output directory. Saving the
+# whole log every 10 lines grew win_full's row past 7 MB and the jobs table to
+# 126 GB, until Postgres stalled and the job failed.
+JOB_LOG_KEEP = 5000
+JOB_SAVE_INTERVAL = 10.0  # seconds between progress saves
+IMAGE_LOCK_TTL = 3600  # refreshed while the job runs, so long jobs keep their locks
+
+
+class JobLogSpool:
+    """Writes every job.log line to a file and trims job.log to its tail."""
+
+    def __init__(self, path):
+        self.path = path
+        self.index = 0
+        self.dropped = 0
+        try:
+            self.file = open(path, "a", buffering=1)
+        except OSError as e:
+            logger.warning(f"Can't open job log file {path}: {e}")
+            self.file = None
+
+    def sync(self, job):
+        if self.file:
+            try:
+                self.file.write("".join(f"{line}\n" for line in job.log[self.index:]))
+            except OSError as e:
+                logger.warning(f"Job log write failed: {e}")
+        if len(job.log) > JOB_LOG_KEEP + 1:
+            body = job.log[1:] if self.dropped else job.log
+            self.dropped += len(body) - JOB_LOG_KEEP
+            marker = f"[... {self.dropped:,} earlier lines are in {self.path}]"
+            job.log = [marker] + body[-JOB_LOG_KEEP:]
+        self.index = len(job.log)
+
+    def close(self):
+        if self.file:
+            self.file.close()
+
+
+def _safe_save(job):
+    """Save without letting a transient database error kill a running job."""
+    try:
+        job_storage.save_job(job)
+        return True
+    except Exception as e:
+        logger.warning(f"Job {job.id}: progress save failed, will retry: {e}")
+        return False
+
+
+def _refresh_image_locks(lock_keys):
+    try:
+        client = get_redis_client()
+        for key in lock_keys:
+            client.expire(key, IMAGE_LOCK_TTL)
+    except Exception as e:
+        logger.warning(f"Could not refresh image locks: {e}")
+
+
+def _stop_process_group(process, grace=30):
+    """SIGTERM Elrond's process group, then SIGKILL whatever is left."""
+    if process is None or process.poll() is not None:
+        return
+    import signal
+    try:
+        pgid = os.getpgid(process.pid)
+        os.killpg(pgid, signal.SIGTERM)
+        try:
+            process.wait(timeout=grace)
+        except subprocess.TimeoutExpired:
+            os.killpg(pgid, signal.SIGKILL)
+            process.wait(timeout=10)
+    except ProcessLookupError:
+        pass
+    except Exception as e:
+        logger.warning(f"Could not stop Elrond (pid {process.pid}): {e}")
+        process.kill()
+
+
 @celery_app.task(bind=True)
 def start_analysis(self, job_id: str):
     """
@@ -334,6 +413,8 @@ def start_analysis(self, job_id: str):
 
     # Track acquired locks for cleanup
     acquired_lock_keys = []
+    process = None
+    spool = None
 
     try:
         # Acquire locks on all source images before starting
@@ -485,7 +566,10 @@ def start_analysis(self, job_id: str):
             bufsize=1,  # Line buffering to get output in real-time
             cwd=dest_dir_str,
             env=env,
+            start_new_session=True,  # own process group, so a failed task can stop Elrond and its tools
         )
+        spool = JobLogSpool(os.path.join(dest_dir_str, "rivendell_job.log"))
+        last_save = time.monotonic()
 
         # Monitor progress
         progress_count = 0
@@ -791,9 +875,13 @@ def start_analysis(self, job_id: str):
                 # Only update if progress increases (never go backwards)
                 job.progress = max(job.progress, min(new_progress, 95))
 
-                # Save periodically (every 10 lines)
-                if progress_count % 10 == 0:
-                    job_storage.save_job(job)
+                # Save on a timer, not per N lines: chatty stages (IOC extraction)
+                # emit thousands of lines a minute.
+                if time.monotonic() - last_save >= JOB_SAVE_INTERVAL:
+                    spool.sync(job)
+                    _safe_save(job)
+                    _refresh_image_locks(acquired_lock_keys)
+                    last_save = time.monotonic()
 
                 logger.info(line)
 
@@ -914,6 +1002,11 @@ def start_analysis(self, job_id: str):
         job.status = JobStatus.FAILED
         job.error = str(e)
         job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Error: {str(e)}")
+        # Nothing reads Elrond's stdout any more; left running it blocks on the
+        # full pipe forever with the image mounted.
+        if process is not None and process.poll() is None:
+            job.log.append(f"[{datetime.now().isoformat().replace('T', ' ')}] -> Stopping Elrond (pid {process.pid}) after the error")
+            _stop_process_group(process)
 
     finally:
         # Release image locks
@@ -922,7 +1015,13 @@ def start_analysis(self, job_id: str):
             logger.info(f"Job {job_id}: Released {len(acquired_lock_keys)} image lock(s)")
 
         job.completed_at = datetime.now()
-        job_storage.save_job(job)
+        if spool:
+            spool.sync(job)
+            spool.close()
+        for attempt in range(5):  # the final status must land even after a DB blip
+            if _safe_save(job):
+                break
+            time.sleep(10 * (attempt + 1))
 
 
 def build_elrond_command(job):
