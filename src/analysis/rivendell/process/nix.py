@@ -1,8 +1,9 @@
 #!/usr/bin/env python3 -tt
+import csv
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.process.extractions.mail import (
@@ -165,6 +166,71 @@ def process_bash_history(
             for bashline in bashcontent:
                 bashcsv.write(bashline)
     # Tag MITRE technique for bash_history
+    tag_mitre_technique(output_directory, img, "bash_history")
+
+
+ZSH_EXTENDED = re.compile(r"^: (\d+):\d+;(.*)$", re.S)
+
+
+def parse_zsh_history(text):
+    """
+    Split zsh history into (timestamp, command) pairs. EXTENDED_HISTORY lines
+    are ': <epoch>:<duration>;<command>' (macOS's default); plain lines have no
+    timestamp. A trailing backslash continues a command onto the next line.
+    """
+    entries, pending = [], ""
+    for line in text.splitlines():
+        if pending:
+            pending += "\n" + line
+        else:
+            pending = line
+        if pending.endswith("\\"):
+            continue
+        match = ZSH_EXTENDED.match(pending)
+        if match:
+            when = datetime.fromtimestamp(int(match.group(1)), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            entries.append((when, match.group(2)))
+        elif pending.strip():
+            entries.append(("", pending))
+        pending = ""
+    if pending.strip():
+        entries.append(("", pending))
+    return entries
+
+
+def process_zsh_history(
+    verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
+):
+    user = artefact.split("/")[-1].split("+")[0]
+    entry, prnt = "{},{},{},zsh_history ({}) file\n".format(
+        datetime.now().isoformat(),
+        vssimage.replace("'", ""),
+        stage,
+        user,
+    ), " -> {} -> {} zsh_history ({}) file from {}".format(
+        datetime.now().isoformat().replace("T", " "),
+        stage,
+        user,
+        vssimage,
+    )
+    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+    out = (
+        output_directory
+        + img.split("::")[0]
+        + "/artefacts/cooked"
+        + vss_path_insert
+        + user
+        + "+zsh_history.csv"
+    )
+    new = not os.path.exists(out)
+    with open(artefact, encoding="utf-8", errors="ignore") as zshcontent:
+        entries = parse_zsh_history(zshcontent.read())
+    with open(out, "a", newline="") as zshcsv:
+        writer = csv.writer(zshcsv)
+        if new:
+            writer.writerow(["LastWriteTime", "Command"])
+        writer.writerows(entries)
+    # Shell history is the same technique whichever shell wrote it
     tag_mitre_technique(output_directory, img, "bash_history")
 
 

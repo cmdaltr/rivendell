@@ -110,10 +110,13 @@ def normalise_gandalf_artefacts(anchor, artefacts_dir):
 
       etc+<file>                  -> raw/<file>
       logs/<file>                 -> raw/logs/var+<file>    (journal/ -> raw/journal/)
+      logs_<source>/<file>        -> raw/logs/<source>+<file> (macOS /Library/Logs, /etc/security)
       user|home/<name>/[.]<file>  -> raw/user_profiles/<name>+<file>
-      cron/*crontab               -> raw/crontab, other cron files -> raw/cron/
+      browsers/<browser>/[<name>/]<name>+<file>
+                                  -> raw/browsers/<name>/<browser>/<file>
+      cron/[etc+]crontab          -> raw/crontab, other cron files -> raw/cron/
       *.info, *.csv               -> artefacts/ (volatile data, beside raw/)
-      anything else               -> raw/<same path>
+      anything else               -> raw/<same path> (plists/, tcc/, shared/, ...)
     """
     raw = os.path.join(artefacts_dir, "raw")
     os.makedirs(raw, exist_ok=True)
@@ -136,6 +139,20 @@ def normalise_gandalf_artefacts(anchor, artefacts_dir):
                     _place(f, os.path.join(raw, rel))
                 else:
                     _place(f, os.path.join(raw, "logs", "var+" + rel.replace(os.sep, "+")))
+        elif entry.startswith("logs_"):
+            source = entry[len("logs_"):]
+            for f in list(_files_under(path)):
+                rel = os.path.relpath(f, path).replace(os.sep, "+")
+                _place(f, os.path.join(raw, "logs", "{}+{}".format(source, rel)))
+        elif entry == "browsers":
+            for f in list(_files_under(path)):
+                parts = os.path.relpath(f, path).split(os.sep)
+                browser, name = parts[0], parts[-1]
+                user, _, browser_file = name.partition("+")
+                if not browser_file:  # not <user>+<file>: keep the path as it is
+                    _place(f, os.path.join(raw, "browsers", *parts))
+                else:
+                    _place(f, os.path.join(raw, "browsers", user, browser, browser_file))
         elif entry == "journal":
             for f in list(_files_under(path)):
                 _place(f, os.path.join(raw, "journal", os.path.relpath(f, path)))
@@ -150,7 +167,7 @@ def normalise_gandalf_artefacts(anchor, artefacts_dir):
         elif entry == "cron":
             for f in list(_files_under(path)):
                 name = os.path.basename(f)
-                if name.endswith("crontab"):
+                if name in ("crontab", "etc+crontab"):
                     _place(f, os.path.join(raw, "crontab"))
                 else:
                     _place(f, os.path.join(raw, "cron", os.path.relpath(f, path)))

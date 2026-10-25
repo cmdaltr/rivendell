@@ -7,6 +7,7 @@ from rivendell.process.browser import process_browser
 from rivendell.process.mac import process_plist
 from rivendell.process.linux import process_journal
 from rivendell.process.nix import process_bash_history
+from rivendell.process.nix import process_zsh_history
 from rivendell.process.nix import process_email
 from rivendell.process.nix import process_group
 from rivendell.process.nix import process_logs
@@ -235,6 +236,16 @@ def process_artefacts(
             )
         elif artefact.endswith(".plist"):
             process_plist(
+                verbosity,
+                vssimage,
+                output_directory,
+                img,
+                vss_path_insert,
+                stage,
+                artefact,
+            )
+        elif artefact.endswith("zsh_history"):
+            process_zsh_history(
                 verbosity,
                 vssimage,
                 output_directory,

@@ -55,6 +55,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                         or "/S-1-5-21-" in root + "/" + f
                         or f.endswith("+bash_aliases")
                         or f.endswith("+bash_history")
+                        or f.endswith("+zsh_history")
                         or f.endswith("+bash_logout")
                         or f.endswith("+bashrc")
                         or f.endswith("crontab")

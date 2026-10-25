@@ -300,6 +300,100 @@ def collect_browser_artefact(
     )
 
 
+MACOS_SINGLE_FILES = {
+    # file -> (folder under artefacts/, name) for single files the main loop's
+    # directory walk can't pick up
+    "/Library/Application Support/com.apple.TCC/TCC.db": ("tcc", "system+TCC.db"),
+    "/private/var/db/CoreDuet/Knowledge/knowledgeC.db": ("coreduet", "system+knowledgeC.db"),
+    "/System/Library/CoreServices/SystemVersion.plist": ("plists", "systemversion+SystemVersion.plist"),
+    "/etc/sudoers": ("conf", "etc+sudoers"),
+    "/etc/ssh/sshd_config": ("conf", "etc+ssh+sshd_config"),
+}
+MACOS_USER_FILES = (
+    ".zsh_history", ".zshrc", ".zprofile", ".zshenv", ".profile",
+)
+SHARED_MAX_BYTES = 10 * 1024 * 1024
+
+
+def _collect_one(source, destination, gandalf_host):
+    """Copy one file (if readable and not empty), log it and hash it."""
+    try:
+        if not os.path.isfile(source) or os.path.getsize(source) == 0:
+            return False
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy2(source, destination)
+    except (PermissionError, OSError):
+        return False
+    audit_log(gandalf_host, source)
+    audit_meta(gandalf_host, destination)
+    return True
+
+
+def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
+    """
+    macOS artefacts the system_artefacts walk misses: zsh history (the default
+    shell since 10.15), per-user LaunchAgents and preferences, quarantine
+    events, TCC and KnowledgeC databases, and /Users/Shared (a common staging
+    folder). Protected files need Full Disk Access and are skipped otherwise.
+    """
+    dest = gandalf_artefact_destination
+    for source, (folder, name) in MACOS_SINGLE_FILES.items():
+        _collect_one(source, os.path.join(dest, folder, name), gandalf_host)
+    for agents_dir, prefix in (
+        ("/System/Library/LaunchAgents", "system+launchagents-"),
+    ):
+        if os.path.isdir(agents_dir):
+            for plist in sorted(os.listdir(agents_dir)):
+                if plist.endswith(".plist"):
+                    _collect_one(os.path.join(agents_dir, plist), os.path.join(dest, "plists", prefix + plist), gandalf_host)
+    for user in sorted(os.listdir("/Users")) if os.path.isdir("/Users") else []:
+        home = os.path.join("/Users", user)
+        if user == "Shared" or user.startswith(".") or not os.path.isdir(home):
+            continue
+        for name in MACOS_USER_FILES:
+            _collect_one(os.path.join(home, name), os.path.join(dest, "user", user, name), gandalf_host)
+        for sessions in (".zsh_sessions", ".bash_sessions"):
+            sdir = os.path.join(home, sessions)
+            if os.path.isdir(sdir):
+                for name in sorted(os.listdir(sdir)):
+                    if name.endswith(".history"):
+                        _collect_one(os.path.join(sdir, name), os.path.join(dest, "user", user, "sessions", name), gandalf_host)
+        for subdir, prefix in (("LaunchAgents", user + "+launchagents+"), ("Preferences", user + "+")):
+            pdir = os.path.join(home, "Library", subdir)
+            if os.path.isdir(pdir):
+                for plist in sorted(os.listdir(pdir)):
+                    if plist.endswith(".plist"):
+                        _collect_one(os.path.join(pdir, plist), os.path.join(dest, "plists", prefix + plist), gandalf_host)
+        _collect_one(
+            os.path.join(home, "Library", "Preferences", "com.apple.LaunchServices.QuarantineEventsV2"),
+            os.path.join(dest, "user", user, "QuarantineEventsV2"),
+            gandalf_host,
+        )
+        _collect_one(
+            os.path.join(home, "Library", "Application Support", "com.apple.TCC", "TCC.db"),
+            os.path.join(dest, "tcc", user + "+TCC.db"),
+            gandalf_host,
+        )
+    shared = "/Users/Shared"
+    for root, dirs, files in os.walk(shared):
+        if root[len(shared):].count(os.sep) >= 3:
+            dirs[:] = []
+        for name in files:
+            source = os.path.join(root, name)
+            try:
+                if os.path.getsize(source) > SHARED_MAX_BYTES:
+                    continue
+            except OSError:
+                continue
+            rel = os.path.relpath(source, shared).replace(os.sep, "+")
+            _collect_one(source, os.path.join(dest, "shared", rel), gandalf_host)
+    print(
+        "      \033[1;32mAcquired macOS shell history, persistence and staging artefacts from '{}'\033[1;m".format(
+            gandalf_host.split("/")[-1]
+        )
+    )
+
+
 def encrypt_archive(encryption_object, gandalf_host):
     with open("{}.zip".format(gandalf_host), "rb") as zipfile:
         zip_archive = zipfile.read()
@@ -916,6 +1010,8 @@ def acquire_artefacts(
             )
         else:
             pass
+    if platform.system() == "Darwin":
+        collect_macos_extras(gandalf_artefact_destination, gandalf_host)
     if access_times != "None":
         print()
         print(

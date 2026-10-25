@@ -3,7 +3,7 @@
 #############################################################################
 # Gandalf Bash - Remote Forensic Artifact Acquisition Tool
 #
-# A pure bash implementation for Linux/Unix forensic evidence collection
+# A pure bash implementation for Linux and macOS forensic evidence collection
 # Part of the Rivendell DF Acceleration Suite
 #
 # Usage: sudo ./gandalf.sh [ENCRYPTION] [MODE] [OPTIONS]
@@ -37,6 +37,8 @@ HOSTS_FILE=""
 REMOTE_USER=""
 REMOTE_HOST=""
 WORK_DIR="/tmp/gandalf"
+
+is_macos() { [ "$(uname -s)" = "Darwin" ]; }
 
 # Lowercase without bash 4's ${var,,} (macOS ships bash 3.2)
 lower() {
@@ -188,6 +190,7 @@ init_directories() {
     local acq_dir="${OUTPUT_DIR}/${hostname}"
 
     mkdir -p "${acq_dir}/artefacts"/{memory,logs,conf,cron,services,browsers,user,tmp}
+    is_macos && mkdir -p "${acq_dir}/artefacts"/{plists,logs_library,logs_security,shared}
 
     echo "$acq_dir"
 }
@@ -209,7 +212,9 @@ log_audit() {
     local log_file="$1"
     local hostname="$2"
     local artefact="$3"
-    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.%6NZ")
+    case "$timestamp" in *N*) timestamp=$(date -u +"%Y-%m-%dT%H:%M:%S.000000Z") ;; esac  # BSD date has no %N
 
     echo "${timestamp},${hostname},${artefact},collected" >> "$log_file"
 }
@@ -257,6 +262,11 @@ collect_volatile() {
     # Process list
     ps aux > "${acq_dir}/artefacts/process.info" 2>/dev/null || true
     log_audit "$audit_log" "$hostname" "process.info"
+
+    if is_macos; then
+        collect_volatile_macos "$acq_dir" "$hostname" "$audit_log"
+        return 0
+    fi
 
     # Network connections
     if command -v ss &> /dev/null; then
@@ -310,6 +320,11 @@ collect_artifacts() {
 
     echo -e "${BLUE}[*]${NC} Collecting filesystem artifacts..."
 
+    if is_macos; then
+        collect_macos_artifacts "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+        return 0
+    fi
+
     # Artefact mappings: source|destination under artefacts/ (a plain list, as
     # bash 3.2 has no associative arrays)
     local mapping source dest_name dest
@@ -355,6 +370,7 @@ collect_directory() {
     local audit_log="$4"
     local meta_log="$5"
     local max_depth="${6:-3}"
+    local max_size="${7:-}"  # find -size limit, e.g. 10M; empty = no limit
 
     if [ ! -d "$source_dir" ]; then
         return 1
@@ -364,13 +380,15 @@ collect_directory() {
 
     # Use find to collect files with depth limit
     while IFS= read -r -d '' file; do
+        # Never collect Gandalf's own working files (it runs from /tmp)
+        case "$file" in "$WORK_DIR"/*|/private"$WORK_DIR"/*|*/gandalf_collect.sh) continue ;; esac
         local rel_path="${file#$source_dir/}"
         local dest_file="${dest_dir}/$(echo "$rel_path" | tr '/' '+')"
 
         if collect_file "$file" "$dest_file" "$hostname" "$meta_log"; then
             log_audit "$audit_log" "$hostname" "$file"
         fi
-    done < <(find "$source_dir" -maxdepth "$max_depth" -type f -print0 2>/dev/null)
+    done < <(find "$source_dir" -maxdepth "$max_depth" -type f ${max_size:+-size -"$max_size"} -print0 2>/dev/null)
 }
 
 # Collect user artifacts
@@ -414,6 +432,8 @@ collect_browser_artifacts() {
     local chrome_paths=(
         "${user_home}/.config/google-chrome/Default"
         "${user_home}/.config/chromium/Default"
+        "${user_home}/Library/Application Support/Google/Chrome/Default"
+        "${user_home}/Library/Application Support/Chromium/Default"
     )
 
     for chrome_path in "${chrome_paths[@]}"; do
@@ -432,6 +452,7 @@ collect_browser_artifacts() {
 
     # Firefox
     local firefox_path="${user_home}/.mozilla/firefox"
+    [ -d "$firefox_path" ] || firefox_path="${user_home}/Library/Application Support/Firefox/Profiles"
     if [ -d "$firefox_path" ]; then
         for profile in "${firefox_path}"/*.default*; do
             if [ -d "$profile" ]; then
@@ -447,6 +468,175 @@ collect_browser_artifacts() {
             fi
         done
     fi
+}
+
+# Safari (macOS): History.db holds visits; Downloads/Bookmarks are plists
+collect_safari_artifacts() {
+    local user_home="$1"
+    local username="$2"
+    local acq_dir="$3"
+    local hostname="$4"
+    local audit_log="$5"
+    local meta_log="$6"
+
+    local safari_path="${user_home}/Library/Safari"
+    [ -d "$safari_path" ] || return 0
+    local safari_dest="${acq_dir}/artefacts/browsers/safari/${username}"
+    local file
+    for file in "History.db" "History.db-wal" "Downloads.plist" "Bookmarks.plist" "TopSites.plist"; do
+        if collect_file "${safari_path}/${file}" "${safari_dest}/${username}+${file}" "$hostname" "$meta_log"; then
+            log_audit "$audit_log" "$hostname" "${safari_path}/${file}"
+        fi
+    done
+}
+
+# Volatile data on macOS (BSD tools: no ss, lsmod or netstat -p)
+collect_volatile_macos() {
+    local acq_dir="$1"
+    local hostname="$2"
+    local audit_log="$3"
+    local out="${acq_dir}/artefacts"
+
+    netstat -anv > "${out}/netstat.info" 2>/dev/null && log_audit "$audit_log" "$hostname" "netstat.info" || true
+    lsof -nP -i > "${out}/lsof.info" 2>/dev/null && log_audit "$audit_log" "$hostname" "lsof.info" || true
+    kmutil showloaded > "${out}/kexts.info" 2>/dev/null || kextstat > "${out}/kexts.info" 2>/dev/null || true
+    launchctl list > "${out}/launchctl.info" 2>/dev/null || true
+    sw_vers > "${out}/sw_vers.info" 2>/dev/null || true
+    who -a > "${out}/who.info" 2>/dev/null || true
+    last > "${out}/last.info" 2>/dev/null || true
+    csrutil status > "${out}/csrutil.info" 2>/dev/null || true
+    env > "${out}/env.info" 2>/dev/null || true
+}
+
+# Copy each *.plist in a directory to plists/<prefix><name>, the names Elrond's
+# own macOS collection uses (launchagents+x.plist, system+launchdaemons-x.plist)
+collect_plists() {
+    local source_dir="$1"
+    local prefix="$2"
+    local acq_dir="$3"
+    local hostname="$4"
+    local audit_log="$5"
+    local meta_log="$6"
+
+    [ -d "$source_dir" ] || return 0
+    local plist
+    for plist in "$source_dir"/*.plist; do
+        [ -f "$plist" ] || continue
+        if collect_file "$plist" "${acq_dir}/artefacts/plists/${prefix}$(basename "$plist")" "$hostname" "$meta_log"; then
+            log_audit "$audit_log" "$hostname" "$plist"
+        fi
+    done
+}
+
+# macOS filesystem artefacts. Protected locations (TCC.db, Safari, Mail,
+# KnowledgeC) are only readable when sshd or the terminal has Full Disk Access;
+# anything unreadable is skipped and left out of log.meta.
+collect_macos_artifacts() {
+    local acq_dir="$1"
+    local hostname="$2"
+    local audit_log="$3"
+    local meta_log="$4"
+    local a="${acq_dir}/artefacts"
+
+    local source dest_name
+    while IFS='|' read -r source dest_name; do
+        [ -n "$source" ] || continue
+        if collect_file "$source" "${a}/${dest_name}" "$hostname" "$meta_log"; then
+            log_audit "$audit_log" "$hostname" "$source"
+        fi
+    done <<'MAP'
+/etc/passwd|etc+passwd
+/etc/group|etc+group
+/etc/hosts|etc+hosts
+/etc/shells|etc+shells
+/etc/sudoers|conf/etc+sudoers
+/etc/ssh/sshd_config|conf/etc+ssh+sshd_config
+/etc/crontab|cron/etc+crontab
+/System/Library/CoreServices/SystemVersion.plist|plists/systemversion+SystemVersion.plist
+/Library/Preferences/com.apple.loginwindow.plist|plists/preferences+com.apple.loginwindow.plist
+/Library/Preferences/com.apple.alf.plist|plists/preferences+com.apple.alf.plist
+/Library/Preferences/SystemConfiguration/com.apple.smb.server.plist|plists/preferences+com.apple.smb.server.plist
+/Library/Application Support/com.apple.TCC/TCC.db|tcc/system+TCC.db
+/private/var/db/CoreDuet/Knowledge/knowledgeC.db|coreduet/system+knowledgeC.db
+MAP
+
+    # Persistence: launchd jobs and login items, system-wide and Apple's own
+    collect_plists "/Library/LaunchAgents" "launchagents+" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_plists "/Library/LaunchDaemons" "launchdaemons+" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_plists "/Library/StartupItems" "startupitems+" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_plists "/System/Library/LaunchAgents" "system+launchagents-" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_plists "/System/Library/LaunchDaemons" "system+launchdaemons-" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+
+    # Logs: /var/log, /Library/Logs and the BSM audit config
+    collect_directory "/private/var/log" "${a}/logs" "$hostname" "$audit_log" "$meta_log" 2 || true
+    collect_directory "/Library/Logs" "${a}/logs_library" "$hostname" "$audit_log" "$meta_log" 2 50M || true
+    collect_directory "/etc/security" "${a}/logs_security" "$hostname" "$audit_log" "$meta_log" 1 || true
+
+    # cron/at: per-user crontabs are files named after the user
+    local tab
+    for tab in /private/var/at/tabs/* /usr/lib/cron/tabs/*; do
+        [ -f "$tab" ] || continue
+        collect_file "$tab" "${a}/cron/$(basename "$tab")+crontab" "$hostname" "$meta_log" && log_audit "$audit_log" "$hostname" "$tab"
+    done
+
+    # Staging locations: world-writable shared and temporary folders (hidden
+    # files included), capped per file so large caches don't swamp the archive
+    collect_directory "/Users/Shared" "${a}/shared" "$hostname" "$audit_log" "$meta_log" 3 10M || true
+    collect_directory "/private/tmp" "${a}/tmp" "$hostname" "$audit_log" "$meta_log" 2 10M || true
+
+    local user_home username
+    for user_home in /Users/* /var/root; do
+        [ -d "$user_home" ] || continue
+        username=$(basename "$user_home")
+        [ "$username" = "Shared" ] && continue
+        collect_macos_user_artifacts "$user_home" "$username" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    done
+}
+
+collect_macos_user_artifacts() {
+    local user_home="$1"
+    local username="$2"
+    local acq_dir="$3"
+    local hostname="$4"
+    local audit_log="$5"
+    local meta_log="$6"
+    local user_dir="${acq_dir}/artefacts/user/${username}"
+    local f
+
+    # Shell history and start-up files (zsh has been the default since 10.15)
+    for f in .zsh_history .bash_history .zshrc .zprofile .zshenv .bashrc .bash_profile .profile; do
+        if collect_file "${user_home}/${f}" "${user_dir}/${f}" "$hostname" "$meta_log"; then
+            log_audit "$audit_log" "$hostname" "${user_home}/${f}"
+        fi
+    done
+    for f in "${user_home}/.zsh_sessions"/*.history "${user_home}/.bash_sessions"/*.history; do
+        [ -f "$f" ] || continue
+        collect_file "$f" "${user_dir}/sessions/$(basename "$f")" "$hostname" "$meta_log" && log_audit "$audit_log" "$hostname" "$f"
+    done
+
+    if [ -d "${user_home}/.ssh" ]; then
+        collect_directory "${user_home}/.ssh" "${user_dir}/ssh" "$hostname" "$audit_log" "$meta_log" 1 || true
+    fi
+
+    # Per-user persistence and preferences
+    collect_plists "${user_home}/Library/LaunchAgents" "${username}+launchagents+" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_plists "${user_home}/Library/Preferences" "${username}+" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+
+    # Quarantine events (downloads and where they came from), TCC grants
+    if collect_file "${user_home}/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2" \
+        "${user_dir}/QuarantineEventsV2" "$hostname" "$meta_log"; then
+        log_audit "$audit_log" "$hostname" "${user_home}/Library/Preferences/com.apple.LaunchServices.QuarantineEventsV2"
+    fi
+    if collect_file "${user_home}/Library/Application Support/com.apple.TCC/TCC.db" \
+        "${acq_dir}/artefacts/tcc/${username}+TCC.db" "$hostname" "$meta_log"; then
+        log_audit "$audit_log" "$hostname" "${user_home}/Library/Application Support/com.apple.TCC/TCC.db"
+    fi
+
+    # Trash: names and contents of deleted files, capped per file
+    [ -d "${user_home}/.Trash" ] && collect_directory "${user_home}/.Trash" "${user_dir}/trash" "$hostname" "$audit_log" "$meta_log" 2 10M || true
+
+    collect_safari_artifacts "$user_home" "$username" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_browser_artifacts "$user_home" "$username" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
 }
 
 # Create archive
@@ -575,7 +765,7 @@ acquire_remote() {
         }
 
         # Execute remotely
-        if ! ssh "${REMOTE_USER}@${host}" "sudo bash ${remote_script} ${ENCRYPTION_METHOD} Local -o /tmp/gandalf/acquisitions ${MEMORY_DUMP:+-m}"; then
+        if ! ssh "${REMOTE_USER}@${host}" "sudo bash ${remote_script} ${ENCRYPTION_METHOD} Local -o /tmp/gandalf/acquisitions $([ "$MEMORY_DUMP" = true ] && echo -m)"; then
             echo -e "${RED}[ERROR]${NC} Remote execution failed on $host"
             ssh "${REMOTE_USER}@${host}" "sudo rm -rf /tmp/gandalf ${remote_script}" || true
             continue

@@ -20,7 +20,6 @@ Bugs found during the October 2026 E2E matrix and the test-lab build, with their
 
 ## Elrond (analysis)
 
-| ID | Bug | Status |
 |---|---|---|
 | E1 | `extract_with_artemis()` re-runs MITRE ATT&CK enrichment over every JSON in the copy's `cooked` folder after each Artemis call: quadratic in event logs, gigabytes re-read per shadow copy. | Fixed: cooked_dir is snapshotted before each Artemis run and only new or changed JSON is enriched. Debug prints removed. Tested: three event logs enrich three files, not six. |
 | E2 | `enrich_with_mitre()` appends to `mitre_techniques.txt` without de-duplicating (77,585 lines, 25 unique in `win_full`). | Fixed: techniques are recorded once per case (seeded from the file on first use). Tested. |
@@ -43,6 +42,8 @@ Bugs found during the October 2026 E2E matrix and the test-lab build, with their
 | E22 | `assess_gandalf` rebinds `allimgs` locally after memory identification, so memory images in Gandalf acquisitions never reach the caller. | Fixed: updated in place |
 | E23 | Gandalf's memory dumps (`<host>.mem`, `mem.raw`/`mem.aff4`) aren't picked up: the Gandalf memory pass only looks for `*.raw` under a path containing `memory`. | Open |
 | E24 | Elrond can't read `gandalf.py`'s Fernet-encrypted `.zip.enc`, and doesn't say so. | Open: decrypt step or a clear message |
+| E26 | Browser history in Gandalf acquisitions was never processed: Gandalf writes `browsers/<browser>/[<user>/]<user>+History`, but processing matches `.../chrome/History`, `safari/...History.db` and `firefox/...places.sqlite` under `raw/browsers/<user>/`. | Fixed: the Gandalf ingest maps them to `raw/browsers/<user>/<browser>/<file>`, Elrond's own layout. Unit-tested |
+| E27 | zsh history (macOS's default shell since 10.15) was collected nowhere and processed nowhere. | Fixed: `+zsh_history` is selected and parsed (EXTENDED_HISTORY timestamps, continued lines) into `cooked/<user>+zsh_history.csv` with LastWriteTime and Command, tagged like bash history. Unit-tested |
 | E12 | `linux_timeline`: Plaso writes a header-only CSV in 13 s; job COMPLETED. | Open: needs investigation |
 | E13 | `linux_archive`: archiving "completes" without producing a zip. | Open: needs investigation |
 | E14 | Linux memory: Volatility plugins find nothing; `linux_memory` tests pass only the disk image. | Open: needs investigation |
@@ -50,7 +51,6 @@ Bugs found during the October 2026 E2E matrix and the test-lab build, with their
 
 ## Gandalf (acquisition)
 
-| ID | Bug | Status |
 |---|---|---|
 | G1 | `gandalf.py` copies `shire/collect_artefacts-py`, which lives in `python/`; every run fails with FileNotFoundError. All paths were relative to the working directory. | Fixed: every path is resolved from the script's own directory. Verified in the lab. |
 | G2 | `gandalf.py -O DIR` uses `output_dir[0]`, the first character of the path. | Fixed: `-O DIR` uses the full path. |
@@ -62,9 +62,26 @@ Bugs found during the October 2026 E2E matrix and the test-lab build, with their
 | G8 | `gandalf.sh` banner prints a literal `${VERSION}` (quoted heredoc). | Fixed. |
 | G9 | `Invoke-Gandalf.ps1` checks `$NoPrompt`, which isn't a declared parameter, so prompts can't be suppressed. | Fixed: `-NoPrompt` is declared and also answers the disk-tools question. |
 | G10 | `Invoke-Gandalf.ps1` expects `tools/disk_tools.zip`, which isn't in the repo. | Open |
-| G11 | `gandalf.sh` collects Linux paths only; on macOS it would gather almost nothing (no LaunchAgents, unified logs, zsh history). | Open: feature work |
+| G11 | `gandalf.sh` collects Linux paths only; on macOS it would gather almost nothing (no LaunchAgents, unified logs, zsh history). `gandalf.py` had a macOS table but missed zsh history, per-user LaunchAgents and preferences. | Fixed: `gandalf.sh` has a macOS branch (BSD volatile commands, launchd plists system-wide and per user, `/var/log`, `/Library/Logs`, `/etc/security`, at/cron tabs, zsh/bash history and sessions, quarantine events, TCC and KnowledgeC where Full Disk Access allows, Safari/Chrome/Firefox, Trash, `/Users/Shared` and `/private/tmp` capped at 10 MB a file); `gandalf.py` gains the same gaps. Unified logs aren't collected (see G17). |
 | G13 | `Invoke-Gandalf.ps1` must be installed at `C:\TEMP\gandalf\gandalf\`; tool and `disk_tools.zip` paths are hard-coded there. | Open (the lab installs it there) |
 | G14 | `gandalf.sh` and `gandalf.py` write `host.info` as `uname -a` / Python's `uname_result(...)`, but Elrond reads its first line as `<host>::<platform>` (what `Invoke-Gandalf` writes), so Bash and Python acquisitions crash on identification. | Fixed: both now write `<host>::<Linux\|macOS>` first, with the uname line after; Elrond also parses the old formats, so existing archives load. Tested. |
 | G15 | `gandalf.sh` Remote mode with Key encryption generates the key on the target, never retrieves it, then deletes it with `/tmp/gandalf`: the archive can't be decrypted. It also left `/tmp/gandalf_collect.sh` on every target, and everything on a failed run. | Fixed: the key comes back as `<host>.shadowfax.key` next to the archive, and the target is cleaned up whether the run succeeds or fails. Verified in the lab: archive decrypts with the retrieved key, target `/tmp` clean. |
 | G16 | `gandalf.sh` Remote mode with Password encryption runs `openssl` over a non-interactive `ssh`, so there's no terminal for the password prompt. | Open: prompt on the collector side and pass it over stdin, or encrypt after retrieval |
+| G17 | `gandalf.py`'s "Enhanced Artifacts" entries for single files (TCC.db, knowledgeC.db) go down the directory branch, where `os.walk` on a file yields nothing, so they were never collected; the directory ones (unified logs, `.fseventsd`, Spotlight, Time Machine, Docker overlay) have no handler and are skipped too. | Partly fixed: the macOS single files are collected. Open: the directory entries, which need size limits before they're turned on (unified logs and Spotlight run to gigabytes) |
+| G18 | `gandalf.sh` Remote mode always passed `-m` (memory) to the target: `${MEMORY_DUMP:+-m}` expands for `false` too. | Fixed |
+| G19 | `gandalf.sh`'s audit timestamps used `%6N`, which BSD `date` doesn't know: on macOS every log.audit row read `...6NZ`. | Fixed: falls back to `.000000Z` |
 | G12 | `gandalf.py` writes the encryption object into the generated script as `str(obj)`, which can't work for Key or Password encryption. | Open: needs investigation |
+
+## Test lab
+
+| ID | Problem | Status |
+|---|---|---|
+| L1 | `lab/lib/` (`common.sh`, `ssh.exp`, `forward.py`) matched the Python `lib/` rule in `.gitignore`, so it was never committed and the pushed lab couldn't start. | Fixed: re-included and committed |
+| L2 | `load_config` returned non-zero through `eval` for every unset setting, which killed `tart-vm.sh` (`set -e`) before it did anything; `lab.sh` doesn't use `set -e`, so it hid there. | Fixed |
+| L3 | Teardown ran the VM deletes with `LAB_YES=1`, which answers their "Delete?" prompts with the default, no: VMs were never removed. | Fixed: `LAB_FORCE=1` |
+| L4 | Windows on Apple silicon was a manual UTM walkthrough. | Fixed: `lab/windows/utm-vm.sh` installs Windows 11 ARM unattended (autounattend on a config ISO, virtio drivers, OpenSSH) and collects over SSH; only the ISO download is manual |
+| L5 | Windows VMs in UTM with an NVMe system disk stop without warning: QEMU segfaults in its NVMe TRIM handler (`nvme_dsm_cb` → `blk_aio_pdiscard`) when Windows trims. Four crash reports on 2026-10-25. | Fixed for lab-built VMs: VirtIO system disk, driver loaded during Setup from the virtio-win ISO. An adopted VM with an NVMe disk can still hit it |
+| L6 | UTM's AppleScript rejects any configuration record that carries a port forward (`make` and `update configuration`), and `export` drops removable media, which UTM keeps in its own registry rather than `config.plist`. | Worked round: the forward is written to `config.plist` and reloaded; the install ISOs are hard-linked into the bundle as fixed CD images and detached after install |
+| L7 | `utm-vm.sh delete` acted on whichever VM `WINDOWS_UTM_VM` named, including one brought in with `adopt`; UTM's delete removes the bundle for good. It deleted an adopted VM on 2026-10-25. | Fixed: `delete` (and teardown) only touch VMs named `rivendell-lab-*`; for an adopted VM they say to remove it in UTM |
+| L8 | Vagrant-built Windows boxes have WinRM, not OpenSSH, and `Add-WindowsCapability OpenSSH.Server` stalls past 30 minutes in a WinRM session. | Fixed: `adopt` finds the VM on UTM's shared network, installs Win32-OpenSSH from GitHub over WinRM (pywinrm in a lab-only virtualenv), then carries on over SSH |
+| L9 | The lab's VM directory is a USB spinning disk (WD My Passport) on the test host: VM first boots take many minutes, and Tart's 3-minute wait for an IP gave up on the macOS VM. | Mitigated: 10-minute IP wait. An SSD for `LAB_VM_DIR` is the real fix |

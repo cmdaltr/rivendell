@@ -45,7 +45,7 @@ Gandalf collects artefacts from a live host into a zip archive, optionally encry
 | Variant | Path | Runs on |
 |---|---|---|
 | Python | `src/acquisition/python/gandalf.py` | Linux, macOS |
-| Bash | `src/acquisition/bash/gandalf.sh` | Linux, Unix |
+| Bash | `src/acquisition/bash/gandalf.sh` | Linux, macOS (stock bash 3.2 is enough) |
 | PowerShell | `src/acquisition/windows/Invoke-Gandalf.ps1` | Windows |
 
 ---
@@ -130,7 +130,21 @@ sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 
 Gandalf encrypts with Fernet (AES-128-CBC with HMAC-SHA256); `gandalf.sh` uses OpenSSL AES-256-CBC, and in Key mode the key comes back as `<host>.shadowfax.key` beside the archive. Decrypt before analysis: Elrond reads unencrypted archives only, and prints the `openssl` command for a `.tar.gz.enc`.
 
-Pass the directory holding the archives to Elrond with `--Gandalf`. It must end in `acquisitions/` (subfolders per host are fine). Elrond extracts each archive, maps Gandalf's layout onto its own (`etc+passwd` → `raw/passwd`, `user/<name>/.bash_history` → `raw/user_profiles/<name>+bash_history`, and so on), then runs processing, keyword search and analysis exactly as for a disk image. An archive with a member that points outside it is refused as possible tampering.
+On macOS, both the Bash and Python collectors gather:
+
+| Area | Artefacts |
+|---|---|
+| Persistence | LaunchAgents, LaunchDaemons and StartupItems (system, Apple's own and per user), per-user preferences, cron/at tabs |
+| Execution | zsh and bash history, including `~/.zsh_sessions`; shell start-up files |
+| Logs | `/var/log`, `/Library/Logs`, `/etc/security` |
+| Downloads and privacy | Quarantine events (`QuarantineEventsV2`), TCC databases, KnowledgeC |
+| Browsers | Safari (`History.db`, downloads, bookmarks), Chrome, Firefox |
+| Staging | `/Users/Shared`, `/private/tmp` and each user's Trash, files up to 10 MB |
+| Volatile | Processes, `netstat`, `lsof`, loaded kexts, `launchctl list`, logins |
+
+TCC.db, KnowledgeC, Safari and Mail are protected by macOS: they're only readable when the process collecting them has Full Disk Access (for Remote mode, enable "Allow full disk access for remote users" under System Settings → General → Sharing → Remote Login). Anything unreadable is skipped and left out of `log.meta`. Unified logs aren't collected yet.
+
+Pass the directory holding the archives to Elrond with `--Gandalf`. It must end in `acquisitions/` (subfolders per host are fine). Elrond extracts each archive, maps Gandalf's layout onto its own (`etc+passwd` → `raw/passwd`, `user/<name>/.zsh_history` → `raw/user_profiles/<name>+zsh_history`, `browsers/<browser>/<name>+History` → `raw/browsers/<name>/<browser>/History`, and so on), then runs processing, keyword search and analysis exactly as for a disk image. An archive with a member that points outside it is refused as possible tampering.
 
 ---
 
