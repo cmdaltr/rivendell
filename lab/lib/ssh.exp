@@ -1,0 +1,19 @@
+#!/usr/bin/expect -f
+# Password SSH/SCP from the Mac without sshpass (expect ships with macOS).
+#   ssh.exp ssh  <user> <host> <port> <command>
+#   ssh.exp scp  <user> <host> <port> <local-file> <remote-path>
+# The password is read from $LAB_SSH_PASSWORD.
+set timeout 900
+set mode [lindex $argv 0]; set user [lindex $argv 1]; set host [lindex $argv 2]; set port [lindex $argv 3]
+set opts {-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR}
+if {$mode eq "ssh"} {
+  eval spawn ssh $opts -p $port $user@$host [list [lindex $argv 4]]
+} else {
+  eval spawn scp $opts -P $port [list [lindex $argv 4]] $user@$host:[lindex $argv 5]
+}
+expect {
+  -re {[Pp]assword:} { send "$env(LAB_SSH_PASSWORD)\r"; exp_continue }
+  eof
+}
+catch wait result
+exit [lindex $result 3]
