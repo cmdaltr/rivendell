@@ -237,7 +237,7 @@ function Set-Defaults {
 function Set-ArtefactParams {
     Param ($EncryptionObject, $OutputDirectory, $ShowProgress, $Memory, $CollectFiles, $Hostnames, $ArchiveObject, $GandalfRoot)
 
-    $InvokeArtefactAcquisition = [IO.Path]::Combine($GandalfRoot, "gandalf", "tools", "Invoke-ArtefactAcquisition.ps1"); $SetArtefactCollection = [IO.Path]::Combine($GandalfRoot, "gandalf", "shire", "Set-ArtefactCollection")
+    $InvokeArtefactAcquisition = [IO.Path]::Combine($GandalfRoot, "gandalf", "tools", "Invoke-ArtefactAcquisition.ps1"); $SetArtefactCollection = Join-Path $PSScriptRoot "Set-ArtefactCollection"
     $ArtefactParams = "Param(`$EncryptionObject = '$EncryptionObject', `$OutputDirectory = '$OutputDirectory', `$ShowProgress = '$ShowProgress', `$Memory = '$Memory', `$CollectFiles = '$CollectFiles', `$Hostnames = '$Hostnames', `$ArchiveObject = '$ArchiveObject')"
     $ArtefactCollection = Get-Content -Path $SetArtefactCollection
 

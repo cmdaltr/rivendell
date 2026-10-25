@@ -338,7 +338,7 @@ collect() {
   LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" pull gandalf 127.0.0.1 "$PORT" \
     "C:/lab/acquisitions/powershell_collection/acquisitions/$host" "$tmp/" >/dev/null \
     || die "Couldn't copy the acquisition out of $VM"
-  ls "$tmp/$host"/*.zip "$tmp/$host"/*.7z >/dev/null 2>&1 || die "Invoke-Gandalf produced no archive (see $tmp/$host)"
+  [ -n "$(find "$tmp/$host" -maxdepth 1 \( -name '*.zip' -o -name '*.7z' \) -print -quit)" ] || die "Invoke-Gandalf produced no archive (see $tmp/$host)"
   mkdir -p "$dest"
   rm -rf "${dest:?}/$host"
   mv "$tmp/$host" "$dest/"

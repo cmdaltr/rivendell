@@ -53,7 +53,11 @@ try {
     if ($Memory) { $gandalfArgs.Memory = $true }
     # Newer Invoke-Gandalf declares -NoPrompt; the Read-Host shim covers older copies.
     if ((Get-Command $entry).Parameters.ContainsKey("NoPrompt")) { $gandalfArgs.NoPrompt = $true }
+    # Gandalf expects PowerShell's default "Continue": under "Stop" one artefact's
+    # error ends the whole acquisition
+    $ErrorActionPreference = "Continue"
     & $entry @gandalfArgs
+    $ErrorActionPreference = "Stop"
 } finally {
     Pop-Location
 }

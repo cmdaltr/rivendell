@@ -224,10 +224,12 @@ function Get-Artefacts {
         Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
         
         $global:ProgressPreference = "SilentlyContinue"
-        Expand-Archive -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip" -DestinationPath "C:\TEMP\gandalf\gandalf\tools"
-
+        # Without disk_tools.zip the raw copies below fail in their own try blocks
+        if (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip") {
+            Expand-Archive -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip" -DestinationPath "C:\TEMP\gandalf\gandalf\tools"
+            Rename-Item -Path "C:\TEMP\gandalf\gandalf\tools\sleuthkit-4.12.1-win32" -NewName "C:\TEMP\gandalf\gandalf\tools\tsk"
+        }
         $global:ProgressPreference = "Continue"
-        Rename-Item -Path "C:\TEMP\gandalf\gandalf\tools\sleuthkit-4.12.1-win32" -NewName "C:\TEMP\gandalf\gandalf\tools\tsk"
 
         # Acquiring MFT
         try { 
