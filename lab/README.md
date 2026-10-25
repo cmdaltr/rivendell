@@ -61,7 +61,7 @@ The agent is a small Python service (standard library only) on loopback port 569
 
 The four **Linux containers** (Ubuntu 24.04, Debian 12, Rocky 9, Alpine) listen for SSH on `127.0.0.1:2221–2224`. They are quick to rebuild (`linux-targets reset`), but there's no real kernel, so memory acquisition can't be tested against them.
 
-The **Linux VM** (`linux-vm create`) is Ubuntu with a real kernel (`bento/ubuntu-24.04` under Vagrant, Cirrus Labs `ubuntu:latest` under Tart), on SSH port 2230. The **macOS VM** (`macos-vm create`, Apple silicon only) is a Cirrus Labs Sequoia image on port 2231. It needs one manual step on first boot, which the script prints.
+The **Linux VM** (`linux-vm create`) is Ubuntu with a real kernel (`bento/ubuntu-24.04` under Vagrant, Cirrus Labs `ubuntu:latest` under Tart), on SSH port 2230. The **macOS VM** (`macos-vm create`, Apple silicon only) is a Cirrus Labs Sequoia image on port 2231, provisioned without prompts: a `gandalf` user, a LaunchAgent, zsh history with a download, and a hidden staging folder in `/Users/Shared`. Both collectors work against it. `gandalf.sh` runs with sudo and also gets the root-only TCC and KnowledgeC databases; `gandalf.py` collects as the SSH user, so it skips what that user can't read. On the reference run (USB HDD), first boot took about an hour, then provisioning took 2.5 minutes, the bash and Python collections about 3 and 2 minutes, and Elrond 1.5–4 minutes.
 
 The **Windows VM** (`windows-vm create`) is Windows 11, provisioned with a Run key, a scheduled task, a service, failed logons and PSReadLine history.
 
