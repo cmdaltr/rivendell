@@ -78,6 +78,9 @@
       <RunSynchronous>
         <!-- No Microsoft account or network needed during OOBE -->
         <RunSynchronousCommand wcm:action="add"><Order>1</Order><Path>reg.exe add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OOBE" /v BypassNRO /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
+        <!-- A lab target doesn't need Windows Update, and on a slow disk a first-boot
+             update run (Insider builds especially) adds hours to the build -->
+        <RunSynchronousCommand wcm:action="add"><Order>2</Order><Path>reg.exe add "HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" /v NoAutoUpdate /t REG_DWORD /d 1 /f</Path></RunSynchronousCommand>
       </RunSynchronous>
     </component>
   </settings>
@@ -108,7 +111,7 @@
       </UserAccounts>
       <AutoLogon>
         <Enabled>true</Enabled>
-        <LogonCount>1</LogonCount>
+        <LogonCount>3</LogonCount><!-- a reboot before first logon (an update, say) mustn't use up the only one -->
         <Username>gandalf</Username>
         <Password><Value>@@PASSWORD@@</Value><PlainText>true</PlainText></Password>
       </AutoLogon>

@@ -79,8 +79,13 @@ if (-not (Get-Service -Name LabHelper -ErrorAction SilentlyContinue)) {
 }
 
 # T1110.001: failed logons (4625) from bad credentials against the local machine.
-1..10 | ForEach-Object { net use \\127.0.0.1\IPC$ /user:labattacker "wrong$_" 2>$null | Out-Null }
-net use \\127.0.0.1\IPC$ /delete /y 2>$null | Out-Null
+# Windows PowerShell 5.1 turns a native command's stderr into a terminating error
+# under "Stop", even redirected, and these are meant to fail.
+& {
+    $ErrorActionPreference = "Continue"
+    1..10 | ForEach-Object { net use \\127.0.0.1\IPC$ /user:labattacker "wrong$_" 2>$null | Out-Null }
+    net use \\127.0.0.1\IPC$ /delete /y 2>$null | Out-Null
+}
 
 # PSReadLine history for the lab user (ConsoleHost_history.txt).
 $hist = "C:\Users\$LabUser\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine"

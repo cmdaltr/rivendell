@@ -25,6 +25,10 @@ if ($Source) {
     Write-Warning "virtio-win ISO not attached: no network driver"
 }
 
+# Defender (AMSI) blocks Provision-GandalfTarget.ps1 outright, because it seeds
+# inert IEX and mimikatz strings, and would quarantine the seeded artefacts too
+Add-MpPreference -ExclusionPath C:\lab, C:\ProgramData\RivendellLab, C:\TEMP, C:\Users\Public\Documents
+
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue C:\lab\scripts, C:\lab\gandalf-src
 Copy-Item -Recurse -Force "$cfg\lab-scripts" C:\lab\scripts
 Copy-Item -Recurse -Force "$cfg\gandalf-src" C:\lab\gandalf-src

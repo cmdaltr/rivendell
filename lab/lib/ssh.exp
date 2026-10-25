@@ -16,6 +16,14 @@ if {$mode eq "ssh"} {
 }
 expect {
   -re {[Pp]assword:} { send "$env(LAB_SSH_PASSWORD)\r"; exp_continue }
+  timeout {
+    # Without this, a stalled ssh (e.g. sshd still starting) leaves wait below
+    # blocking forever and the timeout never takes effect
+    catch {exec kill [exp_pid]}
+    catch {close}
+    catch {wait}
+    exit 124
+  }
   eof
 }
 catch wait result

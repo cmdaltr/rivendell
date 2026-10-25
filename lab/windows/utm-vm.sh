@@ -140,12 +140,21 @@ register_vm() {
 # adding one if it has none. UTM only changes configuration while stopped.
 # Write the forward into config.plist: UTM's AppleScript rejects any
 # configuration record that carries a port forward (on make and on update).
+# Also make sure the VM has a display: one made through AppleScript gets none,
+# and Windows then runs headless with nothing for UTM (or anyone) to show.
+# WINDOWS_VM_VNC=1 adds a VNC server on 127.0.0.1:5959 (no password; loopback
+# only) for watching an unattended install.
 write_port_forward() {
-  python3 - "$BUNDLE/config.plist" "$PORT" <<'PY'
+  python3 - "$BUNDLE/config.plist" "$PORT" "${WINDOWS_VM_VNC:-0}" <<'PY'
 import plistlib, sys
-path, port = sys.argv[1], int(sys.argv[2])
+path, port, vnc = sys.argv[1], int(sys.argv[2]), sys.argv[3] == "1"
 with open(path, "rb") as f:
     cfg = plistlib.load(f)
+if not cfg.get("Display"):
+    cfg["Display"] = [{"Hardware": "virtio-ramfb", "DynamicResolution": True, "NativeResolution": False,
+                       "UpscalingFilter": "Nearest", "DownscalingFilter": "Linear"}]
+args = [a for a in cfg["QEMU"].get("AdditionalArguments", []) if a not in ("-vnc", "127.0.0.1:59")]
+cfg["QEMU"]["AdditionalArguments"] = args + (["-vnc", "127.0.0.1:59"] if vnc else [])
 fwd = {"Protocol": "TCP", "HostAddress": "127.0.0.1", "HostPort": port, "GuestAddress": "", "GuestPort": 22}
 nics = cfg.setdefault("Network", [])
 emulated = [n for n in nics if n.get("Mode") == "Emulated"]
