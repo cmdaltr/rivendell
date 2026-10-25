@@ -457,6 +457,7 @@ def main():
         else:
             pass
         ssh = paramiko.client.SSHClient()
+        hostlist = []  # the collecting machine itself isn't a remote target
         with open(os.path.join(LISTS_DIR, "hosts.list")) as host_list:
             for each_host in host_list:
                 if not each_host.startswith("#"):

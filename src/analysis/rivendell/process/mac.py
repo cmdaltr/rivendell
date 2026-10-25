@@ -2,71 +2,38 @@
 import json
 import os
 import plistlib
-import re
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
-from rivendell.process.extractions.plist import (
-    format_plist_extractions,
-)
 from rivendell.process.extractions.mitre_tagger import tag_mitre_technique
 
 
-def repair_malformed_plist(plist_out):
-    plist_out = re.sub(r"'(: \d+, )'", r'"\1"', plist_out)
-    plist_out = re.sub(r"'(: )((?:True|False))(, )'", r'"\1"\2"\3"', plist_out)
-    plist_out = plist_out.replace('[\\"', '["').replace('\\"]', '"]')
-    plist_out = plist_out.replace('": "[{"', '": [{"').replace('"}]", "', '"}], "')
-    plist_out = plist_out.replace('": "[\'', '": ["').replace('\']", "', '"], "')
-    plist_out = re.sub(r"'(: \d+\}\])\"(, \")", r'"\1\2', plist_out)
-    plist_out = (
-        plist_out.replace(']"}]', '"]}]')
-        .replace('""]}]', '"]}]')
-        .replace('": "[\'', '": ["')
-        .replace('\']", "', '"], "')
-        .replace('": [">', '": ["')
-        .replace('": "}, \'', '": {{}}, "')
-        .replace("': [", '": [')
-        .replace("]'}]\"}}]", "]}]}}]")
-        .replace("': ['", '": ["')
-        .replace('\']", "', '"], "')
-        .replace("'}, '", '"}, "')
-        .replace("': {'", '": {"')
-        .replace("'}, {'", '"}, {"')
-        .replace('": "[\'', '": ["')
-        .replace("'}}, {'", "'}}, {'")
-        .replace('": "[', '": ["')
-        .replace('": [""', '": ["')
-        .replace('\']"}], "', '"]}], "')
-        .replace("']\"}}", '"]}}')
-        .replace('": ["]", "', '": [], "')
-        .replace('": ["]"}', '": []}')
-    )
-    plist_out = re.sub(r"': (-?\d+)\}, '", r'": "\1"}, "', plist_out)
-    plist_out = re.sub(r"(\": \[\{\"[^']+)'(: )(b')", r'\1"\2"\3', plist_out)
-    plist_out = re.sub(r'\'(: \d+\}\])"(\})', r'"\1\2', plist_out)
-    plist_out = plist_out.replace('": [", "', '": ["')
-    plist_out = re.sub(r'(\w+)(\])"([\}\]]{1,2})', r'\1"\2\3', plist_out)
-    plist_out = plist_out.replace('\']"}, "', '"]}, "')
-    plist_out = re.sub(r"(\w+)'(], \")", r'\1"\2', plist_out)
-    plist_out = re.sub(r"(\w+)(: )(\[')", r'\1"\2"\3', plist_out)
-    plist_out = plist_out.replace('[\\"', '["').replace('\\"]', '"]')
-    plist_out = re.sub(r"(\w+)(\])(, \"\w+)", r"\1'\2\"\3", plist_out)
-    plist_out = plist_out.re.sub(r'(\w+)\'\}\]"\}, \{"', r'\1"}]}, {"', plist_out)
-    plist_out = re.sub(
-        r'(": "[^"]+", "[^\']+)\'(: )([^,]+)(, )\'([^"]+": ")',
-        r'\1"\2"\3"\4"\5',
-        plist_out,
-    )
-    plist_out = re.sub(r'(\w+)\'(\}\])"(\})', r'\1"\2\3', plist_out)
-    plist_out = re.sub(
-        r"(\d+\])'(\}\])\"(\})",
-        r"\1\2\3",
-    )
-    plist_out = re.sub(r'(w+)\'(\])"(\})', r'\1"\2\3', plist_out)
-    plist_out = plist_out.replace("', {'", '", {"')
-    plist_out = re.sub(r"'(: \d+}, {)'", r'"\1"', plist_out)
-    return plist_out
+def _plist_value(value):
+    """Plist values as JSON: scalars as strings (as Elrond has always shown
+    them), containers kept as containers."""
+    if isinstance(value, dict):
+        return {str(k): _plist_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plist_value(v) for v in value]
+    if isinstance(value, bytes):
+        return value.hex()
+    return str(value)
+
+
+def plist_record(plistdata):
+    """One cooked plist record, plus the launchd fields analysis looks for:
+    Process (Program), CommandLine (ProgramArguments) and Plist (Label)."""
+    if not isinstance(plistdata, dict):
+        return {"Values": _plist_value(plistdata)}
+    record = {str(k): _plist_value(v) for k, v in plistdata.items()}
+    if isinstance(plistdata.get("Program"), str):
+        record["Process"] = plistdata["Program"].lower()
+    arguments = plistdata.get("ProgramArguments")
+    if isinstance(arguments, (list, tuple)):
+        record["CommandLine"] = " ".join(str(a) for a in arguments).lower()
+    if isinstance(plistdata.get("Label"), str):
+        record["Plist"] = plistdata["Label"].lower()
+    return record
 
 
 def process_plist(
@@ -116,151 +83,8 @@ def process_plist(
                     vssimage,
                 )
                 write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                pliststr = format_plist_extractions(plistdata)
-                if (
-                    '"Program"' in pliststr
-                    and '"ProgramArguments"' in pliststr
-                    and '"Label"' in pliststr
-                ):
-                    insert = ', "Process{}, "CommandLine{}, "Plist{}'.format(
-                        str(
-                            str(
-                                re.findall(
-                                    r"Program(\"\: \"[^\"]+\")",
-                                    pliststr,
-                                )[0]
-                            ).lower()
-                        ),
-                        str(
-                            str(
-                                str(
-                                    re.findall(
-                                        r"ProgramArguments(\"\: \"\[[^\]]+\])",
-                                        pliststr,
-                                    )[0]
-                                ).lower()
-                            )
-                        )
-                        .replace('"', "")
-                        .replace(",", ""),
-                        str(
-                            str(
-                                re.findall(r"Label(\"\: \"[^\"]+\")", pliststr)[0]
-                            ).lower()
-                        ),
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                elif '"Program"' in pliststr and '"ProgramArguments"' in pliststr:
-                    insert = ', "Process{}", "CommandLine{}'.format(
-                        str(
-                            str(
-                                re.findall(
-                                    r"Program(\"\: \"[^\"]+\")",
-                                    pliststr,
-                                )[0]
-                            ).lower()
-                        ),
-                        str(
-                            str(
-                                str(
-                                    re.findall(
-                                        r"ProgramArguments(\"\: \"\[[^\]]+\])",
-                                        pliststr,
-                                    )[0]
-                                ).lower()
-                            )
-                        )
-                        .replace('"', "")
-                        .replace(",", ""),
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                elif '"Program"' in pliststr and '"Label"' in pliststr:
-                    insert = ', "Process{}", "Plist{}'.format(
-                        str(
-                            str(
-                                re.findall(
-                                    r"Program(\"\: \"[^\"]+\")",
-                                    pliststr,
-                                )[0]
-                            ).lower()
-                        ),
-                        str(
-                            str(
-                                re.findall(r"Label(\"\: \"[^\"]+\")", pliststr)[0]
-                            ).lower()
-                        ),
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                elif '"ProgramArguments"' in pliststr and '"Label"' in pliststr:
-                    insert = ', "CommandLine{}, "Plist{}'.format(
-                        str(
-                            str(
-                                str(
-                                    re.findall(
-                                        r"ProgramArguments(\"\: \"\[[^\]]+\])",
-                                        pliststr,
-                                    )[0]
-                                ).lower()
-                            )
-                        )
-                        .replace('"', "")
-                        .replace(",", ""),
-                        str(
-                            str(
-                                re.findall(r"Label(\"\: \"[^\"]+\")", pliststr)[0]
-                            ).lower()
-                        ),
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                elif '"Program"' in pliststr:
-                    insert = ', "Process{}"'.format(
-                        str(
-                            str(
-                                re.findall(
-                                    r"Program(\"\: \"[^\"]+\")",
-                                    pliststr,
-                                )[0]
-                            ).lower()
-                        )
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                elif '"ProgramArguments"' in pliststr:
-                    insert = ', "Command{}'.format(
-                        str(
-                            str(
-                                str(
-                                    re.findall(
-                                        r"ProgramArguments(\"\: \"\[[^\]]+\])",
-                                        pliststr,
-                                    )[0]
-                                ).lower()
-                            )
-                        )
-                        .replace('"', "")
-                        .replace(",", "")
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                elif '"Label"' in pliststr:
-                    insert = ', "Plist{}'.format(
-                        str(
-                            str(
-                                re.findall(r"Label(\"\: \"[^\"]+\")", pliststr)[0]
-                            ).lower()
-                        )
-                    )
-                    plistout = str(pliststr[0:-1] + insert + "}")
-                else:
-                    plistout = pliststr
-                plist_out = (
-                    plistout.replace("', '", '", "')
-                    .replace("': '", '": "')
-                    .replace('": "[{\'', '": "[{"')
-                    .replace('\'}]", "', '"}]", "')
-                )
-                plist_out = repair_malformed_plist(plist_out)
-                plistjson.write("[{}]".format(plist_out))
+                plistjson.write(json.dumps([plist_record(plistdata)]))
                 # Tag MITRE technique for plist processing
                 tag_mitre_technique(output_directory, img, "plist")
-
-            except:
-                pass
+            except (plistlib.InvalidFileException, ValueError, OSError):
+                pass  # not a parseable plist; the empty output is cleaned up later

@@ -11,6 +11,7 @@ expect {
   -re {Username:} { send "gandalf\r"; exp_continue }
   -re {Password:} { send "$env(LAB_PASSWORD)\r"; exp_continue }
   -re {Collected\? \[Yes\]} { send "\r"; exp_continue }
+  timeout { puts "\[x\] gandalf.py produced no output for $timeout s"; catch {exec kill [exp_pid]}; catch {close}; catch {wait}; exit 124 }
   eof
 }
 catch wait result

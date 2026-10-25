@@ -41,6 +41,15 @@ def make_artefact_dir(gandalf_artefact_destination, artefact_output_dir):
         pass
 
 
+def listdir_readable(path):
+    """os.listdir, but an unreadable directory (another user's home when
+    collecting unprivileged) lists as empty instead of ending the run."""
+    try:
+        return os.listdir(path)
+    except (PermissionError, FileNotFoundError):
+        return []
+
+
 def copy_file(source, destination):
     if os.stat(source).st_size > 0:
         try:
@@ -54,7 +63,7 @@ def copy_file(source, destination):
 
 
 def copy_dir(source, destination):
-    if os.path.exists(source) and len(os.listdir(source)) != 0:
+    if os.path.exists(source) and len(listdir_readable(source)) != 0:
         try:
             shutil.copytree(source, destination)
         except PermissionError:
@@ -343,10 +352,10 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
         ("/System/Library/LaunchAgents", "system+launchagents-"),
     ):
         if os.path.isdir(agents_dir):
-            for plist in sorted(os.listdir(agents_dir)):
+            for plist in sorted(listdir_readable(agents_dir)):
                 if plist.endswith(".plist"):
                     _collect_one(os.path.join(agents_dir, plist), os.path.join(dest, "plists", prefix + plist), gandalf_host)
-    for user in sorted(os.listdir("/Users")) if os.path.isdir("/Users") else []:
+    for user in sorted(listdir_readable("/Users")) if os.path.isdir("/Users") else []:
         home = os.path.join("/Users", user)
         if user == "Shared" or user.startswith(".") or not os.path.isdir(home):
             continue
@@ -355,13 +364,13 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
         for sessions in (".zsh_sessions", ".bash_sessions"):
             sdir = os.path.join(home, sessions)
             if os.path.isdir(sdir):
-                for name in sorted(os.listdir(sdir)):
+                for name in sorted(listdir_readable(sdir)):
                     if name.endswith(".history"):
                         _collect_one(os.path.join(sdir, name), os.path.join(dest, "user", user, "sessions", name), gandalf_host)
         for subdir, prefix in (("LaunchAgents", user + "+launchagents+"), ("Preferences", user + "+")):
             pdir = os.path.join(home, "Library", subdir)
             if os.path.isdir(pdir):
-                for plist in sorted(os.listdir(pdir)):
+                for plist in sorted(listdir_readable(pdir)):
                     if plist.endswith(".plist"):
                         _collect_one(os.path.join(pdir, plist), os.path.join(dest, "plists", prefix + plist), gandalf_host)
         _collect_one(
@@ -546,7 +555,7 @@ def acquire_artefacts(
                         make_artefact_dir(
                             gandalf_artefact_destination, artefact_output_dir
                         )
-                        for cronobject in os.listdir(artefact):
+                        for cronobject in listdir_readable(artefact):
                             if os.path.isfile(os.path.join(artefact, cronobject)):
                                 copy_file(
                                     os.path.join(artefact, cronobject),
@@ -577,7 +586,7 @@ def acquire_artefacts(
                         make_artefact_dir(
                             gandalf_artefact_destination, artefact_output_dir
                         )
-                        for tmpobject in os.listdir(artefact):
+                        for tmpobject in listdir_readable(artefact):
                             if os.path.isfile(os.path.join(artefact, tmpobject)):
                                 copy_file(
                                     os.path.join(artefact, tmpobject),
@@ -679,7 +688,7 @@ def acquire_artefacts(
                                 usergandalfroot = os.path.join(
                                     gandalfroot, user_profile
                                 )
-                                for userobject in os.listdir(usergandalfroot):
+                                for userobject in listdir_readable(usergandalfroot):
                                     make_artefact_dir(
                                         gandalf_artefact_destination,
                                         artefact_output_dir,
@@ -758,7 +767,7 @@ def acquire_artefacts(
                                             userlibraryroot = os.path.join(
                                                 gandalfroot, user_profile, userobject
                                             )
-                                            for librarysubdir in os.listdir(
+                                            for librarysubdir in listdir_readable(
                                                 userlibraryroot
                                             ):
                                                 if librarysubdir == "Keychains":
@@ -887,7 +896,7 @@ def acquire_artefacts(
                                                     librarysubdir
                                                     == "Application Support"
                                                 ):
-                                                    for applicationdir in os.listdir(
+                                                    for applicationdir in listdir_readable(
                                                         os.path.join(
                                                             userlibraryroot,
                                                             librarysubdir,
