@@ -98,7 +98,7 @@ COMMANDS = {
     "linux-targets": (_one_of("up", "down", "reset", "status"), True),
     "linux-vm": (_one_of(*VM_ACTIONS), True),
     "macos-vm": (_one_of(*VM_ACTIONS), True),
-    "windows-vm": (_one_of("create", "start", "stop", "provision", "delete", "status"), True),
+    "windows-vm": (_one_of("create", "adopt", "start", "stop", "provision", "delete", "status"), True),
     "gandalf-collect": (_collect, True),
     "mordor-download": (_datasets, True),
     "mordor-sensor": (_none, True),

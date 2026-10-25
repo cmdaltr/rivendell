@@ -209,7 +209,7 @@ function Lab() {
           <button
             key={a}
             className="secondary"
-            disabled={busy || (noPassword && a === 'create')}
+            disabled={busy || (noPassword && (a === 'create' || a === 'adopt'))}
             onClick={() => start(command, [a], a === 'delete' ? `Destroy the ${title}? Its disk is deleted.` : null)}
           >
             {a}
@@ -300,12 +300,14 @@ function Lab() {
             {(vagrant || tart) && vmRow('linux-vm', 'Linux VM', ['create', 'start', 'stop', 'delete', 'status'])}
             {tart && vmRow('macos-vm', 'macOS VM', ['create', 'start', 'stop', 'delete', 'status'])}
             {vagrant && vmRow('windows-vm', 'Windows 11 VM', ['create', 'start', 'stop', 'provision', 'delete', 'status'])}
+            {tart && vmRow('windows-vm', 'Windows 11 ARM VM (UTM; SSH on 127.0.0.1:2232)', ['create', 'adopt', 'start', 'stop', 'delete', 'status'])}
           </tbody>
         </table>
         {tart && (
           <p className="lab-note">
-            Windows 11 ARM on Apple silicon needs UTM and a few manual steps; run <code>./lab.sh windows-vm</code> in a
-            terminal for the guide.
+            Windows 11 ARM runs in UTM. <strong>create</strong> installs it unattended from the ARM64 ISO in the lab's
+            <code>isos/</code> folder (Microsoft's download is manual); <strong>adopt</strong> takes an installed VM
+            from <code>utm/</code> that has OpenSSH (Vagrant login by default) and provisions it.
           </p>
         )}
         {noPassword && <p className="lab-note">Set the lab password before creating targets.</p>}

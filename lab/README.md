@@ -7,7 +7,7 @@ Targets to acquire with Gandalf and datasets to analyse with Mordor, all on one 
 | Host | Linux targets | Linux VM | macOS VM | Windows VM | Mordor capture |
 |---|---|---|---|---|---|
 | macOS, Intel | 4 containers | Vagrant + VirtualBox | — (Tart needs Apple silicon) | Windows 11 x64, unattended | Yes |
-| macOS, Apple silicon | 4 containers | Tart | Tart | Windows 11 ARM in UTM, guided | Download only |
+| macOS, Apple silicon | 4 containers | Tart | Tart | Windows 11 ARM in UTM, unattended (you download the ISO) | Download only |
 | Linux x86-64 | 4 containers | Vagrant + VirtualBox | — (macOS licensing) | Windows 11 x64, unattended | Yes |
 | Linux arm64 | 4 containers | — | — | — | Download only |
 
@@ -63,7 +63,10 @@ The four **Linux containers** (Ubuntu 24.04, Debian 12, Rocky 9, Alpine) listen 
 
 The **Linux VM** (`linux-vm create`) is Ubuntu with a real kernel (`bento/ubuntu-24.04` under Vagrant, Cirrus Labs `ubuntu:latest` under Tart), on SSH port 2230. The **macOS VM** (`macos-vm create`, Apple silicon only) is a Cirrus Labs Sequoia image on port 2231. It needs one manual step on first boot, which the script prints.
 
-The **Windows VM** (`windows-vm create`, x86-64 hosts) is Windows 11 from `gusztavvargadr/windows-11`. Provisioning enables PowerShell remoting and seeds a Run key, a scheduled task, a service, failed logons and PSReadLine history. The first boot takes 10–20 minutes. On Apple silicon, `./lab.sh windows-vm` walks you through a Windows 11 ARM install in UTM; DumpIt is x64-only, so Windows memory acquisition can't be tested there.
+The **Windows VM** (`windows-vm create`) is Windows 11, provisioned with a Run key, a scheduled task, a service, failed logons and PSReadLine history.
+
+- On x86-64 hosts it's `gusztavvargadr/windows-11` under Vagrant, with PowerShell remoting. The first boot takes 10–20 minutes.
+- On Apple silicon it's Windows 11 ARM in UTM, built unattended from Microsoft's ISO, or an installed VM you bring with `adopt`. See [Windows 11 ARM on Apple silicon](#windows-11-arm-on-apple-silicon).
 
 The collectors run from a controller container (`rivendell-lab-controller`) that reaches the VMs via `host.docker.internal`, so nothing is installed on the host. Output goes where Elrond's `--Gandalf` mode expects it:
 
@@ -71,9 +74,33 @@ The collectors run from a controller container (`rivendell-lab-controller`) that
 <data>/gandalf/<collector>_collection/acquisitions/<target>/
 ```
 
-Each target folder also gets that target's `expected.json` and a `collector.log`.
+Each target folder also gets that target's `expected.json` and a `collector.log`. The Windows collector is the exception to the controller container: `gandalf-collect powershell` runs Invoke-Gandalf inside the Windows VM (over WinRM on Vagrant, over SSH on UTM) and copies the archive out.
 
 The Bash collector runs unencrypted by default; set `GANDALF_ENCRYPTION=Key` to test Key encryption (the key comes back as `<target>.shadowfax.key` next to the archive). The lab runs Gandalf as shipped. `GANDALF_WORKAROUNDS=1` repacks `.tar.gz` archives as `.zip`, for Rivendell builds whose Elrond predates `.tar.gz` support (bug E7 in [BUGS.md](../tests/docs/BUGS.md)).
+
+### Windows 11 ARM on Apple silicon
+
+Tart can't run Windows (Apple's Virtualization framework only boots macOS and Linux), so the lab drives UTM through its AppleScript API. The VM lives under `$LAB_VM_DIR/utm/`, and its SSH is forwarded to `127.0.0.1:2232`, user `gandalf`, the lab password.
+
+**Building one (`windows-vm create`).** Download the Windows 11 ARM64 ISO from [Microsoft](https://www.microsoft.com/software-download/windows11arm64) (or with CrystalFetch) into `$LAB_DATA_DIR/isos/`; Microsoft only issues links through its web form, so this is the one manual step. Then:
+
+```bash
+./lab.sh windows-vm create
+```
+
+It downloads the virtio-win drivers and Win32-OpenSSH, builds a config ISO (`autounattend.xml`, the lab scripts, Gandalf, OpenSSH), creates `rivendell-lab-win11` and boots the installer. Setup runs without prompts: TPM, Secure Boot and RAM checks are bypassed, the VirtIO disk and network drivers load from the virtio-win ISO, and a local `gandalf` administrator signs in once to run `firstlogon.ps1`, which provisions the target and starts sshd. It takes 30–60 minutes on an SSD and longer on a spinning disk. When it's ready, the install media are detached and the config ISO, which holds the lab password, is deleted.
+
+Two UTM details shape how this works. The system disk is VirtIO, not NVMe, because QEMU crashes in its NVMe TRIM handler when Windows trims (the VM just stops; L5 in [BUGS.md](../tests/docs/BUGS.md)). And because UTM's `export` drops removable media, the ISOs are hard-linked into the VM bundle as fixed CD images rather than attached as removable drives (L6).
+
+**Bringing your own (`windows-vm adopt`).** Put an installed Windows 11 ARM `.utm` in `$LAB_VM_DIR/utm/`, open it in place rather than dragging it into UTM (UTM keeps a separate copy of anything imported into its library, and the lab can't reach that copy), and run:
+
+```bash
+./lab.sh windows-vm adopt /path/to/vm.utm
+```
+
+`adopt` registers the bundle, adds the port forward and boots it. It logs in as `vagrant`/`vagrant` (set `ADOPT_USER` and `ADOPT_PASSWORD` for another account); if the VM has WinRM but no SSH, as Vagrant boxes do, it installs Win32-OpenSSH over WinRM first. Then it runs the same provisioning as `create`. The VM's name is saved as `WINDOWS_UTM_VM`. An adopted VM is never deleted by the lab: `windows-vm delete` and teardown refuse anything not named `rivendell-lab-*`. An NVMe system disk on an adopted VM can still hit the QEMU crash above.
+
+**Collecting.** `./lab.sh gandalf-collect powershell` runs `Run-GandalfLocal.ps1` in the VM and copies the archive to `$ACQ_ROOT/powershell_collection/acquisitions/<COMPUTERNAME>/`. DumpIt is x64-only, so Windows memory acquisition can't be tested on ARM. The old manual walkthrough is still in the `windows-vm` menu.
 
 ## Mordor Datasets
 
@@ -107,7 +134,8 @@ Settings live in `~/.config/rivendell-lab/lab.conf`. Edit them with `./lab.sh co
 |---|---|---|
 | `LAB_DATA_DIR` | `~/rivendell-lab-data` | Collected data and datasets |
 | `TEST_IMAGES_PATH` | — | When set, data goes to `$TEST_IMAGES_PATH/gandalf` and `/mordor`, the paths `run_test.py` uses |
-| `LAB_VM_DIR` | `$LAB_DATA_DIR/vms` | Vagrant boxes, VirtualBox VMs and Tart images. Existing lab VMs in the default locations are left where they are |
+| `LAB_VM_DIR` | `$LAB_DATA_DIR/vms` | Vagrant boxes, VirtualBox VMs, Tart images (`tart/`) and UTM bundles (`utm/`). Existing lab VMs in the default locations are left where they are |
+| `WINDOWS_UTM_VM` | `rivendell-lab-win11` | Apple silicon: the UTM VM the lab drives (set by `windows-vm adopt`) |
 | `WINDOWS_VM_MEMORY_MB` / `WINDOWS_VM_CPUS` | 6144 / 2 | |
 | `LINUX_VM_MEMORY_MB` | 2048 | |
 
@@ -127,3 +155,8 @@ This removes the lab's containers, volumes and VMs; collected data is kept, and 
 - **"No input … menus need a terminal".** You ran `lab.sh` without a terminal and without a command. Pass a command, or set `LAB_YES=1`.
 - **The web UI says the agent isn't reachable.** Check `./lab.sh agent status` and `~/.config/rivendell-lab/run/agent.log`. On Linux, the backend needs `host.docker.internal`, which `docker-compose.yml` maps to the host gateway.
 - **Collector failures.** Each collection leaves `collector.log` next to its archive (`collector-python.log` for the Python collector), and the lab's known Gandalf issues are tracked in [BUGS.md](../tests/docs/BUGS.md).
+- **A UTM Windows VM stops on its own.** Look for `QEMULauncher-*.ips` in `~/Library/Logs/DiagnosticReports`. A crash in `nvme_dsm_cb` is QEMU's NVMe TRIM bug: lab-built VMs use a VirtIO disk to avoid it, so it only affects VMs brought in with `adopt`.
+- **`utmctl start` fails with OSStatus -1712.** UTM is waiting on a dialog, or wedged after a VM crash. Check its window, or quit and reopen UTM.
+- **`adopt` says UTM is running a different copy.** The VM was dragged into UTM's library, which copies it into UTM's own storage. Remove it from UTM (this deletes UTM's copy only) and run `adopt` again; it opens the bundle in place.
+- **A VM takes ages to boot, or Tart gives up waiting for an IP.** `LAB_VM_DIR` is probably on a spinning USB disk. It works, but first boots take many minutes; an SSD is much faster. Run one VM at a time on a 16 GB Mac with Rivendell up.
+- **`delete` won't remove a Windows VM.** It only deletes VMs the lab built (`rivendell-lab-*`). Remove an adopted VM in UTM yourself.

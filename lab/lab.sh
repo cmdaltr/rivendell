@@ -289,7 +289,16 @@ EOF
 
 cmd_windows_vm() {
   local sub="${1:-}"
-  if uses_tart; then windows_arm_guide; return; fi
+  if uses_tart; then
+    if [ -z "$sub" ]; then
+      menu "Windows 11 ARM VM (UTM; SSH on 127.0.0.1:2232)" "Create / install (needs the ARM64 ISO in $LAB_DATA_DIR/isos)" "Adopt an installed VM (.utm in $LAB_VM_DIR/utm)" "Start" "Stop" "Destroy" "Status" "Manual install instead (guide)"
+      case "$MENU_CHOICE" in 1) sub=create ;; 2) sub=adopt ;; 3) sub=start ;; 4) sub=stop ;; 5) sub=delete ;; 6) sub=status ;; 7) windows_arm_guide; return ;; *) return ;; esac
+    fi
+    [ "$sub" = provision ] && sub=create  # re-running create on an existing VM just starts it and checks it's ready
+    shift || true
+    "$LAB_ROOT/windows/utm-vm.sh" "$sub" "$@"
+    return
+  fi
   if ! uses_vagrant; then warn "No Windows VM option on $(host_label)."; return; fi
   if [ -z "$sub" ]; then
     menu "Windows 11 x64 VM (Vagrant + VirtualBox)" "Create / provision (~15 GB box download)" "Start" "Stop" "Re-run provisioning" "Open console (VirtualBox GUI)" "Destroy" "Status"
@@ -347,8 +356,10 @@ cmd_gandalf_collect() {
       if is_intel; then
         vagrant_env
         vagrant winrm win -e -c "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Run-GandalfLocal.ps1" || rc=1
+      elif uses_tart; then
+        LAB_SSH_TIMEOUT=7200 "$LAB_ROOT/windows/utm-vm.sh" collect || rc=1
       else
-        warn "Run in the UTM VM: C:\\lab\\scripts\\Run-GandalfLocal.ps1 -GandalfSource Z:\\gandalf-src -AcquisitionsRoot Z:\\gandalf"
+        warn "No Windows VM on $(host_label)."
       fi
     else
       # shellcheck disable=SC2086
@@ -509,7 +520,10 @@ cmd_teardown() {
   confirm "Tear down the lab?" n || return
   if need docker && docker info >/dev/null 2>&1; then pick_docker_context; lab_compose --profile controller down -v --rmi local || true; fi
   if uses_vagrant && need vagrant; then vagrant_env; vagrant destroy -f || true; fi
-  if uses_tart && [ -n "$(tart_bin)" ]; then LAB_YES=1 "$LAB_ROOT/macos/tart-vm.sh" delete linux || true; LAB_YES=1 "$LAB_ROOT/macos/tart-vm.sh" delete macos || true; fi
+  # LAB_FORCE, not LAB_YES: each delete's own prompt defaults to no, and the
+  # teardown was already confirmed above.
+  if uses_tart && [ -n "$(tart_bin)" ]; then LAB_FORCE=1 "$LAB_ROOT/macos/tart-vm.sh" delete linux || true; LAB_FORCE=1 "$LAB_ROOT/macos/tart-vm.sh" delete macos || true; fi
+  if uses_tart && [ -d /Applications/UTM.app ]; then LAB_FORCE=1 "$LAB_ROOT/windows/utm-vm.sh" delete || true; fi
   [ "${LAB_KEEP_PASSWORD:-0}" = "1" ] || { confirm "Also remove the stored lab password?" n && delete_password && ok "Removed"; }
   ok "Lab torn down"
 }
@@ -547,7 +561,7 @@ cmd_agent() {
 
 # ------------------------------------------------------- non-interactive (lab agent)
 
-CONFIG_KEYS="LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB ELASTIC_URL"
+CONFIG_KEYS="LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB ELASTIC_URL WINDOWS_UTM_VM"
 
 # KEY=value lines describing this host and the lab, for the web UI.
 cmd_state() {

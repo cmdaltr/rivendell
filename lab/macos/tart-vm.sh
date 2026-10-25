@@ -26,8 +26,9 @@ vm_ip() { "$TART" ip "$VM" 2>/dev/null || true; }
 
 wait_ip() {
   local i ip
-  for i in $(seq 1 90); do ip="$(vm_ip)"; [ -n "$ip" ] && { echo "$ip"; return; }; sleep 2; done
-  die "$VM did not get an IP address within 3 minutes"
+  # A first boot from an external drive can take several minutes.
+  for i in $(seq 1 300); do ip="$(vm_ip)"; [ -n "$ip" ] && { echo "$ip"; return; }; sleep 2; done
+  die "$VM did not get an IP address within 10 minutes (log: $RUN_DIR/$VM.log)"
 }
 
 start_forward() {

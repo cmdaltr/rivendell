@@ -2,12 +2,15 @@
 # Password SSH/SCP from the Mac without sshpass (expect ships with macOS).
 #   ssh.exp ssh  <user> <host> <port> <command>
 #   ssh.exp scp  <user> <host> <port> <local-file> <remote-path>
+#   ssh.exp pull <user> <host> <port> <remote-path> <local-dir>   (recursive)
 # The password is read from $LAB_SSH_PASSWORD.
-set timeout 900
+set timeout [expr {[info exists env(LAB_SSH_TIMEOUT)] ? $env(LAB_SSH_TIMEOUT) : 900}]
 set mode [lindex $argv 0]; set user [lindex $argv 1]; set host [lindex $argv 2]; set port [lindex $argv 3]
-set opts {-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR}
+set opts {-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=20}
 if {$mode eq "ssh"} {
   eval spawn ssh $opts -p $port $user@$host [list [lindex $argv 4]]
+} elseif {$mode eq "pull"} {
+  eval spawn scp -r $opts -P $port $user@$host:[list [lindex $argv 4]] [list [lindex $argv 5]]
 } else {
   eval spawn scp $opts -P $port [list [lindex $argv 4]] $user@$host:[lindex $argv 5]
 }

@@ -118,8 +118,8 @@ tart_bin() {
 load_config() {
   # Values exported in the environment win over lab.conf (CI, one-off runs).
   local _v _saved=""
-  for _v in LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB ELASTIC_URL; do
-    eval "[ -n \"\${$_v:-}\" ] && _saved=\"\$_saved $_v=\$(printf %q \"\${$_v}\")\""
+  for _v in LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB ELASTIC_URL WINDOWS_UTM_VM; do
+    eval "if [ -n \"\${$_v:-}\" ]; then _saved=\"\$_saved $_v=\$(printf %q \"\${$_v}\")\"; fi"
   done
   # Defaults; lab.conf (written by `./lab.sh configure`) overrides them.
   LAB_DATA_DIR="${LAB_DATA_DIR:-$HOME/rivendell-lab-data}"
@@ -128,9 +128,10 @@ load_config() {
   WINDOWS_VM_CPUS="${WINDOWS_VM_CPUS:-2}"
   LINUX_VM_MEMORY_MB="${LINUX_VM_MEMORY_MB:-2048}"
   ELASTIC_URL="${ELASTIC_URL:-http://host.docker.internal:9200}"
+  WINDOWS_UTM_VM="${WINDOWS_UTM_VM:-rivendell-lab-win11}"  # Apple silicon: the UTM VM the lab drives
   # shellcheck disable=SC1090
   [ -f "$LAB_CONFIG" ] && . "$LAB_CONFIG"
-  [ -n "$_saved" ] && eval "$_saved"
+  if [ -n "$_saved" ]; then eval "$_saved"; fi
   LAB_VM_DIR="${LAB_VM_DIR:-$LAB_DATA_DIR/vms}"
   ACQ_ROOT="${TEST_IMAGES_PATH:-$LAB_DATA_DIR}/gandalf"
   MORDOR_ROOT="${TEST_IMAGES_PATH:-$LAB_DATA_DIR}/mordor"
@@ -178,6 +179,7 @@ WINDOWS_VM_MEMORY_MB="$WINDOWS_VM_MEMORY_MB"
 WINDOWS_VM_CPUS="$WINDOWS_VM_CPUS"
 LINUX_VM_MEMORY_MB="$LINUX_VM_MEMORY_MB"
 ELASTIC_URL="$ELASTIC_URL"
+WINDOWS_UTM_VM="$WINDOWS_UTM_VM"
 EOF
   ok "Saved $LAB_CONFIG"
 }
