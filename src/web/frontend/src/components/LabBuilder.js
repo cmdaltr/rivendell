@@ -44,6 +44,14 @@ const ELROND_PROFILES = {
   timeline: { label: 'Process, analyse, IOCs and a timeline', options: { analysis: true, extract_iocs: true, timeline: true } },
 };
 
+const OS_LOGO = { windows: 'windows.svg', macos: 'macos.png', linux: 'tux.svg' };
+const osLogo = (m) => {
+  let f = OS_LOGO[m.os] || 'tux.svg';
+  if (m.os === 'linux' && /ubuntu/i.test(m.name)) f = 'ubuntu.png';
+  if (m.os === 'linux' && /rocky/i.test(m.name)) f = 'rocky.svg';
+  return `${IMG}/mordor/${f}`;
+};
+
 const Step = ({ n, title, children }) => (
   <div className="lb-step">
     <div className="lb-step-head"><span className="lb-step-n">{n}</span><h3>{title}</h3></div>
@@ -321,11 +329,11 @@ function LabBuilder() {
 
         {tool === 'mordor' && (
           <>
-            <div className="lb-pair">
+            <div className="lb-pair lb-pair-even">
               <Step n="1" title="What">
                 <div className="lb-row">
                   <Choice active={mode === 'record'} onClick={() => setMode('record')}>Record telemetry</Choice>
-                  <Choice active={mode === 'capture'} onClick={() => setMode('capture')}>Capture a dataset for Elrond</Choice>
+                  <Choice active={mode === 'capture'} onClick={() => setMode('capture')}>Capture dataset for Elrond</Choice>
                   <Choice active={mode === 'download'} onClick={() => setMode('download')}>Download OTRF datasets</Choice>
                 </div>
               </Step>
@@ -334,7 +342,7 @@ function LabBuilder() {
                   <div className="lb-row">
                     {recordable.map((m) => (
                       <Choice key={`${m.engine}/${m.name}`} active={picked && picked.name === m.name} onClick={() => setMachine(`${m.engine}/${m.name}`)}>
-                        <span className={`mt-dot is-${m.state}`} />{m.name} <span className="mt-dim">· {m.os}</span>
+                        <span className={`mt-dot is-${m.state}`} /><img className="lb-os" src={osLogo(m)} alt={m.os} title={m.os} />{m.name}
                       </Choice>
                     ))}
                   </div>
