@@ -25,6 +25,7 @@ const ENGINE_NAME = { docker: 'Docker', tart: 'Tart', utm: 'UTM' };
 const OsIcon = ({ os, name = '' }) => {
   let f = OS_ICON[os];
   if (os === 'linux' && /ubuntu/i.test(name)) f = 'ubuntu.png';
+  if (os === 'linux' && /rocky/i.test(name)) f = 'rocky.svg';
   return f ? <img className="mt-icon" src={`${IMG}/${f}`} alt={os} /> : null;
 };
 const EngineIcon = ({ engine }) =>

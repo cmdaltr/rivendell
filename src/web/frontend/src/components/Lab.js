@@ -28,7 +28,7 @@ const SETTINGS = [
 ];
 
 const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
-const STATUS_ICON = { succeeded: '✅', failed: '❌', cancelled: '❌', running: '⏳' };
+const STATUS_ICON = { succeeded: '✅', failed: '❌', cancelled: '⏹️', running: '⏳' };
 const formatTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '—');
 
 function AgentPanel({ status, onRecheck }) {
@@ -276,7 +276,7 @@ function LabManage({ section = 'lab', children = null }) {
         <table className="lab-table">
           <tbody>
             <tr>
-              {logos([['ubuntu.png', 'Ubuntu'], ['tux.svg', 'Rocky'], ['docker.png', 'Docker']],
+              {logos([['ubuntu.png', 'Ubuntu'], ['rocky.svg', 'Rocky'], ['docker.png', 'Docker']],
                 `Linux containers: ${(state.linux_containers || []).join(', ')} (Ubuntu 24.04, Rocky 9), SSH on 127.0.0.1:2221-2222`)}
               <td className="lab-actions">
                 <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['up'])}>up</button>
