@@ -260,12 +260,13 @@ function LabManage({ section = 'lab', children = null }) {
 
       {section === 'lab' && (
       <>
+      <div className="lab-split">
       <div className="card">
-        <h2>Targets and maintenance</h2>
+        <h2>Targets</h2>
         <table className="lab-table">
           <tbody>
             <tr>
-              <td>Linux containers ({(state.linux_containers || []).join(', ')}; SSH on 127.0.0.1:2221-2224)</td>
+              <td>Linux containers ({(state.linux_containers || []).join(', ')}; SSH on 127.0.0.1:2221-2222)</td>
               <td className="lab-actions">
                 <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['up'])}>up</button>
                 <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['down'])}>down</button>
@@ -287,23 +288,11 @@ function LabManage({ section = 'lab', children = null }) {
           </p>
         )}
         {noPassword && <p className="lab-note">Set the lab password before creating targets.</p>}
-        <div className="lab-maintenance">
-          <div className="lab-actions">
-            <button className="secondary" disabled={busy} onClick={() => start('rivendell-env')}>Rivendell test settings</button>
-            <button className="secondary" disabled={busy} onClick={() => start('teardown', [], 'Remove all lab containers and VMs? Collected data and the lab password are kept.')}>Tear down lab</button>
-          </div>
-          <p className="lab-note">
-            Test settings writes the paths <code>tests/scripts/run_test.py</code> needs and checks Rivendell's worker can
-            read the lab's data directory. Teardown removes every target; collected data and the password are kept.
-          </p>
-        </div>
       </div>
 
-      {children}
-
-      {runs.length > 0 && (
-        <div className="card">
-          <h2>Recent runs</h2>
+      <div className="card">
+        <h2>Recent runs</h2>
+        {runs.length ? (
           <table className="lab-table">
             <thead><tr><th>Command</th><th>Status</th><th>Started</th><th /></tr></thead>
             <tbody>
@@ -317,8 +306,25 @@ function LabManage({ section = 'lab', children = null }) {
               ))}
             </tbody>
           </table>
+        ) : <p className="lab-note">No runs yet. Commands from this page and Deploy show here.</p>}
+      </div>
+      </div>
+
+      <div className="card">
+        <h2>Maintenance</h2>
+        <div>
+          <div className="lab-actions">
+            <button className="secondary" disabled={busy} onClick={() => start('rivendell-env')}>Rivendell test settings</button>
+            <button className="secondary" disabled={busy} onClick={() => start('teardown', [], 'Remove all lab containers and VMs? Collected data and the lab password are kept.')}>Tear down lab</button>
+          </div>
+          <p className="lab-note">
+            Test settings writes the paths <code>tests/scripts/run_test.py</code> needs and checks Rivendell's worker can
+            read the lab's data directory. Teardown removes every target; collected data and the password are kept.
+          </p>
         </div>
-      )}
+      </div>
+
+      {children}
       </>
       )}
     </div>

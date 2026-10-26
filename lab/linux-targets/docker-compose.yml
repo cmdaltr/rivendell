@@ -27,29 +27,13 @@ services:
     container_name: lab-ubuntu
     ports: ["127.0.0.1:2221:22"]
 
-  debian:
-    <<: *target
-    build: { context: ., args: { BASE: "debian:12" } }
-    image: rivendell-lab-target:debian
-    hostname: lab-debian
-    container_name: lab-debian
-    ports: ["127.0.0.1:2222:22"]
-
   rocky:
     <<: *target
     build: { context: ., args: { BASE: "rockylinux:9" } }
     image: rivendell-lab-target:rocky
     hostname: lab-rocky
     container_name: lab-rocky
-    ports: ["127.0.0.1:2223:22"]
-
-  alpine:
-    <<: *target
-    build: { context: ., args: { BASE: "alpine:3.20" } }
-    image: rivendell-lab-target:alpine
-    hostname: lab-alpine
-    container_name: lab-alpine
-    ports: ["127.0.0.1:2224:22"]
+    ports: ["127.0.0.1:2222:22"]
 
   # Runs gandalf.py and gandalf.sh against the targets. Started on demand by
   # `./lab.sh gandalf-collect`, never left running.

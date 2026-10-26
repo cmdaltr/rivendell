@@ -13,7 +13,7 @@ load_config
 
 VAGRANT_DIR="$LAB_ROOT/vagrant"
 TESTS_ENV="$LAB_CONFIG_DIR/rivendell-tests.env"
-LINUX_CONTAINERS="lab-ubuntu lab-debian lab-rocky lab-alpine"
+LINUX_CONTAINERS="lab-ubuntu lab-rocky"
 
 vagrant_env() {
   require_password
@@ -208,7 +208,7 @@ cmd_linux_targets() {
     case "$MENU_CHOICE" in 1) sub=up ;; 2) sub=down ;; 3) sub=reset ;; 4) sub=status ;; *) return ;; esac
   fi
   case "$sub" in
-    up)     build_lab_images && lab_compose up -d --no-build && ok "Targets up: $LINUX_CONTAINERS (SSH on 127.0.0.1:2221-2224)" ;;
+    up)     build_lab_images && lab_compose up -d --no-build && ok "Targets up: $LINUX_CONTAINERS (SSH on 127.0.0.1:2221-2222)" ;;
     down)   lab_compose down && ok "Targets stopped" ;;
     reset)  lab_compose down -v; build_lab_images && lab_compose up -d --no-build --force-recreate && ok "Targets rebuilt and re-seeded" ;;
     status) lab_compose ps ;;

@@ -35,9 +35,9 @@ The same steps exist as single commands:
 ./lab.sh check                      # what this host can run, and what's missing
 ./lab.sh install                    # Homebrew/apt/dnf packages for this profile
 ./lab.sh configure                  # data location, VM directory, VM sizes, password
-./lab.sh linux-targets up           # lab-ubuntu, lab-debian, lab-rocky, lab-alpine
+./lab.sh linux-targets up           # lab-ubuntu, lab-rocky
 ./lab.sh gandalf-collect bash       # every running target; or name them:
-./lab.sh gandalf-collect python "lab-debian lab-rocky"
+./lab.sh gandalf-collect python "lab-ubuntu lab-rocky"
 ./lab.sh mordor-download apt29/day1 apt29/day2
 ./lab.sh rivendell-env
 ```
@@ -65,7 +65,7 @@ The agent is a small Python service (standard library only) on loopback port 569
 
 ## Gandalf Targets
 
-The four **Linux containers** (Ubuntu 24.04, Debian 12, Rocky 9, Alpine) listen for SSH on `127.0.0.1:2221–2224`. They are quick to rebuild (`linux-targets reset`), but there's no real kernel, so memory acquisition can't be tested against them.
+The two **Linux containers**, Ubuntu 24.04 (Debian family, apt) and Rocky 9 (RHEL family, dnf), listen for SSH on `127.0.0.1:2221–2222`. They are quick to rebuild (`linux-targets reset`), but there's no real kernel, so memory acquisition can't be tested against them.
 
 The **Linux VM** (`linux-vm create`) is Ubuntu with a real kernel (`bento/ubuntu-24.04` under Vagrant, Cirrus Labs `ubuntu:latest` under Tart), on SSH port 2230. The **macOS VM** (`macos-vm create`, Apple silicon only) is a Cirrus Labs Sequoia image on port 2231, provisioned without prompts: a `gandalf` user, a LaunchAgent, zsh history with a download, and a hidden staging folder in `/Users/Shared`. Both collectors work against it. `gandalf.sh` runs with sudo and also gets the root-only TCC and KnowledgeC databases; `gandalf.py` collects as the SSH user, so it skips what that user can't read. On the reference run (USB HDD), first boot took about an hour, then provisioning took 2.5 minutes, the bash and Python collections about 3 and 2 minutes, and Elrond 1.5–4 minutes.
 

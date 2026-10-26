@@ -11,8 +11,6 @@ if command -v apt-get >/dev/null 2>&1; then
 elif command -v dnf >/dev/null 2>&1; then
   dnf install -y --allowerasing openssh-server openssh-clients sudo bash python3 tar gzip coreutils zip unzip cronie procps-ng iproute passwd
   dnf clean all
-elif command -v apk >/dev/null 2>&1; then
-  apk add --no-cache openssh-server openssh-client sudo bash python3 tar gzip coreutils zip unzip dcron procps iproute2 shadow
 else
   echo "Unsupported base image" >&2
   exit 1

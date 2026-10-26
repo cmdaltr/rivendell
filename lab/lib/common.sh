@@ -281,8 +281,8 @@ build_image() {  # build_image <tag> <context dir> [build-arg ...]
 
 build_lab_images() {
   local d base
-  for d in ubuntu debian rocky alpine; do
-    case "$d" in ubuntu) base=ubuntu:24.04 ;; debian) base=debian:12 ;; rocky) base=rockylinux:9 ;; alpine) base=alpine:3.20 ;; esac
+  for d in ubuntu rocky; do
+    case "$d" in ubuntu) base=ubuntu:24.04 ;; rocky) base=rockylinux:9 ;; esac
     build_image "rivendell-lab-target:$d" "$LAB_ROOT/linux-targets" "BASE=$base" || return 1
   done
   build_image rivendell-lab-controller "$LAB_ROOT/controller"

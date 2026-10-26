@@ -75,13 +75,13 @@ function EnablePanel({ status, onRecheck }) {
       <div className="aragorn-command">
         <code>{command}</code>
         <button className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+        <button className="aragorn-recheck" onClick={onRecheck}>Check again</button>
       </div>
       <p className="aragorn-note">
         Anduril only sees containers labelled with the <code>rivendell</code> compose project and named
         <code> rivendell-*</code>. Other containers and images on the same engine are never listed or touched.
       </p>
       {status?.detail && <p className="aragorn-note">Last error: {status.detail}</p>}
-      <button onClick={onRecheck}>Check again</button>
     </div>
   );
 }
