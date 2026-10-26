@@ -116,10 +116,18 @@ sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 
 #### Locked files and `disk_tools.zip`
 
-Some artefacts are held open by Windows and need raw access. Gandalf looks for `tools\disk_tools.zip`, which isn't shipped with Rivendell because it contains third-party binaries. Build it yourself from the upstream releases:
+Some artefacts are held open by Windows. Gandalf reads `$MFT` itself, straight off the volume (boot sector, MFT record 0, then the runs of its `$DATA` attribute), so it needs no tools for that. For `hiberfil.sys` and `pagefile.sys` it looks for `tools\disk_tools.zip`, which isn't shipped with Rivendell because it contains third-party binaries: put `RawCopy.exe` and `RawCopy64.exe` from [jschicht/RawCopy](https://github.com/jschicht/RawCopy) in it.
 
-| File in the zip | Source |
+| Artefact | How Gandalf gets it |
 |---|---|
+| `$MFT` | raw volume read (needs admin) |
+| `Amcache.hve`, `SRUDB.dat` | RawCopy when `disk_tools.zip` is present, otherwise a temporary shadow copy of C:, deleted afterwards and noted in `log.audit` |
+| `setupapi.dev.log` | RawCopy, or a direct copy (it isn't locked) |
+| `hiberfil.sys`, `pagefile.sys` | RawCopy only |
+
+Creating the shadow copy writes to the target's System Volume Information and adds VSS events to its logs; weigh that against getting Amcache and SRUM before using the fallback on a sensitive system.
+
+---|---|
 | `sleuthkit-4.12.1-win32\` (the extracted folder; Gandalf renames it `tsk`) | [The Sleuth Kit releases](https://github.com/sleuthkit/sleuthkit/releases), `sleuthkit-4.12.1-win32.zip` |
 | `RawCopy.exe`, `RawCopy64.exe` | [jschicht/RawCopy](https://github.com/jschicht/RawCopy) |
 
@@ -217,7 +225,7 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 | Option | Does |
 |---|---|
 | `--Process` | Parse collected artefacts (always runs) |
-| `--Analysis` | Automated analysis: extended attributes, ADS, timestomping and more |
+| `--Analysis` | MFT analysis: extended attributes other than Windows' own, and timestomping ($SI created before $FN created) of executables and scripts in user-writable paths. ADS only where the MFT export lists stream names (Artemis's does not) |
 | `--Memory` | Volatility 3 analysis of memory images |
 | `--Timeline` | Plaso timeline of the disk image. Very slow (105 min on a 12 GB E01) |
 | `--memorytimeline` | Volatility timeliner on memory images |

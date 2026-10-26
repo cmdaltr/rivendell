@@ -366,6 +366,16 @@ def process_clipboard(
         )
 
 
+def collected_dir(output_directory, img, vss_path_insert, *names):
+    """First existing directory among the collected raw artefacts: Gandalf
+    writes prefetch/ and wmi/, the image collector prefetch/ and wbem/."""
+    raw = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert
+    for name in names:
+        if os.path.isdir(raw + name + "/"):
+            return raw + name + "/"
+    return None
+
+
 def process_prefetch(
     verbosity,
     vssimage,
@@ -376,7 +386,7 @@ def process_prefetch(
     mount_location,
 ):
     """Process Windows Prefetch files using Artemis (Rust-based forensic parser)"""
-    prefetch_dir = "{}/Windows/Prefetch/".format(mount_location)
+    prefetch_dir = collected_dir(output_directory, img, vss_path_insert, "prefetch") or "{}/Windows/Prefetch/".format(mount_location)
 
     # Create a unique key for this prefetch directory to avoid reprocessing
     prefetch_key = output_directory + img.split("::")[0] + vss_path_insert + "prefetch"
@@ -425,9 +435,9 @@ def process_wmi(
 ):
     """Process WMI persistence using Artemis (Rust-based forensic parser)"""
     # WMI repository is typically at Windows/System32/wbem/Repository
-    wmi_dir = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "wbem/"
+    wmi_dir = collected_dir(output_directory, img, vss_path_insert, "wbem", "wmi")
 
-    if not os.path.exists(wmi_dir):
+    if not wmi_dir:
         return
 
     # Get specific file being processed for better logging
@@ -457,9 +467,9 @@ def process_wbem(
     """Process WBEM/WMI repository using Artemis (Rust-based forensic parser)"""
     print(f"    [DEBUG-WBEM] Entered process_wbem, verbosity={verbosity}, artefact={artefact}", flush=True)
     # WBEM is processed via wmipersist in Artemis - this is a wrapper for compatibility
-    wbem_dir = output_directory + img.split("::")[0] + "/artefacts/raw" + vss_path_insert + "wbem/"
+    wbem_dir = collected_dir(output_directory, img, vss_path_insert, "wbem", "wmi")
 
-    if not os.path.exists(wbem_dir):
+    if not wbem_dir:
         print(f"    [DEBUG-WBEM] wbem_dir does not exist, returning", flush=True)
         return
 

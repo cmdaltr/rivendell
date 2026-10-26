@@ -64,6 +64,84 @@ def _analyse_artemis_mft_from_status_log(ar, f, stage, vssimage, anysd, verbosit
 
 VSS_DIR = re.compile(r"^vss\d+$")
 
+# Extended attributes Windows itself writes (code integrity, kernel caches, WSL)
+BENIGN_EA = re.compile(r"^(\$KERNEL\.|\$CI\.CATALOGHINT$|\$LX(UID|GID|MOD|DEV)$|APPLICENSING$)", re.I)
+# Where a timestomped implant is worth flagging: user-writable, not OS-managed
+TIMESTOMP_LOCATIONS = re.compile(r"^\.?[\\/](users|programdata|windows[\\/]temp|\$recycle\.bin|perflogs)[\\/]", re.I)
+# Setup copies these with their original $SI times, which reads as timestomping
+OS_MANAGED = re.compile(r"^\.?[\\/](programdata[\\/]microsoft|users[\\/]default)[\\/]", re.I)
+EXECUTABLE = re.compile(r"\.(exe|dll|sys|scr|ps1|psm1|bat|cmd|vbs|vbe|js|jse|hta|wsf|lnk|msi)$", re.I)
+MFT_JSON_NAMES = ("mft.json", "mft.jsonl", "rawfiles.json", "rawfiles.jsonl", "journal_mft.json")
+
+
+def iter_json_records(f, chunk=1 << 20):
+    """Records from a JSON array or JSON Lines file, without loading it whole
+    (an Artemis MFT export is several GB)."""
+    first = f.read(chunk)
+    if not first.lstrip().startswith("["):
+        rest = first
+        while True:
+            lines = rest.split("\n")
+            rest = lines.pop()
+            for line in lines:
+                if line.strip():
+                    try:
+                        yield json.loads(line)
+                    except ValueError:
+                        pass
+            more = f.read(chunk)
+            if not more:
+                if rest.strip():
+                    try:
+                        yield json.loads(rest)
+                    except ValueError:
+                        pass
+                return
+            rest += more
+    decoder = json.JSONDecoder()
+    buf, eof = first.lstrip()[1:], False
+    while True:
+        buf = buf.lstrip().lstrip(",").lstrip()
+        if buf.startswith("]") or (not buf and eof):
+            return
+        try:
+            record, end = decoder.raw_decode(buf)
+        except ValueError:
+            if eof:
+                return
+            more = f.read(chunk)
+            eof = not more
+            buf += more
+            continue
+        yield record
+        buf = buf[end:]
+        if len(buf) < chunk and not eof:
+            more = f.read(chunk)
+            eof = not more
+            buf += more
+
+
+def mft_findings(record):
+    """(analysis type, value) findings for one Artemis MFT record. ADS names
+    aren't in Artemis's MFT output, so only EAs and timestomping are checked."""
+    findings = []
+    if not isinstance(record, dict) or not record.get("is_file", True):
+        return findings
+    for attribute in record.get("attribute_list") or []:
+        if isinstance(attribute, dict) and "data_size" in attribute and "name" in attribute:
+            if not BENIGN_EA.match(str(attribute["name"])):
+                findings.append(("ExtendedAttributes", str(attribute["name"])))
+    for stream in record.get("ads_info") or []:
+        findings.append(("AlternateDataStream", stream.get("name", "unknown") if isinstance(stream, dict) else str(stream)))
+    path = str(record.get("full_path") or record.get("filename") or "")
+    si_created, fn_created = record.get("created"), record.get("filename_created")
+    if (
+        si_created and fn_created and type(si_created) is type(fn_created) and si_created < fn_created
+        and TIMESTOMP_LOCATIONS.match(path) and not OS_MANAGED.match(path) and EXECUTABLE.search(path)
+    ):
+        findings.append(("Timestomp", "$SI: {}|$FN: {}".format(si_created, fn_created)))
+    return findings
+
 
 def volume_artefact_dirs(artefacts_dir, mnt, vssimage):
     """[(directory, skip_vss_subdirs)] holding one volume's collected artefacts.
@@ -85,190 +163,53 @@ def analyse_artefacts(
     verbosity, output_directory, img, mnt, analysis, magicbytes, extractiocs, iocsfile, vssimage
 ):
     def analyse_mft_json(stage, vssimage, filepath, anysd, verbosity, output_directory):
-        """Analyse MFT data from Artemis JSON output for EA, ADS, and Timestomping."""
-        print(" -> {} -> analysing MFT for Extended Attributes, Alternate Data Streams & Timestomping...".format(
+        """Analyse Artemis MFT JSON for extended attributes and timestomping,
+        streaming it record by record."""
+        print(" -> {} -> analysing MFT for Extended Attributes & Timestomping...".format(
             datetime.now().isoformat().replace("T", " ")
         ))
-
-        # Counters for findings
-        ads_count = 0
-        ea_count = 0
-        timestomp_count = 0
+        counts = {"ExtendedAttributes": 0, "AlternateDataStream": 0, "Timestomp": 0}
         records_processed = 0
-
+        audit_text = {
+            "ExtendedAttributes": "extended attribute",
+            "AlternateDataStream": "alternate data stream",
+            "Timestomp": "evidence of timestomping",
+        }
         try:
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-                # Handle both JSON array and JSONL formats
-                content = f.read().strip()
-                if content.startswith('['):
-                    records = json.loads(content)
-                else:
-                    # JSONL format
-                    records = []
-                    for line in content.split('\n'):
-                        if line.strip():
-                            try:
-                                records.append(json.loads(line))
-                            except:
-                                pass
-
-            print(" -> {} -> processing {} MFT records...".format(
-                datetime.now().isoformat().replace("T", " "),
-                len(records)
-            ))
-
-            for record in records:
-                records_processed += 1
-                if not isinstance(record, dict):
-                    continue
-
-                filename = record.get('filename', record.get('full_path', 'unknown'))
-                is_file = record.get('is_file', True)
-
-                if not is_file:
-                    continue
-
-                # Check for Alternate Data Streams
-                ads_info = record.get('ads_info', [])
-                if ads_info and len(ads_info) > 0:
-                    ads_count += 1
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                for record in iter_json_records(f):
+                    records_processed += 1
+                    findings = mft_findings(record)
+                    if not findings:
+                        continue
+                    filename = str(record.get("full_path") or record.get("filename") or "unknown")
+                    short = filename.replace("\\", "/").split("/")[-1]
                     if not os.path.exists(anysd + "/analysis.csv"):
                         with open(anysd + "/analysis.csv", "a") as analysisfile:
-                            analysisfile.write(
-                                "LastWriteTime,elrond_host,Filename,AnalysisType,AnalysisValue\n"
-                            )
+                            analysisfile.write("LastWriteTime,elrond_host,Filename,AnalysisType,AnalysisValue\n")
                     with open(anysd + "/analysis.csv", "a") as analysisfile:
-                        for ads in ads_info:
-                            ads_name = ads.get('name', 'unknown') if isinstance(ads, dict) else str(ads)
-                            analysisfile.write(
-                                "{},{},{},AlternateDataStream,{}\n".format(
-                                    datetime.now().isoformat(),
-                                    vssimage.replace("'", ""),
-                                    filename,
-                                    ads_name,
-                                )
-                            )
-                    entry, prnt = "{},{},{},alternate data stream found in '{}'\n".format(
-                        datetime.now().isoformat(),
-                        vssimage,
-                        stage,
-                        filename.split("/")[-1] if "/" in filename else filename,
-                    ), " -> {} -> alternate data stream found in '{}' for {}".format(
-                        datetime.now().isoformat().replace("T", " "),
-                        filename.split("/")[-1] if "/" in filename else filename,
-                        vssimage,
-                    )
-                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
-
-                # Check for Extended Attributes
-                attributes = record.get('attributess', record.get('attributes', []))
-                has_ea = False
-                if isinstance(attributes, list):
-                    for attr in attributes:
-                        if isinstance(attr, dict) and attr.get('attribute_type') == 'ExtendedAttribute':
-                            has_ea = True
-                            break
-                        elif isinstance(attr, str) and 'extended' in attr.lower():
-                            has_ea = True
-                            break
-
-                if has_ea:
-                    ea_count += 1
-                    if not os.path.exists(anysd + "/analysis.csv"):
-                        with open(anysd + "/analysis.csv", "a") as analysisfile:
-                            analysisfile.write(
-                                "LastWriteTime,elrond_host,Filename,AnalysisType,AnalysisValue\n"
-                            )
-                    with open(anysd + "/analysis.csv", "a") as analysisfile:
-                        analysisfile.write(
-                            "{},{},{},ExtendedAttributes,Yes\n".format(
-                                datetime.now().isoformat(),
-                                vssimage.replace("'", ""),
-                                filename,
-                            )
-                        )
-                    entry, prnt = "{},{},{},extended attribute found in '{}'\n".format(
-                        datetime.now().isoformat(),
-                        vssimage,
-                        stage,
-                        filename.split("/")[-1] if "/" in filename else filename,
-                    ), " -> {} -> extended attribute found in '{}' for {}".format(
-                        datetime.now().isoformat().replace("T", " "),
-                        filename.split("/")[-1] if "/" in filename else filename,
-                        vssimage,
-                    )
-                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
-
-                # Check for Timestomping ($SI vs $FN timestamp mismatch)
-                # Artemis provides both standard timestamps and filename timestamps
-                si_created = record.get('created', 0)
-                si_modified = record.get('modified', 0)
-                fn_created = record.get('filename_created', 0)
-                fn_modified = record.get('filename_modified', 0)
-
-                # Timestomping indicators:
-                # 1. $SI timestamp is earlier than $FN timestamp (impossible naturally)
-                # 2. Timestamps with suspicious patterns (all zeros in microseconds)
-                if si_created and fn_created:
-                    try:
-                        si_ts = int(si_created) if isinstance(si_created, (int, float)) else 0
-                        fn_ts = int(fn_created) if isinstance(fn_created, (int, float)) else 0
-
-                        # $SI created before $FN created suggests timestomping
-                        if si_ts > 0 and fn_ts > 0 and si_ts < fn_ts:
-                            timestomp_count += 1
-                            if not os.path.exists(anysd + "/analysis.csv"):
-                                with open(anysd + "/analysis.csv", "a") as analysisfile:
-                                    analysisfile.write(
-                                        "LastWriteTime,elrond_host,Filename,AnalysisType,AnalysisValue\n"
-                                    )
-                            with open(anysd + "/analysis.csv", "a") as analysisfile:
-                                analysisfile.write(
-                                    "{},{},{},Timestomp,$SI: {}|$FN: {}\n".format(
-                                        datetime.now().isoformat(),
-                                        vssimage.replace("'", ""),
-                                        filename,
-                                        si_ts,
-                                        fn_ts,
-                                    )
-                                )
-                            entry, prnt = "{},{},{},evidence of timestomping found in '{}'\n".format(
-                                datetime.now().isoformat(),
-                                vssimage,
-                                stage,
-                                filename.split("/")[-1] if "/" in filename else filename,
-                            ), " -> {} -> evidence of timestomping found in '{}' for {}".format(
-                                datetime.now().isoformat().replace("T", " "),
-                                filename.split("/")[-1] if "/" in filename else filename,
-                                vssimage,
+                        for kind, value in findings:
+                            counts[kind] += 1
+                            analysisfile.write("{},{},{},{},{}\n".format(
+                                datetime.now().isoformat(), vssimage.replace("'", ""),
+                                filename.replace(",", "%2C"), kind, value.replace(",", "%2C"),
+                            ))
+                            entry, prnt = "{},{},{},{} found in '{}'\n".format(
+                                datetime.now().isoformat(), vssimage, stage, audit_text[kind], short
+                            ), " -> {} -> {} found in '{}' for {}".format(
+                                datetime.now().isoformat().replace("T", " "), audit_text[kind], short, vssimage
                             )
                             write_audit_log_entry(verbosity, output_directory, entry, prnt)
-                    except (ValueError, TypeError):
-                        pass
-
-        except Exception as e:
+        except (OSError, ValueError) as e:
             print(" -> {} -> warning: could not analyse MFT JSON: {}".format(
-                datetime.now().isoformat().replace("T", " "),
-                str(e)[:100]
+                datetime.now().isoformat().replace("T", " "), str(e)[:100]
             ))
-
-        # Print summary
-        print(" -> {} -> MFT analysis complete: {} records processed".format(
-            datetime.now().isoformat().replace("T", " "),
-            records_processed
-        ))
-        print(" -> {} ->   Extended Attributes: {} files".format(
-            datetime.now().isoformat().replace("T", " "),
-            ea_count
-        ))
-        print(" -> {} ->   Alternate Data Streams: {} files".format(
-            datetime.now().isoformat().replace("T", " "),
-            ads_count
-        ))
-        print(" -> {} ->   Timestomping indicators: {} files".format(
-            datetime.now().isoformat().replace("T", " "),
-            timestomp_count
-        ))
+        now = datetime.now().isoformat().replace("T", " ")
+        print(" -> {} -> MFT analysis complete: {} records processed".format(now, records_processed))
+        print(" -> {} ->   Extended Attributes (not Windows' own): {} files".format(now, counts["ExtendedAttributes"]))
+        print(" -> {} ->   Timestomping indicators ($SI before $FN, executables in user-writable paths): {} files".format(now, counts["Timestomp"]))
+        if counts["AlternateDataStream"]:
+            print(" -> {} ->   Alternate Data Streams: {} files".format(now, counts["AlternateDataStream"]))
 
     def analyse_disk_images(stage, vssimage, ar, f, anysd):
         print()
@@ -709,7 +650,7 @@ def analyse_artefacts(
                         if f.endswith("MFT.csv"):
                             mft_files_found = True
                             analyse_disk_images(stage, vssimage, ar, f, anysd)
-                        elif f.lower() in ("mft.json", "mft.jsonl", "rawfiles.json", "rawfiles.jsonl"):
+                        elif f.lower() in MFT_JSON_NAMES:
                             mft_files_found = True
                             analyse_mft_json(stage, vssimage, os.path.join(ar, f), anysd, verbosity, output_directory)
                         # Handle Artemis UUID-named output files
@@ -720,7 +661,7 @@ def analyse_artefacts(
                     if f.endswith("MFT.csv"):
                         mft_files_found = True
                         analyse_disk_images(stage, vssimage, ar, f, anysd)
-                    elif f.lower() in ("mft.json", "mft.jsonl", "rawfiles.json", "rawfiles.jsonl"):
+                    elif f.lower() in MFT_JSON_NAMES:
                         mft_files_found = True
                         analyse_mft_json(stage, vssimage, os.path.join(ar, f), anysd, verbosity, output_directory)
                     # Handle Artemis UUID-named output files via status.log

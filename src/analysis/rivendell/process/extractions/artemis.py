@@ -1052,38 +1052,28 @@ def extract_prefetch(
     stage: str,
     prefetch_dir: str,
 ) -> bool:
-    """Extract Windows Prefetch files using Artemis, logging each file individually."""
+    """Extract Windows Prefetch files using Artemis. Its prefetch parser only
+    takes a directory (--alt-dir), so the whole directory goes in one run."""
     if not os.path.exists(prefetch_dir):
         return False
 
-    # Get list of .pf files
     pf_files = [f for f in os.listdir(prefetch_dir) if f.lower().endswith('.pf')]
 
     if not pf_files:
         return False
 
-    success_count = 0
-    for pf_file in pf_files:
-        pf_path = os.path.join(prefetch_dir, pf_file)
-        # Log each prefetch file being processed
-        print(
-            "     processing prefetch file '{}'".format(pf_file)
-        )
-        result = extract_with_artemis(
-            verbosity=verbosity,
-            vssimage=vssimage,
-            output_directory=output_directory,
-            img=img,
-            vss_path_insert=vss_path_insert,
-            stage=stage,
-            artifact_type="prefetch",
-            artifact_file=pf_path,
-            output_subdir="prefetch",
-        )
-        if result:
-            success_count += 1
-
-    return success_count > 0
+    print("     processing {} prefetch files".format(len(pf_files)))
+    return extract_with_artemis(
+        verbosity=verbosity,
+        vssimage=vssimage,
+        output_directory=output_directory,
+        img=img,
+        vss_path_insert=vss_path_insert,
+        stage=stage,
+        artifact_type="prefetch",
+        artifact_dir=prefetch_dir,
+        output_subdir="prefetch",
+    )
 
 
 def extract_eventlogs(
