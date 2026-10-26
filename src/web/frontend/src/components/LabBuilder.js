@@ -169,6 +169,11 @@ function LabBuilder() {
       plan.push({ label: `Run Atomic Red Team ${techniques} in ${picked.name}, each test's logs kept apart, and bring them back as Your lab`, kind: 'record', machine: picked });
       if (revertTo && !labWin) plan.push({ label: `Revert ${picked.name} to ${revertTo}`, kind: 'none' });
       if (revertTo && labWin) plan.push({ label: `Revert ${picked.name} to ${revertTo} (UTM snapshot)`, kind: 'revert', machine: picked });
+      if (mordorElrond) {
+        if (!caseId.trim()) blocker = blocker || 'Give the case ID Elrond should file the analysis under.';
+        plan.push({ label: `Turn the recording into a dataset Elrond reads: ${mordorRoot}/lab/<run>/acquisitions/`, kind: 'lab', command: 'mordor-dataset', run: true });
+        plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on the recording as ${caseId || '…'}`, kind: 'elrond', run: true });
+      }
     }
   } else if (mode === 'setup') {
     if (!picked) blocker = 'No machine with a known OS yet (Lab → Lab machines).';
@@ -232,7 +237,13 @@ function LabBuilder() {
   const deploy = async () => {
     setError(null);
     setOutput('');
-    const todo = plan.filter((p) => p.kind !== 'none');
+    // Deploy names the recording, so the steps after it know where it is
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    const runName = picked ? `deploy-${picked.name}-${stamp}`.slice(0, 64) : '';
+    const todo = plan.filter((p) => p.kind !== 'none').map((p) => {
+      if (!p.run) return p;
+      return p.kind === 'elrond' ? { ...p, paths: [`${mordorRoot}/lab/${runName}/acquisitions/`] } : { ...p, args: [runName] };
+    });
     setSteps(todo.map((p) => ({ label: p.label, status: 'waiting' })));
     const mark = (i, patch) => setSteps((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)));
     for (let i = 0; i < todo.length; i += 1) {
@@ -259,7 +270,7 @@ function LabBuilder() {
               result = await follow(await postMordorLab('provision', { ...body, step: st.step }));
             }
           } else if (p.kind === 'setup') req = postMordorLab('provision', { ...body, step: 'sensor' });
-          else if (p.kind === 'record') req = postMordorLab('record', { ...body, techniques, revert_to: m.name === lab.lab_windows_vm ? '' : revertTo, execute: true });
+          else if (p.kind === 'record') req = postMordorLab('record', { ...body, techniques, run_name: runName, revert_to: m.name === lab.lab_windows_vm ? '' : revertTo, execute: true });
           else req = postMordorLab('action', { ...body, action: 'revert', snapshot: revertTo });
           if (req) {
             // eslint-disable-next-line no-await-in-loop
@@ -417,8 +428,8 @@ function LabBuilder() {
                 </Step>
               )}
             </div>
-            {(mode === 'capture' || mode === 'download') && (
-              <Step n="3" title="Then">
+            {(mode === 'record' || mode === 'capture' || mode === 'download') && (
+              <Step n={mode === 'record' ? '5' : '3'} title="Then">
                 {mode === 'download' && !OTRF_GROUPS[group].length ? (
                   <p className="lab-note">Pick APT29 or the Atomic sets to analyse them here; for every dataset, use the <Link to="/elrond">Elrond</Link> page per dataset.</p>
                 ) : (

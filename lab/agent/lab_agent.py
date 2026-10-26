@@ -89,6 +89,19 @@ def _capture(args: list[str]) -> list[str]:
     raise ValueError("a preset name, or: custom <name> <T1059.001,T1003,...>")
 
 
+def _record(args: list[str]) -> list[str]:
+    """As _capture, with an optional run name after the techniques (Deploy names its runs)."""
+    if len(args) == 4 and args[0] == "custom" and NAME.match(args[3]):
+        return _capture(args[:3]) + [args[3]]
+    return _capture(args)
+
+
+def _run_name(args: list[str]) -> list[str]:
+    if len(args) == 1 and NAME.match(args[0]):
+        return args
+    raise ValueError("a recording's run name")
+
+
 VM_ACTIONS = ("create", "start", "stop", "delete", "status")
 
 # command -> (argument validator, long-running). Everything else is refused:
@@ -105,7 +118,8 @@ COMMANDS = {
     "mordor-download": (_datasets, True),
     "mordor-sensor": (_none, True),
     "mordor-capture": (_capture, True),
-    "mordor-record": (_capture, True),
+    "mordor-record": (_record, True),
+    "mordor-dataset": (_run_name, True),
     "teardown": (_none, True),
 }
 # Commands that change or destroy something; the UI confirms these first.

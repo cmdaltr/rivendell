@@ -457,11 +457,11 @@ cmd_mordor_capture() {
 TELEMETRY_LAB="${RIVENDELL_TELEMETRY_LAB:-$REPO_ROOT/src/mordor/data/telemetry/lab}"
 
 cmd_mordor_record() {
-  local preset techniques run
-  # Non-interactive: mordor-record <preset> | mordor-record custom <name> <T1,T2>
+  local preset techniques run=""
+  # Non-interactive: mordor-record <preset> | mordor-record custom <name> <T1,T2> [run]
   if [ -n "${1:-}" ]; then
     if [ "$1" = custom ]; then
-      preset="${2:?name}"; techniques="${3:?techniques}"
+      preset="${2:?name}"; techniques="${3:?techniques}"; run="${4:-}"
     else
       preset="$1"; techniques="$(preset_techniques "$1")"; [ -n "$techniques" ] || die "Presets: $MORDOR_PRESETS"
     fi
@@ -479,8 +479,8 @@ cmd_mordor_record() {
     esac
     [ -n "${techniques:-}" ] || techniques="$(preset_techniques "$preset")"
   fi
-  case "$preset$techniques" in *[!A-Za-z0-9_.,-]*) die "Names and technique IDs may only use letters, digits, _ . , -" ;; esac
-  run="lab-win11-$preset-$(date +%Y%m%d-%H%M)"
+  case "$preset$techniques$run" in *[!A-Za-z0-9_.,-]*) die "Names and technique IDs may only use letters, digits, _ . , -" ;; esac
+  [ -n "$run" ] || run="lab-win11-$preset-$(date +%Y%m%d-%H%M)"
   if uses_tart; then
     "$LAB_ROOT/windows/utm-vm.sh" record "$techniques" "$run" "$TELEMETRY_LAB" || return 1
   else
@@ -492,6 +492,14 @@ cmd_mordor_record() {
   fi
   ( cd "$REPO_ROOT" && RIVENDELL_TELEMETRY_LAB="$TELEMETRY_LAB" python3 -m src.mordor.telemetry --build --source lab ) \
     && ok "Recorded telemetry: $TELEMETRY_LAB/$run (source 'Your lab'; see /api/mordor/telemetry)"
+}
+
+# mordor-dataset <run>: a recording as a dataset Elrond can analyse, in $MORDOR_ROOT/lab/<run>/
+# (acquisitions/ plus expected.json, the tests that ran). See src/mordor/lab/dataset.py.
+cmd_mordor_dataset() {
+  local run="${1:?run name (a folder in $TELEMETRY_LAB)}"
+  case "$run" in *[!A-Za-z0-9_.-]*) die "Run names may only use letters, digits, _ . -" ;; esac
+  ( cd "$REPO_ROOT" && python3 -m src.mordor.lab.dataset --run "$run" --src "$TELEMETRY_LAB" --dest "$MORDOR_ROOT/lab" )
 }
 
 # ----------------------------------------------------------------------- rivendell
@@ -674,7 +682,8 @@ Usage: ./lab.sh [command]
   mordor-download [test paths...]   e.g. apt29/day1 atomic/persistence
   mordor-sensor       Sysmon + Atomic Red Team in the Windows VM
   mordor-capture      Run atomics and export a dataset
-  mordor-record [preset | custom <name> <T1,T2>]   Record each atomic test's logs for the telemetry engine
+  mordor-record [preset | custom <name> <T1,T2> [run]]   Record each atomic test's logs for the telemetry engine
+  mordor-dataset <run>   Turn a recording into a dataset Elrond can analyse ($MORDOR_ROOT/lab/<run>)
   rivendell-env       Write the env file for run_test.py and check mounts
   agent [start|stop|status]   Host agent so the Rivendell web UI can drive the lab
   status | teardown
@@ -745,6 +754,7 @@ case "${1:-}" in
   mordor-sensor) cmd_mordor_sensor ;;
   mordor-capture) shift; cmd_mordor_capture "$@" ;;
   mordor-record) shift; cmd_mordor_record "$@" ;;
+  mordor-dataset) shift; cmd_mordor_dataset "$@" ;;
   agent) shift; cmd_agent "$@" ;;
   rivendell-env) cmd_rivendell_env ;;
   state) cmd_state ;;

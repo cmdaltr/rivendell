@@ -156,7 +156,8 @@ def handle_post(parts: list[str], body: dict, jobs) -> tuple[int, dict]:
                 return 200, {"preview": True, "plan": plan, "techniques": techs,
                              "warnings": [] if lab_windows else record.preflight(engine, name, os_name)}
             if lab_windows:
-                return 202, jobs.start("mordor-record", ["custom", safe_name(run_name or "ui"), ",".join(techs)])
+                args = ["custom", safe_name(run_name or "ui"), ",".join(techs)]
+                return 202, jobs.start("mordor-record", args + ([safe_name(run_name)] if run_name else []))
             return 202, jobs.start_python(f"record {','.join(techs)} on {name}", lambda say: record.record(
                 engine, name, os_name, techs, run_name=run_name, settle=settle, timeout=timeout,
                 revert_to=revert_to, execute=True, say=say))
