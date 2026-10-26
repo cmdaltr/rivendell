@@ -28,6 +28,7 @@ const SETTINGS = [
 ];
 
 const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
+const STATUS_ICON = { succeeded: '✅', failed: '❌', cancelled: '❌', running: '⏳' };
 const formatTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '—');
 
 function AgentPanel({ status, onRecheck }) {
@@ -306,7 +307,7 @@ function LabManage({ section = 'lab', children = null }) {
               {runs.map((r) => (
                 <tr key={r.id}>
                   <td><code>{r.label}</code></td>
-                  <td><span className={`lab-status lab-status-${r.status}`}>{r.status}</span></td>
+                  <td className="lab-status-icon" title={r.status}>{STATUS_ICON[r.status] || r.status}</td>
                   <td>{formatTime(r.started)}</td>
                   <td><button className="secondary" onClick={() => openRun(r.id)}>Output</button></td>
                 </tr>
