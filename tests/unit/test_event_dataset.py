@@ -124,5 +124,23 @@ class EventDatasetTests(unittest.TestCase):
         self.assertTrue(Path(raw).resolve().is_relative_to(self.out.resolve()))
 
 
+    def test_large_hosts_are_split_below_the_ioc_size_limit(self):
+        # IOC extraction skips files of 10 MB or more, so a big host is written in parts
+        lines = self.out / "host.jsonl"
+        lines.write_text("\n".join(json.dumps(event_dataset.to_artemis(dict(SYSMON_PROCESS, RecordNumber=i)))
+                                   for i in range(50)) + "\n")
+        parts = event_dataset.write_json_arrays(str(lines), str(self.out / "evt"), "big", part_bytes=4000)
+        self.assertGreater(len(parts), 1)
+        self.assertTrue(parts[0].endswith("big-0001.json"))
+        records = [r for part in parts for r in json.loads(Path(part).read_text())]
+        self.assertEqual([r["data"]["Event"]["System"]["EventRecordID"] for r in records], list(range(50)))
+        self.assertTrue(all(os.path.getsize(part) <= 4000 for part in parts))
+
+    def test_a_small_host_is_one_file(self):
+        lines = self.out / "host.jsonl"
+        lines.write_text(json.dumps(event_dataset.to_artemis(SYSMON_PROCESS)) + "\n")
+        parts = event_dataset.write_json_arrays(str(lines), str(self.out / "evt"), "small")
+        self.assertEqual([Path(p).name for p in parts], ["small.json"])
+
 if __name__ == "__main__":
     unittest.main()

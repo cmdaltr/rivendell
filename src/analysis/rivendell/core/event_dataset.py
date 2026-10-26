@@ -17,6 +17,9 @@ logger = logging.getLogger(__name__)
 
 PLATFORM = "Windows"
 EVT_DIR = os.path.join("artefacts", "cooked", "evt")
+# Elrond's IOC extraction skips files of 10 MB or more (analysis.py), so a host's events are
+# written in parts below that.
+PART_BYTES = 9_000_000
 # Flat OTRF fields that belong in the event's System block; the rest is EventData, apart from
 # what Winlogbeat/NXLog added in transit, which isn't part of the event.
 SYSTEM_FIELDS = {
@@ -138,31 +141,53 @@ def split_by_host(paths: Iterable[str], fallback: str, out_dir: str) -> Dict[str
     return {h: (os.path.join(out_dir, f"{h}.jsonl"), counts[h]) for h in handles}
 
 
-def write_json_array(lines_path: str, dest: str) -> None:
-    """Rewrite a JSON-lines file as the one JSON array Artemis writes per log, streamed."""
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(lines_path, encoding="utf-8") as src, open(dest, "w", encoding="utf-8") as out:
-        out.write("[")
-        for i, line in enumerate(src):
-            out.write(("," if i else "") + line.rstrip("\n"))
-        out.write("]")
+def write_json_arrays(lines_path: str, dest_dir: str, stem: str, part_bytes: int = PART_BYTES) -> List[str]:
+    """Rewrite a JSON-lines file as JSON arrays like Artemis's, streamed: <stem>.json, or
+    <stem>-0001.json, <stem>-0002.json ... when the events don't fit in one part."""
+    os.makedirs(dest_dir, exist_ok=True)
+    parts: List[str] = []
+    out = None
+    size = 0
+    try:
+        with open(lines_path, encoding="utf-8") as src:
+            for line in src:
+                line = line.rstrip("\n")
+                if out is None or size + len(line) + 1 > part_bytes:
+                    if out is not None:
+                        out.write("]")
+                        out.close()
+                    parts.append(os.path.join(dest_dir, f"{stem}-{len(parts) + 1:04d}.json"))
+                    out = open(parts[-1], "w", encoding="utf-8")
+                    out.write("[" + line)
+                    size = len(line) + 2
+                else:
+                    out.write("," + line)
+                    size += len(line) + 1
+    finally:
+        if out is not None:
+            out.write("]")
+            out.close()
+    if len(parts) == 1:
+        single = os.path.join(dest_dir, f"{stem}.json")
+        os.replace(parts[0], single)
+        parts = [single]
+    return parts
 
 
-def ingest(staging: str, stem: str, output_directory: str) -> List[Tuple[str, int, str]]:
+def ingest(staging: str, stem: str, output_directory: str) -> List[Tuple[str, int, List[str]]]:
     """Lay one extracted event dataset out as Elrond hosts.
 
     Writes <output>/<host>/artefacts/cooked/evt/<stem>.json for every host its events name and
     creates <host>/artefacts/raw/ (empty: there's no disk behind it), so the host is registered
-    like any other. Returns [(host, events, evt file)]."""
+    like any other. Returns [(host, events, [evt files])]."""
     split_dir = os.path.join(staging, ".by-host")
     hosts = split_by_host(json_files(staging), _host_name(stem, "dataset"), split_dir)
     placed = []
     for host, (lines_path, count) in sorted(hosts.items()):
         host_dir = os.path.join(output_directory, host)
         os.makedirs(os.path.join(host_dir, "artefacts", "raw"), exist_ok=True)
-        dest = os.path.join(host_dir, EVT_DIR, f"{stem}.json")
-        write_json_array(lines_path, dest)
-        placed.append((host, count, dest))
+        files = write_json_arrays(lines_path, os.path.join(host_dir, EVT_DIR), stem)
+        placed.append((host, count, files))
     return placed
 
 
@@ -171,7 +196,7 @@ def platform_entry(host: str) -> str:
     return f"{host}::{PLATFORM}"
 
 
-def summary(placed: List[Tuple[str, int, str]]) -> Optional[str]:
+def summary(placed: List[Tuple[str, int, List[str]]]) -> Optional[str]:
     """'3 hosts, 196,071 events' for the audit log."""
     if not placed:
         return None

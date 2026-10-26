@@ -270,13 +270,16 @@ def ingest_event_dataset(staging, stem, output_directory, verbosity, allimgs):
         "{},{},event dataset,{}\n".format(datetime.now().isoformat(), stem, event_dataset.summary(placed)),
         "   '{}' is an event dataset: {}".format(stem, event_dataset.summary(placed)),
     )
-    for host, count, evt_file in placed:
-        enrich_with_mitre(evt_file, "eventlogs")
+    for host, count, evt_files in placed:
+        for evt_file in evt_files:
+            enrich_with_mitre(evt_file, "eventlogs")
         allimgs[os.path.join(output_directory, host, "artefacts", "raw")] = event_dataset.platform_entry(host)
         write_audit_log_entry(
             verbosity, output_directory,
             "{},{},identified platform,{}\n".format(datetime.now().isoformat(), host, event_dataset.PLATFORM),
-            "    {}: {:,} events -> {}".format(host, count, evt_file),
+            "    {}: {:,} events -> {}{}".format(
+                host, count, os.path.dirname(evt_files[0]),
+                " ({} parts)".format(len(evt_files)) if len(evt_files) > 1 else ""),
         )
     return [host for host, _, _ in placed]
 
