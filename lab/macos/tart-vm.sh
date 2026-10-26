@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Apple silicon only: Linux and macOS target VMs with Tart.
 #   tart-vm.sh create|start|stop|delete|status <linux|macos>
+#   tart-vm.sh move <linux|macos> <dir>   move the VM to another TART_HOME (e.g. local disk while testing)
 # Images are Cirrus Labs' public Tart images (default login admin/admin, which
 # this script changes to the lab password once provisioned).
 set -euo pipefail
 . "$(dirname "$0")/../lib/common.sh"
 load_config
 
-action="${1:?create|start|stop|delete|status}"; kind="${2:?linux|macos}"
+action="${1:?create|start|stop|delete|status|move}"; kind="${2:?linux|macos}"
 TART="$(tart_bin)"; [ -n "$TART" ] || die "Tart is not installed. Run: ./lab.sh install"
 is_arm || die "Tart VMs need Apple silicon. On an Intel Mac the lab uses Vagrant + VirtualBox."
 
@@ -92,6 +93,31 @@ case "$action" in
   delete)
     confirm "Delete $VM and its disk?" n || exit 0
     "$TART" stop "$VM" 2>/dev/null || true; "$TART" delete "$VM"; ok "$VM deleted" ;;
+  move)
+    dest="${3:?move needs a directory, e.g. $LAB_VM_DIR/tart or ~/.rivendell-lab/tart}"
+    mkdir -p "$dest/vms"; dest="$(cd "$dest" && pwd)"
+    old_home="$(cd "$TART_HOME" && pwd)"
+    [ "$dest" != "$old_home" ] || die "$VM is already in $dest"
+    vm_exists || die "$VM doesn't exist in $old_home"
+    src="$old_home/vms/$VM"
+    need_kb="$(du -sk "$src" | cut -f1)"
+    free_kb="$(df -k "$dest" | awk 'NR==2 {print $4}')"
+    [ "$free_kb" -gt $((need_kb + 5 * 1024 * 1024)) ] || die "Not enough space in $dest: $((need_kb / 1048576)) GB needed plus 5 GB spare, $((free_kb / 1048576)) GB free"
+    "$TART" stop "$VM" 2>/dev/null || true
+    [ -f "$RUN_DIR/forward-$PORT.pid" ] && kill "$(cat "$RUN_DIR/forward-$PORT.pid")" 2>/dev/null || true
+    info "Copying $VM from $old_home to $dest ($((need_kb / 1048576)) GB in use)"
+    mkdir -p "$dest/vms/$VM"
+    for f in "$src"/*; do
+      [ -f "$f" ] || continue  # skips control.sock, which tart recreates
+      echo "  $(basename "$f")"
+      python3 "$LAB_ROOT/lib/sparse_copy.py" "$f" "$dest/vms/$VM/$(basename "$f")" || die "Copy failed; $VM is still in $old_home"
+    done
+    TART_HOME="$dest" "$TART" list --quiet | grep -qx "$VM" || die "Tart doesn't see $VM in $dest; $VM is still in $old_home"
+    LAB_TART_HOME="$dest"; save_config >/dev/null
+    ok "$VM now runs from $dest (LAB_TART_HOME in $LAB_CONFIG)"
+    if confirm "Remove the old copy in $old_home?" y; then
+      TART_HOME="$old_home" "$TART" delete "$VM" && ok "Removed $src"
+    fi ;;
   status)
     if vm_exists; then echo "$VM: $([ -n "$(vm_ip)" ] && echo "running at $(vm_ip), SSH 127.0.0.1:$PORT" || echo stopped)"; else echo "$VM: not created"; fi ;;
   *) die "unknown action $action" ;;

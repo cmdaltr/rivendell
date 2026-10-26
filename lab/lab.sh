@@ -259,7 +259,8 @@ cmd_macos_vm() {
     menu "macOS VM (Tart; SSH on 127.0.0.1:2231)" "Create / provision (~25 GB download)" "Start" "Stop" "Destroy" "Status"
     case "$MENU_CHOICE" in 1) sub=create ;; 2) sub=start ;; 3) sub=stop ;; 4) sub=delete ;; 5) sub=status ;; *) return ;; esac
   fi
-  "$LAB_ROOT/macos/tart-vm.sh" "$sub" macos
+  shift || true
+  "$LAB_ROOT/macos/tart-vm.sh" "$sub" macos "$@"
 }
 
 windows_arm_guide() {
@@ -624,7 +625,7 @@ Usage: ./lab.sh [command]
   configure           Data location, VM sizes, lab password
   linux-targets [up|down|reset|status]   Four seeded Linux containers
   linux-vm [create|start|stop|delete|status]
-  macos-vm [create|start|stop|delete|status]   (Apple silicon)
+  macos-vm [create|start|stop|delete|status|move <dir>]   (Apple silicon)
   windows-vm [create|start|stop|provision|gui|delete|status]
   gandalf-collect [bash|python|powershell|all] ["targets"]
   mordor-download [test paths...]   e.g. apt29/day1 atomic/persistence
