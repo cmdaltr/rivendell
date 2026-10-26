@@ -2952,7 +2952,7 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lab-targets td.lab-slot:last-child { padding-right: 0; text-align: right; }
 .lab-targets td.lab-slot button { width: 100%; padding: 0.35rem 0.6rem; font-size: 0.82rem; white-space: nowrap; }
 .lab-targets td.lab-target { width: auto; }
-.lab-logo-sep { display: inline-block; width: 1px; height: 22px; background: #3a3a6a; margin: 0 0.6rem 0 0.15rem; vertical-align: middle; }
+.lab-logo-sep { display: inline-block; width: 1.4rem; }
 .lab-target > span:first-child .lab-logo, .lab-target > span:first-child .lab-logo-text { margin-right: 0; }
 .lab-logo-toggle { background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px; margin-right: 0.3rem; cursor: pointer; vertical-align: middle; }
 .lab-logo-toggle .lab-logo { margin-right: 0; }
