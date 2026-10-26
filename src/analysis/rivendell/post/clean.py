@@ -138,43 +138,69 @@ def cleanup_small_files_and_empty_dirs(output_directory, min_file_size=10):
 
     print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> cleaning up small files and empty directories...")
 
-    # First pass: delete small files and macOS metadata files. Collected
-    # artefacts (artefacts/raw/) are left alone: an empty .bash_history is
-    # evidence (T1070.003), not clutter.
-    for root, dirs, files in os.walk(output_directory):
-        if "/artefacts/raw" in root.replace(os.sep, "/") + "/":
-            continue
-        for filename in files:
-            filepath = os.path.join(root, filename)
+    # One bottom-up walk: a directory's files go before the directory is checked, so
+    # nested empty directories fall in the same pass. Collected artefacts
+    # (artefacts/raw/) are left alone: an empty .bash_history is evidence
+    # (T1070.003), not clutter.
+    top = os.path.normpath(output_directory)
+    for root, dirs, files in os.walk(top, topdown=False):
+        if "/artefacts/raw/" not in root.replace(os.sep, "/") + "/":
+            for filename in files:
+                filepath = os.path.join(root, filename)
+                try:
+                    if filename.startswith("._") or os.path.getsize(filepath) < min_file_size:
+                        os.remove(filepath)
+                        deleted_files += 1
+                except (OSError, IOError):
+                    pass
+        if root != top:
             try:
-                # Delete macOS AppleDouble metadata files (._*)
-                if filename.startswith("._"):
-                    os.remove(filepath)
-                    deleted_files += 1
-                    continue
-
-                # Delete small files
-                file_size = os.path.getsize(filepath)
-                if file_size < min_file_size:
-                    os.remove(filepath)
-                    deleted_files += 1
-            except (OSError, IOError):
-                pass
-
-    # Second pass: delete empty directories (bottom-up)
-    # We need to walk bottom-up so we can delete nested empty dirs
-    for root, dirs, files in os.walk(output_directory, topdown=False):
-        for dirname in dirs:
-            dirpath = os.path.join(root, dirname)
-            try:
-                # Only delete if directory is empty
-                if not os.listdir(dirpath):
-                    os.rmdir(dirpath)
-                    deleted_dirs += 1
-            except (OSError, IOError):
+                os.rmdir(root)  # only succeeds when empty
+                deleted_dirs += 1
+            except OSError:
                 pass
 
     if deleted_files > 0 or deleted_dirs > 0:
         print(f"     Cleaned up {deleted_files} small files and {deleted_dirs} empty directories")
 
     return deleted_files, deleted_dirs
+
+
+def output_folder_name(key, value):
+    """The case folder an allimgs entry's output is in. Disk images and Gandalf hosts
+    carry '<name>::<platform>' as the value (keyed by mount point or raw/ directory);
+    memory images carry it as the key (the value is the dump's directory)."""
+    entry = value if "::" in str(value) else key
+    return str(entry).split("::")[0].rstrip("/").split("/")[-1]
+
+
+def tidy_processed_output(img_output_dir, max_empty_size=100):
+    """Tidy one host's processed output at the end of a run: drop near-empty files
+    (just [] or {}) from cooked/ and analysis/, and lift a lone file out of its
+    cooked/ subdirectory as cooked/<subdirectory><ext>. Collected artefacts under
+    raw/ are evidence, whatever their size, and aren't touched."""
+    cooked_dir = os.path.join(img_output_dir, "artefacts", "cooked")
+    for processed in (cooked_dir, os.path.join(img_output_dir, "analysis")):
+        for root, _, files in os.walk(processed):
+            for name in files:
+                path = os.path.join(root, name)
+                try:
+                    if os.stat(path).st_size <= max_empty_size:
+                        os.remove(path)
+                except OSError:
+                    pass
+    if not os.path.isdir(cooked_dir):
+        return
+    for subdir in os.listdir(cooked_dir):
+        subdir_path = os.path.join(cooked_dir, subdir)
+        if not os.path.isdir(subdir_path):
+            continue
+        entries = os.listdir(subdir_path)
+        if len(entries) == 1 and os.path.isfile(os.path.join(subdir_path, entries[0])):
+            ext = os.path.splitext(entries[0])[1] or ".json"
+            dst = os.path.join(cooked_dir, subdir + ext)
+            if not os.path.exists(dst):
+                try:
+                    shutil.move(os.path.join(subdir_path, entries[0]), dst)
+                except OSError:
+                    pass

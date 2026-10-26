@@ -44,6 +44,30 @@ job_storage = JobStorage()
 _redis_client = None
 
 
+def output_stats(root: Path) -> tuple:
+    """(files, bytes) under root in one scandir walk: one stat per file, not rglob's
+    is_file() and stat() on every path (E15: 33 min on a full Windows case).
+    macOS resource forks (._*) are skipped; they can raise permission errors."""
+    files = size = 0
+    stack = [str(root)]
+    while stack:
+        try:
+            with os.scandir(stack.pop()) as entries:
+                for entry in entries:
+                    if entry.name.startswith("._"):
+                        continue
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            stack.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            files += 1
+                            size += entry.stat(follow_symlinks=False).st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+    return files, size
+
 def get_redis_client():
     """Get or create Redis client for image locking."""
     global _redis_client
@@ -1103,12 +1127,7 @@ def start_analysis(self, job_id: str):
             output_path = dest_dir
             if output_path.exists():
                 try:
-                    # Skip macOS resource fork files (._*) which can cause permission errors
-                    all_files = [f for f in output_path.rglob("*") if not f.name.startswith('._')]
-                    result_info["output_files"] = len(all_files)
-                    result_info["output_size"] = sum(
-                        f.stat().st_size for f in all_files if f.is_file()
-                    )
+                    result_info["output_files"], result_info["output_size"] = output_stats(output_path)
                 except (FileNotFoundError, PermissionError, OSError) as e:
                     # Handle cases where paths don't exist or are inaccessible
                     logger.warning(f"Error calculating output stats: {e}")

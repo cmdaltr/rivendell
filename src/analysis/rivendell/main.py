@@ -63,6 +63,8 @@ def is_memory_image(filename, imgformat, filepath=None):
 from rivendell.post.clean import archive_artefacts
 from rivendell.post.clean import delete_artefacts
 from rivendell.post.clean import cleanup_small_files_and_empty_dirs
+from rivendell.post.clean import output_folder_name
+from rivendell.post.clean import tidy_processed_output
 from rivendell.post.elastic.config import configure_elastic_stack
 from rivendell.post.mitre.nav_config import configure_navigator
 from rivendell.post.splunk.config import configure_splunk_stack
@@ -1317,63 +1319,8 @@ def main(
     doneimgs = sorted(list(set(doneimgs)))
     unmount_images(elrond_mount, ewf_mount)
     for eachimg, eachname in allimgs.items():
-        # Gandalf hosts are keyed by their raw/ directory; the host name is the value.
-        img_name = eachname if gandalf else eachimg
-        img_output_dir = output_directory + str(img_name.split("::")[0]).split("/")[-1]
-
-        # First pass: remove small/empty processed output (JSON with just [] or
-        # empty). Only cooked/ and analysis/: collected artefacts under raw/ (a
-        # short crontab or bash history) are evidence, whatever their size.
-        processed_dirs = [os.path.join(img_output_dir, "artefacts", "cooked"), os.path.join(img_output_dir, "analysis")]
-        for doneroot, donedirs, donefiles in (w for d in processed_dirs for w in os.walk(d)):
-            for donefile in donefiles:
-                filepath = os.path.join(doneroot, donefile)
-                if os.path.exists(filepath):
-                    try:
-                        filesize = os.stat(filepath).st_size
-                        # Remove files <= 100 bytes (empty or just [] or {})
-                        if filesize <= 100:
-                            os.remove(filepath)
-                    except:
-                        pass
-
-        # Second pass: move single files from subdirectories to parent (cooked dir)
-        cooked_dir = os.path.join(img_output_dir, "artefacts", "cooked")
-        if os.path.exists(cooked_dir):
-            for subdir in os.listdir(cooked_dir):
-                subdir_path = os.path.join(cooked_dir, subdir)
-                if os.path.isdir(subdir_path):
-                    files_in_subdir = [f for f in os.listdir(subdir_path) if os.path.isfile(os.path.join(subdir_path, f))]
-                    # If only one file in subdirectory, move it up to cooked dir
-                    if len(files_in_subdir) == 1:
-                        src_file = os.path.join(subdir_path, files_in_subdir[0])
-                        # Name the file after the subdirectory (e.g., usnjrnl.json)
-                        dst_file = os.path.join(cooked_dir, subdir + ".json")
-                        try:
-                            shutil.move(src_file, dst_file)
-                        except:
-                            pass
-
-        # Third pass: remove empty directories and cleanup raw artefacts
-        for doneroot, donedirs, donefiles in os.walk(img_output_dir, topdown=False):
-            # Remove raw IE directories
-            if os.path.exists(doneroot + "/artefacts/raw/"):
-                for eachdir in os.listdir(doneroot + "/artefacts/raw/"):
-                    if os.path.exists(doneroot + "/artefacts/raw/" + eachdir + "/IE/"):
-                        try:
-                            shutil.rmtree(doneroot + "/artefacts/raw/" + eachdir)
-                        except:
-                            pass
-            # Remove empty directories
-            # TEMPORARILY DISABLED for debugging - see BUG3_DEEP_INVESTIGATION.md
-            # This was removing /artefacts/ directories when artifact copy silently failed
-            # for donedir in donedirs:
-            #     dirpath = os.path.join(doneroot, donedir)
-            #     try:
-            #         if os.path.exists(dirpath) and len(os.listdir(dirpath)) == 0:
-            #             shutil.rmtree(dirpath)
-            #     except:
-            #         pass
+        img_output_dir = output_directory + output_folder_name(eachimg, eachname)
+        tidy_processed_output(img_output_dir)
     for doneimg in doneimgs:
         print("       '{}'".format(doneimg))
         entry, prnt = "{},{},finished,'{}'-'{}': ({} seconds)".format(

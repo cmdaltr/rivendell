@@ -1,0 +1,55 @@
+"""End-of-run cleanup (post/clean.py): processed output tidied, collected artefacts kept (E15, E20, E25)."""
+import sys
+from pathlib import Path
+
+# Appended, not prepended: src/analysis/platform would shadow the stdlib module.
+sys.path.append(str(Path(__file__).resolve().parents[2] / "src" / "analysis"))
+
+from rivendell.post.clean import (  # noqa: E402
+    cleanup_small_files_and_empty_dirs, output_folder_name, tidy_processed_output)
+
+
+def write(path, body):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body)
+    return path
+
+
+def test_every_kind_of_entry_names_its_case_folder():
+    # Disk image: keyed by mount point (E20: the old cleanup used the key, elrond_mount00)
+    assert output_folder_name("/mnt/elrond_mount00", "WIN-DC01.E01::Windows") == "WIN-DC01.E01"
+    # Gandalf host: keyed by its raw/ directory
+    assert output_folder_name("/out/lab-win11/artefacts/raw", "lab-win11::Windows") == "lab-win11"
+    # Memory: the name is the key, the value the dump's directory
+    assert output_folder_name("mem.raw::Win10x64_19041", "/evidence/case1") == "mem.raw"
+
+
+def test_tidy_drops_empty_processed_output_but_not_raw(tmp_path):
+    host = tmp_path / "host"
+    empty_cooked = write(host / "artefacts" / "cooked" / "registry" / "a.json", "[]")
+    write(host / "artefacts" / "cooked" / "registry" / "b.json", "[" + "1," * 100 + "1]")
+    empty_analysis = write(host / "analysis" / "iocs.csv", "ioc\n")
+    history = write(host / "artefacts" / "raw" / "user_profiles" / "root+.bash_history", "")
+    tidy_processed_output(str(host))
+    assert not empty_cooked.exists() and not empty_analysis.exists()
+    assert history.exists()
+
+
+def test_a_lone_file_is_lifted_with_its_own_extension(tmp_path):
+    host = tmp_path / "host"
+    write(host / "artefacts" / "cooked" / "usnjrnl" / "journal.json", "[" + "1," * 100 + "1]")
+    write(host / "artefacts" / "cooked" / "prefetch" / "prefetch.csv", "x" * 200)
+    tidy_processed_output(str(host))
+    cooked = host / "artefacts" / "cooked"
+    assert (cooked / "usnjrnl.json").is_file()
+    assert (cooked / "prefetch.csv").is_file()  # was renamed prefetch.json
+
+
+def test_one_walk_removes_small_files_and_nested_empty_dirs(tmp_path):
+    write(tmp_path / "h" / "artefacts" / "cooked" / "a" / "b" / "tiny.json", "[]")
+    write(tmp_path / "h" / "._meta", "x" * 50)
+    kept = write(tmp_path / "h" / "artefacts" / "raw" / "crontab", "")
+    files, dirs = cleanup_small_files_and_empty_dirs(str(tmp_path))
+    assert files == 2
+    assert not (tmp_path / "h" / "artefacts" / "cooked").exists()
+    assert kept.exists() and tmp_path.is_dir()
