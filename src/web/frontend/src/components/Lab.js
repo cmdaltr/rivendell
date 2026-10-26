@@ -253,7 +253,7 @@ function LabManage({ section = 'lab', children = null }) {
     ? <img className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
     : <span className="lab-logo-text">{f}</span>);
   const field = ([key, label, help]) => (
-    <label key={key} className={`lab-field${DIR_KEYS.includes(key) ? '' : ' lab-field-narrow'}`} title={help}>
+    <label key={key} className={`lab-field${DIR_KEYS.includes(key) ? '' : ' lab-field-narrow'}${key === 'WINDOWS_VM_MEMORY_MB' ? ' lab-field-winmem' : ''}`} title={help}>
       <span>{label}</span>
       <input type="text" value={settings[key] ?? ''} placeholder={help}
              onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} />
