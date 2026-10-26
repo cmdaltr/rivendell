@@ -174,6 +174,81 @@ def _record_techniques(techniques_file_path: str, techniques) -> None:
         seen.update(new)
 
 
+# Windows event IDs that are evidence of a technique, keyed by channel: the same
+# ID means different things in different channels (1102 outside Security isn't
+# a log clear).
+EVENTLOG_TECHNIQUES = {
+    "security": {
+        1102: ["T1070.001"],
+        4697: ["T1543.003", "T1569.002"],
+        4698: ["T1053.005"],
+        4702: ["T1053.005"],
+        4720: ["T1136.001"],
+        4728: ["T1098"],
+        4732: ["T1098"],
+        4756: ["T1098"],
+    },
+    "system": {
+        104: ["T1070.001"],
+        7045: ["T1543.003", "T1569.002"],
+    },
+    "microsoft-windows-powershell/operational": {4104: ["T1059.001"]},
+    "windows powershell": {400: ["T1059.001"], 800: ["T1059.001"]},
+    "microsoft-windows-taskscheduler/operational": {106: ["T1053.005"]},
+}
+# This many failed logons (4625) in one Security log is treated as password guessing
+FAILED_LOGON_THRESHOLD = 5
+# Substrings of command lines, script blocks and service image paths
+EVENTLOG_TEXT_INDICATORS = {
+    "T1003.001": ["mimikatz", "sekurlsa", "procdump", "lsass.dmp"],
+    "T1059.003": ["cmd.exe /c", "cmd /c"],
+    "T1059.005": ["wscript", "cscript"],
+    "T1218": ["mshta", "regsvr32", "rundll32", "msiexec"],
+    "T1105": ["certutil -urlcache", "bitsadmin", "downloadstring", "downloadfile", "invoke-webrequest"],
+    "T1027": ["-encodedcommand", " -enc "],
+}
+EVENTLOG_TEXT_FIELDS = ("CommandLine", "ScriptBlockText", "ImagePath", "ServiceFileName", "HostApplication")
+
+
+def _event_fields(record):
+    """(channel, event ID, EventData) from an Artemis event-log record."""
+    event = (record.get("data") or {}).get("Event") or {}
+    system = event.get("System") or {}
+    event_id = system.get("EventID")
+    if isinstance(event_id, dict):
+        event_id = event_id.get("#text")
+    try:
+        event_id = int(event_id)
+    except (TypeError, ValueError):
+        event_id = None
+    channel = str(system.get("Channel") or "").lower()
+    data = event.get("EventData") or {}
+    return channel, event_id, data if isinstance(data, dict) else {}
+
+
+def eventlog_techniques(records) -> set:
+    """Techniques evidenced by Windows event-log records: channel-scoped event
+    IDs, repeated failed logons, and suspicious command lines."""
+    found, failed_logons = set(), 0
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        channel, event_id, data = _event_fields(record)
+        found.update(EVENTLOG_TECHNIQUES.get(channel, {}).get(event_id, []))
+        if channel == "security" and event_id == 4625:
+            failed_logons += 1
+        if channel == "security" and event_id == 4624 and str(data.get("LogonType")) == "10":
+            found.add("T1021.001")
+        text = " ".join(str(data.get(f, "")) for f in EVENTLOG_TEXT_FIELDS).lower()
+        if text.strip():
+            for technique, indicators in EVENTLOG_TEXT_INDICATORS.items():
+                if any(i in text for i in indicators):
+                    found.add(technique)
+    if failed_logons >= FAILED_LOGON_THRESHOLD:
+        found.update(["T1110", "T1110.001"])
+    return found
+
+
 def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
     """
     Fast MITRE enrichment for all artifact files.
@@ -225,6 +300,18 @@ def enrich_with_mitre(json_path: str, artifact_type: str) -> bool:
         os.makedirs(case_dir, exist_ok=True)
 
         # Base technique for artifact type
+        if artifact_type.lower() == "eventlogs":
+            # Artemis writes each log as one JSON array; tag what the records show,
+            # not the mere presence of a log.
+            try:
+                with open(json_path, errors="ignore") as f:
+                    records = json.load(f)
+            except (OSError, ValueError):
+                records = None
+            if isinstance(records, list):
+                _record_techniques(techniques_file_path, eventlog_techniques(records))
+                return True
+
         base_technique = ARTEFACT_MITRE_MAPPING.get(artifact_type.lower(), {}).get("technique_id")
 
         found_techniques = set()
@@ -298,17 +385,9 @@ def _get_patterns_for_artifact(artifact_type: str):
     # ========================================
     if artifact_lower in ["eventlogs", "evtx", "evt", "logs", "log"]:
         patterns = {
-            # Windows Event ID based techniques
-            "T1070.001": ["1102", "104"],  # Log clearing
-            "T1053.005": ["4698", "4699", "4700", "4701", "4702"],  # Scheduled tasks
-            "T1136": ["4720", "4722", "4738"],  # Account creation/modification
-            "T1098": ["4728", "4732", "4756"],  # Group membership changes
-            "T1003": ["4656", "4663"],  # Credential access (LSASS)
-            "T1021.001": ["4624", "4625"],  # RDP logon
-            "T1021.002": ["5140", "5145"],  # SMB access
-            "T1547.001": ["7045"],  # Service installation
-            "T1059.001": ["4104", "4103", "powershell", ".ps1", "-enc", "-encodedcommand"],  # PowerShell
-            "T1569.002": ["7045", "4697"],  # Service execution
+            # Windows event IDs are matched per record in eventlog_techniques();
+            # as substrings of free text they matched almost anything
+            "T1059.001": ["powershell", ".ps1", "-encodedcommand"],  # PowerShell
             # Cross-platform command/process patterns
             "T1059.003": ["cmd.exe", "cmd /c"],  # Windows cmd
             "T1059.004": ["/bin/sh", "/bin/bash", "/bin/zsh", "sh -c"],  # Unix shell
@@ -319,7 +398,7 @@ def _get_patterns_for_artifact(artifact_type: str):
             "T1105": ["psexec", "paexec", "bitsadmin", "certutil", "curl", "wget"],
             # macOS/Linux specific
             "T1053.003": ["cron", "crontab"],  # Cron
-            "T1543.002": ["systemctl", "service"],  # Systemd
+            "T1543.002": ["systemctl"],  # Systemd
             "T1548.003": ["sudo", "doas"],  # Sudo abuse
         }
         # Extract Event IDs and message content
@@ -413,7 +492,7 @@ def _get_patterns_for_artifact(artifact_type: str):
             "T1059.004": ["/bin/sh", "/bin/bash", "/bin/zsh", "sh -c"],  # Unix shell
             "T1059.006": ["python", "/usr/bin/python"],  # Python
             "T1053.003": ["cron", "crontab"],  # Cron
-            "T1543.002": ["systemctl", "service"],  # Systemd
+            "T1543.002": ["systemctl"],  # Systemd
             "T1070.002": ["rm ", "unlink", "shred"],  # Log deletion
             "T1105": ["curl", "wget", "nc", "netcat", "scp", "rsync"],
         }
@@ -525,7 +604,7 @@ def _get_patterns_for_artifact(artifact_type: str):
             "T1548.003": ["sudo", "doas", "root"],
             # Persistence
             "T1053.003": ["cron", "crontab"],
-            "T1543.002": ["systemctl", "service"],
+            "T1543.002": ["systemctl"],
             # Lateral movement / tools
             "T1021.004": ["ssh", "sshd", "accepted publickey"],
             "T1105": ["curl", "wget", "scp", "rsync", "nc", "netcat"],

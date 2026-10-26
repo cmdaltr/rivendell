@@ -3,6 +3,41 @@ import json
 import re
 import subprocess
 
+from rivendell.process.extractions.mitre_tagger import tag_mitre_technique
+
+
+def run_key_records(profile, hive, account=None):
+    """One record per autostart value in RegRipper's run (formerly soft_run /
+    user_run) output. profile is the plugin's section of rip.pl output, with
+    newlines escaped as the other handlers expect."""
+    name, _, body = profile.partition(" v.")
+    blocks = body.split("\\n\\n")
+    header = blocks[0].split("\\n")
+    base = {
+        "RegistryHive": hive,
+        "Plugin": name.replace("\\n", "").strip("-").replace("Launching ", ""),
+        "PluginVer": header[0],
+        "PluginDesc": header[1] if len(header) > 1 else "",
+    }
+    if account is not None:
+        base["AccountProfile"] = account
+    records = []
+    for block in blocks[1:]:
+        lines = [line for line in block.split("\\n") if line.strip()]
+        if len(lines) < 2 or not lines[1].startswith("LastWrite Time"):
+            continue
+        for line in lines[2:]:
+            match = re.match(r"^\s+(?P<name>.+?) - (?P<value>.+)$", line)
+            if match:
+                records.append(json.dumps(dict(
+                    base,
+                    RegistryKey=lines[0],
+                    LastWriteTime=lines[1].replace("LastWrite Time", "").strip(),
+                    AppName=match.group("name"),
+                    AppLocation=match.group("value"),
+                )))
+    return records
+
 
 def use_system_plugins(
     artefact, jsondict, jsonlist, regjsonlist, rgrplistj, userinfo, sids
@@ -670,43 +705,8 @@ def use_system_plugins(
                     if len(jsondict) > 4:
                         jsonlist.append(json.dumps(jsondict))
                 jsondict.clear()
-            elif profile.split(" v.")[0].replace("\\n", "").strip("-") == "soft_run":
-                for eachinfo in profile.split(" v.")[1].split("\\n\\n")[1:]:
-                    if (
-                        " has no subkeys." not in eachinfo
-                        and " not found." not in eachinfo
-                    ):
-                        (
-                            jsondict["RegistryHive"],
-                            jsondict["Plugin"],
-                            jsondict["PluginVer"],
-                            jsondict["PluginDesc"],
-                            jsondict["RegistryKey"],
-                            jsondict["LastWriteTime"],
-                        ) = (
-                            artefact.split("/")[-1].upper(),
-                            profile.split(" v.")[0]
-                            .replace("\\n", "")
-                            .strip("-")
-                            .replace("Launching ", ""),
-                            profile.split(" v.")[1].split("\\n")[0],
-                            profile.split(" v.")[1].split("\\n\\n")[0].split("\\n")[1],
-                            eachinfo.split("\\n")[0],
-                            eachinfo.split("\\n")[1],
-                        )
-                        for info in eachinfo.split("\\n")[2:]:
-                            for eachkv in re.findall(
-                                r"(?P<AppName>[\S\ ]+)\ \-\ (?P<AppLocation>[\S\ ]+)",
-                                info,
-                            ):
-                                kv = list(eachkv)
-                                if len(kv) > 0:
-                                    (
-                                        jsondict["AppName"],
-                                        jsondict["AppLocation"],
-                                    ) = (kv[0], kv[1])
-                        if len(jsondict) > 6:
-                            jsonlist.append(json.dumps(jsondict))
+            elif profile.split(" v.")[0].replace("\\n", "").strip("-") in ("run", "soft_run"):
+                jsonlist.extend(run_key_records(profile, artefact.split("/")[-1].upper()))
                 jsondict.clear()
             elif profile.split(" v.")[0].replace("\\n", "").strip("-") == "assoc":
                 for eachinfo in profile.split(" v.")[1].split("\\n\\n")[1:]:
@@ -1520,6 +1520,8 @@ def extract_registry_system(
         jsonlist, regjsonlist = use_system_plugins(
             artefact, jsondict, jsonlist, regjsonlist, rgrplistj, userinfo, sids
         )
+        if any('"Plugin": "run"' in record for record in jsonlist):
+            tag_mitre_technique(output_directory, img, "registry", "T1547.001")
         if len(regjsonlist) > 0:
             regjson.write(
                 str(regjsonlist)

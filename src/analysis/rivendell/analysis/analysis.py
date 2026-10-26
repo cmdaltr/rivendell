@@ -781,9 +781,10 @@ def analyse_artefacts(
                 for f in files:
                     try:
                         if 0 < os.stat(os.path.join(root, f)).st_size < 10000000:  # 10MB
-                            with open(os.path.join(root, f), "r") as filetest:
-                                filetest.readline()
-                                iocfilelist.append(os.path.join(root, f))
+                            with open(os.path.join(root, f), "rb") as filetest:
+                                if b"\x00" in filetest.read(8192):
+                                    continue  # binary (jumplists, databases): noise as text
+                            iocfilelist.append(os.path.join(root, f))
                     except:
                         pass
         print("       Done.")

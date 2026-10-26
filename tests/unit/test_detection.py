@@ -1,0 +1,92 @@
+"""Detection fixes from the lab runs: IOC extraction (E30), event-log technique
+tagging (E29) and RegRipper Run-key parsing (E28)."""
+
+import json
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[2] / "src" / "analysis"))
+
+from rivendell.analysis.iocs import extract_line_iocs  # noqa: E402
+from rivendell.process.extractions.artemis import eventlog_techniques  # noqa: E402
+from rivendell.process.extractions.registry.system import run_key_records  # noqa: E402
+
+
+class IocExtractionTest(unittest.TestCase):
+    def test_every_ioc_on_a_line(self) -> None:
+        line = "curl http://198.51.100.23/a -H 'Host: c2.rivendell-lab.test' && ping 8.8.8.8"
+        self.assertEqual(
+            extract_line_iocs(line),
+            [("198.51.100.23", "IPv4 address"), ("c2.rivendell-lab.test", "domain"), ("8.8.8.8", "IPv4 address")],
+        )
+
+    def test_file_names_are_not_domains(self) -> None:
+        for line in (
+            "Invoke-WebRequest x -OutFile payload.ps1",
+            "/Users/Shared/.x/update.sh",
+            "chmod +x update.sh",
+            "pnputil /add-driver netkvm.inf",
+            "com.apple.bgtaskmanagementagent.plist",
+        ):
+            self.assertEqual(extract_line_iocs(line), [], line)
+
+    def test_private_addresses_are_skipped(self) -> None:
+        self.assertEqual(extract_line_iocs("10.1.2.3 172.16.0.9 192.168.64.4 127.0.0.1 169.254.0.1"), [])
+
+    def test_internal_suffixes_and_mail(self) -> None:
+        self.assertEqual(extract_line_iocs("dc01.contoso.local"), [("dc01.contoso.local", "domain")])
+        self.assertEqual(extract_line_iocs("to: ops@corp.example.co.uk"), [("corp.example.co.uk", "domain")])
+
+
+def _event(channel: str, event_id: int, **data) -> dict:
+    return {"data": {"Event": {"System": {"Channel": channel, "EventID": event_id}, "EventData": data}}}
+
+
+class EventlogTechniquesTest(unittest.TestCase):
+    def test_service_install_and_brute_force(self) -> None:
+        records = [_event("System", 7045, ImagePath="C:\\Windows\\System32\\cmd.exe /c exit 0")]
+        records += [_event("Security", 4625) for _ in range(5)]
+        self.assertEqual(
+            eventlog_techniques(records),
+            {"T1543.003", "T1569.002", "T1059.003", "T1110", "T1110.001"},
+        )
+
+    def test_ids_are_scoped_to_their_channel(self) -> None:
+        self.assertEqual(eventlog_techniques([_event("Microsoft-Windows-Foo/Operational", 1102)]), set())
+        self.assertEqual(eventlog_techniques([_event("Security", 1102)]), {"T1070.001"})
+
+    def test_a_few_failed_logons_are_not_brute_force(self) -> None:
+        self.assertEqual(eventlog_techniques([_event("Security", 4625)] * 4), set())
+
+    def test_rdp_needs_logon_type_10(self) -> None:
+        self.assertEqual(eventlog_techniques([_event("Security", 4624, LogonType="2")]), set())
+        self.assertEqual(eventlog_techniques([_event("Security", 4624, LogonType="10")]), {"T1021.001"})
+
+
+class RunKeyRecordsTest(unittest.TestCase):
+    # rip.pl output as Elrond sees it: str(bytes), so newlines are literal \n
+    SECTION = (
+        "run v.20200511\\n(Software, NTUSER.DAT) [Autostart] Get autostart key contents from Software hive"
+        "\\n\\nMicrosoft\\\\Windows\\\\CurrentVersion\\\\Run\\nLastWrite Time 2026-10-25 20:56:20Z"
+        "\\n  LabUpdater - powershell.exe -w hidden -enc VwBy\\n  SecurityHealth - %windir%\\\\system32\\\\x.exe"
+        "\\n\\nMicrosoft\\\\Windows\\\\CurrentVersion\\\\Run has no subkeys."
+        "\\n\\nMicrosoft\\\\Windows\\\\CurrentVersion\\\\RunOnce\\nLastWrite Time 2026-10-25 10:57:37Z"
+        "\\nMicrosoft\\\\Windows\\\\CurrentVersion\\\\RunOnce has no values."
+    )
+
+    def test_one_record_per_value(self) -> None:
+        records = [json.loads(r) for r in run_key_records(self.SECTION, "SOFTWARE")]
+        self.assertEqual([r["AppName"] for r in records], ["LabUpdater", "SecurityHealth"])
+        self.assertEqual(records[0]["AppLocation"], "powershell.exe -w hidden -enc VwBy")
+        self.assertEqual(records[0]["LastWriteTime"], "2026-10-25 20:56:20Z")
+        self.assertEqual(records[0]["Plugin"], "run")
+        self.assertNotIn("AccountProfile", records[0])
+
+    def test_profile_records_carry_the_account(self) -> None:
+        records = [json.loads(r) for r in run_key_records(self.SECTION, "NTUSER.DAT", "gandalf")]
+        self.assertEqual({r["AccountProfile"] for r in records}, {"gandalf"})
+
+
+if __name__ == "__main__":
+    unittest.main()

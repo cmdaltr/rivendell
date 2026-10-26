@@ -3,6 +3,10 @@ import json
 import re
 import subprocess
 
+from rivendell.process.extractions.mitre_tagger import tag_mitre_technique
+
+from rivendell.process.extractions.registry.system import run_key_records
+
 
 def use_profile_plugins(
     artefact, jsondict, jsonlist, regjsonlist, rgrplistj, regart, regusr
@@ -1162,80 +1166,8 @@ def use_profile_plugins(
                     if len(jsondict) > 6:
                         jsonlist.append(json.dumps(jsondict))
                 jsondict.clear()
-            elif profile.split(" v.")[0].replace("\\n", "").strip("-") == "user_run":
-                if len(profile.split(" v.")[1].split("\\n\\n")[0]) > 8:
-                    (
-                        jsondict["RegistryHive"],
-                        jsondict["Plugin"],
-                        jsondict["PluginVer"],
-                        jsondict["PluginDesc"],
-                        jsondict["AccountProfile"],
-                    ) = (
-                        regart,
-                        profile.split(" v.")[0]
-                        .replace("\\n", "")
-                        .strip("-")
-                        .replace("Launching ", ""),
-                        profile.split(" v.")[1].split("\\n")[0],
-                        profile.split(" v.")[1].split("\\n\\n")[0].split("\\n")[1],
-                        regusr,
-                    )
-                else:
-                    (
-                        jsondict["RegistryHive"],
-                        jsondict["Plugin"],
-                        jsondict["PluginVer"],
-                        jsondict["PluginDesc"],
-                        jsondict["AccountProfile"],
-                    ) = (
-                        regart,
-                        profile.split(" v.")[0]
-                        .replace("\\n", "")
-                        .strip("-")
-                        .replace("Launching ", ""),
-                        profile.split(" v.")[1].split("\\n")[0],
-                        "",
-                        regusr,
-                    )
-                for eachinfo in profile.split(" v.")[1].split("\\n\\n")[1:]:
-                    if len(eachinfo.split("\\n")) > 1:
-                        if "'  " in str(eachinfo.split("\\n")):
-                            (
-                                jsondict["RegistryKey"],
-                                jsondict["Plugin"],
-                                jsondict["PluginVer"],
-                                jsondict["PluginDesc"],
-                                jsondict["LastWriteTime"],
-                            ) = (
-                                regart,
-                                profile.split(" v.")[0]
-                                .replace("\\n", "")
-                                .strip("-")
-                                .replace("Launching ", ""),
-                                profile.split(" v.")[1].split("\\n")[0],
-                                profile.split(" v.")[1]
-                                .split("\\n\\n")[0]
-                                .split("\\n")[1],
-                                eachinfo.split("\\n")[1].split("Time ")[1],
-                            )
-                            for info in eachinfo.split("\\n")[2:]:
-                                for eachkv in re.findall(
-                                    r"^\ \ (?P<FileDescription>[^\:]+)\:\ (?P<Filename>[^\.]+\.\w{3})(?:\ (?P<CommandParameters>[\S\ ]+))?",
-                                    info.replace('"', ""),
-                                ):
-                                    kv = list(eachkv)
-                                    if len(kv) > 0:
-                                        (
-                                            jsondict["FileDescription"],
-                                            jsondict["Filename"],
-                                            jsondict["CommandParameters"],
-                                        ) = (
-                                            kv[0],
-                                            kv[1],
-                                            kv[2],
-                                        )
-                    if len(jsondict) > 7:
-                        jsonlist.append(json.dumps(jsondict))
+            elif profile.split(" v.")[0].replace("\\n", "").strip("-") in ("run", "user_run"):
+                jsonlist.extend(run_key_records(profile, regart, regusr))
                 jsondict.clear()
             elif profile.split(" v.")[0].replace("\\n", "").strip("-") == "outlook2":
                 if len(profile.split(" v.")[1].split("\\n\\n")[0]) > 8:
@@ -1467,6 +1399,8 @@ def extract_registry_profile(
             artefact.split("/")[-1].upper().split("+")[1],
             regusr,
         )
+        if any('"Plugin": "run"' in record for record in jsonlist):
+            tag_mitre_technique(output_directory, img, "registry", "T1547.001")
         if len(regjsonlist) > 0:
             regdata = (
                 str(regjsonlist)
