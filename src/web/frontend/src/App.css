@@ -3001,7 +3001,9 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lb input.lb-input:disabled, .lb select.lb-select:disabled { opacity: 0.45; }
 @media (max-width: 900px) { .lb-thirds { grid-template-columns: 1fr; } }
 .lb-pair { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem 2.5rem; align-items: start; }
-@media (max-width: 900px) { .lb-pair { grid-template-columns: 1fr; } }
+.lb-pair.lb-pair-even { grid-template-columns: 1fr 1fr; }
+.lb-pair > .lb-step { min-width: 0; }
+@media (max-width: 900px) { .lb-pair, .lb-pair.lb-pair-even { grid-template-columns: 1fr; } }
 select.large-select.lb-select { width: auto; min-width: 16rem; padding: 0.45rem 0.75rem; font-size: 0.85rem; font-family: inherit; letter-spacing: 0; }
 .lb-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #ccc; }
 .lb-warn { color: #d57a54; }

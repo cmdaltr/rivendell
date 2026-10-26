@@ -321,15 +321,15 @@ function LabBuilder() {
 
         {tool === 'mordor' && (
           <>
-            <Step n="1" title="What">
-              <div className="lb-row">
-                <Choice active={mode === 'record'} onClick={() => setMode('record')}>Record telemetry</Choice>
-                <Choice active={mode === 'capture'} onClick={() => setMode('capture')}>Capture a dataset for Elrond</Choice>
-                <Choice active={mode === 'download'} onClick={() => setMode('download')}>Download OTRF datasets</Choice>
-              </div>
-            </Step>
-            {mode === 'record' && (
-              <>
+            <div className="lb-pair">
+              <Step n="1" title="What">
+                <div className="lb-row">
+                  <Choice active={mode === 'record'} onClick={() => setMode('record')}>Record telemetry</Choice>
+                  <Choice active={mode === 'capture'} onClick={() => setMode('capture')}>Capture a dataset for Elrond</Choice>
+                  <Choice active={mode === 'download'} onClick={() => setMode('download')}>Download OTRF datasets</Choice>
+                </div>
+              </Step>
+              {mode === 'record' && (
                 <Step n="2" title="On">
                   <div className="lb-row">
                     {recordable.map((m) => (
@@ -340,6 +340,24 @@ function LabBuilder() {
                   </div>
                   <label className="lb-check"><input type="checkbox" checked={setUp} onChange={(e) => setSetUp(e.target.checked)} /> Set it up first (logging and Atomic Red Team)</label>
                 </Step>
+              )}
+              {mode === 'capture' && (
+                <Step n="2" title="Techniques">
+                  <div className="lb-row">
+                    {Object.keys(PRESETS).map((k) => <Choice key={k} active={preset === k} onClick={() => setPreset(k)}>{k.replace('_', ' ')}</Choice>)}
+                  </div>
+                </Step>
+              )}
+              {mode === 'download' && (
+                <Step n="2" title="Which">
+                  <div className="lb-row">
+                    {Object.keys(OTRF_GROUPS).map((g) => <Choice key={g} active={group === g} onClick={() => setGroup(g)}>{g}</Choice>)}
+                  </div>
+                </Step>
+              )}
+            </div>
+            {mode === 'record' && (
+              <div className="lb-pair lb-pair-even">
                 <Step n="3" title="Techniques">
                   <div className="lb-row">
                     {Object.keys(PRESETS).map((k) => <Choice key={k} active={!custom && preset === k} onClick={() => { setPreset(k); setCustom(''); }}>{k.replace('_', ' ')}</Choice>)}
@@ -347,26 +365,10 @@ function LabBuilder() {
                   <input type="text" className="lb-input lb-wide" placeholder={`Or your own: ${PRESETS[preset]}`} value={custom} onChange={(e) => setCustom(e.target.value)} />
                 </Step>
                 <Step n="4" title="Afterwards">
-                  <div className="lb-row">
-                    <input type="text" className="lb-input" placeholder="Snapshot to revert to (blank: don't)" value={revertTo} onChange={(e) => setRevertTo(e.target.value)} />
-                  </div>
+                  <input type="text" className="lb-input lb-wide" placeholder="Snapshot to revert to (blank: don't)" value={revertTo} onChange={(e) => setRevertTo(e.target.value)} />
                   <label className="lb-check lb-warn"><input type="checkbox" checked={snapped} onChange={(e) => setSnapped(e.target.checked)} /> The machine is snapshotted and disposable: the tests change it</label>
                 </Step>
-              </>
-            )}
-            {mode === 'capture' && (
-              <Step n="2" title="Techniques">
-                <div className="lb-row">
-                  {Object.keys(PRESETS).map((k) => <Choice key={k} active={preset === k} onClick={() => setPreset(k)}>{k.replace('_', ' ')}</Choice>)}
-                </div>
-              </Step>
-            )}
-            {mode === 'download' && (
-              <Step n="2" title="Which">
-                <div className="lb-row">
-                  {Object.keys(OTRF_GROUPS).map((g) => <Choice key={g} active={group === g} onClick={() => setGroup(g)}>{g}</Choice>)}
-                </div>
-              </Step>
+              </div>
             )}
           </>
         )}
