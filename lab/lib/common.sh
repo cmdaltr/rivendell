@@ -8,6 +8,9 @@ LAB_CONFIG_DIR="${HOME}/.config/rivendell-lab"
 LAB_CONFIG="${LAB_CONFIG_DIR}/lab.conf"
 KEYCHAIN_SERVICE="rivendell-lab"
 KEYCHAIN_ACCOUNT="gandalf"
+# Every lab target listens on loopback or a host-only network, so a well-known
+# default is fine; set your own with ./lab.sh configure.
+LAB_DEFAULT_PASSWORD="mellon"
 COMPOSE_PROJECT="rivendell-lab"
 
 if [ -t 1 ]; then
@@ -217,8 +220,12 @@ delete_password() {
 set_lab_password() {
   local p1 p2
   while true; do
-    read -r -s -p "Lab password for the 'gandalf' user on every target (min 12 chars): " p1 || die "No input for the lab password (set LAB_PASSWORD to run unattended)"; echo
-    [ "${#p1}" -ge 12 ] || { warn "Too short."; continue; }
+    read -r -s -p "Lab password for the 'gandalf' user on every target (Enter for the default, '$LAB_DEFAULT_PASSWORD'): " p1 || die "No input for the lab password (set LAB_PASSWORD to run unattended)"; echo
+    if [ -z "$p1" ]; then
+      delete_password; LAB_PASSWORD="$LAB_DEFAULT_PASSWORD"; export LAB_PASSWORD
+      ok "Using the default lab password '$LAB_DEFAULT_PASSWORD'."
+      return
+    fi
     case "$p1" in *"'"*|*'"'*|*\\*|*' '*) warn "Avoid quotes, backslashes and spaces; the password is passed to remote shells."; continue ;; esac
     read -r -s -p "Again: " p2 || die "No input"; echo
     [ "$p1" = "$p2" ] && break
@@ -229,19 +236,16 @@ set_lab_password() {
     ok "Stored in $where (service '$KEYCHAIN_SERVICE')."
   else
     warn "No keyring available (install libsecret-tools for secret-tool); using it for this run only."
-    LAB_PASSWORD="$p1"; export LAB_PASSWORD
   fi
+  LAB_PASSWORD="$p1"; export LAB_PASSWORD
 }
 
 require_password() {
-  # An exported LAB_PASSWORD wins (CI, or testing without touching the Keychain).
+  # An exported LAB_PASSWORD wins (CI, or testing without touching the Keychain),
+  # then a custom one in the keyring, then the default.
   [ -n "${LAB_PASSWORD:-}" ] && { export LAB_PASSWORD; return; }
   LAB_PASSWORD="$(lab_password)"
-  if [ -z "$LAB_PASSWORD" ]; then
-    warn "No lab password set yet."
-    set_lab_password
-    [ -n "${LAB_PASSWORD:-}" ] || LAB_PASSWORD="$(lab_password)"
-  fi
+  [ -n "$LAB_PASSWORD" ] || LAB_PASSWORD="$LAB_DEFAULT_PASSWORD"
   export LAB_PASSWORD
 }
 

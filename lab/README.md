@@ -27,7 +27,7 @@ cd lab
 ./lab.sh
 ```
 
-Choose **1) Quickstart**. It checks the host, offers to install what's missing, asks where to keep data and VMs, and asks for a lab password: the `gandalf` user on every target gets this password, and it's stored in your Keychain (or the Secret Service keyring on Linux), never on disk. Then it builds and starts the Linux containers, collects from them with both the Bash and Python collectors, downloads APT29 days 1–2 from OTRF, and writes the settings Rivendell's test runner needs.
+Choose **1) Quickstart**. It checks the host, offers to install what's missing, asks where to keep data and VMs, and and sets up the lab password: the `gandalf` user on every target gets it. The default is `mellon`, which is fine because every target listens only on loopback or a host-only network. If you set your own (`./lab.sh configure`, or **Lab** in the web UI), it's stored in your Keychain (or the Secret Service keyring on Linux), never on disk; an empty entry goes back to the default. Targets keep the password they were created with, so re-create them after a change. Then it builds and starts the Linux containers, collects from them with both the Bash and Python collectors, downloads APT29 days 1–2 from OTRF, and writes the settings Rivendell's test runner needs.
 
 The same steps exist as single commands:
 
@@ -80,7 +80,7 @@ The Bash collector runs unencrypted by default; set `GANDALF_ENCRYPTION=Key` to 
 
 ### Windows 11 ARM on Apple silicon
 
-Tart can't run Windows (Apple's Virtualization framework only boots macOS and Linux), so the lab drives UTM through its AppleScript API. The VM lives under `$LAB_VM_DIR/utm/`, and its SSH is forwarded to `127.0.0.1:2232`, user `gandalf`, the lab password.
+Tart can't run Windows (Apple's Virtualization framework only boots macOS and Linux), so the lab drives UTM through its AppleScript API. The VM lives under `$LAB_VM_DIR/utm/`, and its SSH is forwarded to `127.0.0.1:2232`, user `gandalf`, the lab password (default `mellon`).
 
 **Building one (`windows-vm create`).** Download the Windows 11 ARM64 ISO from [Microsoft](https://www.microsoft.com/software-download/windows11arm64) (or with CrystalFetch) into `$LAB_DATA_DIR/isos/`; Microsoft only issues links through its web form, so this is the one manual step. Then:
 
@@ -142,7 +142,7 @@ Settings live in `~/.config/rivendell-lab/lab.conf`. Edit them with `./lab.sh co
 | `WINDOWS_VM_MEMORY_MB` / `WINDOWS_VM_CPUS` | 6144 / 2 | |
 | `LINUX_VM_MEMORY_MB` | 2048 | |
 
-Unattended runs: `LAB_YES=1` accepts every default, `LAB_FORCE=1` answers yes to everything, and `LAB_PASSWORD` supplies the lab password instead of the keyring.
+Unattended runs: `LAB_YES=1` accepts every default, `LAB_FORCE=1` answers yes to everything, and `LAB_PASSWORD` overrides both the keyring and the default.
 
 ## Tearing Down
 

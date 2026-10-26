@@ -71,7 +71,7 @@ cmd_check() {
   echo "  VMs:        $LAB_VM_DIR (Tart: $TART_HOME, Vagrant: $VAGRANT_HOME${VBOX_USER_HOME:+, VirtualBox: $VBOX_USER_HOME})"
   echo "  data:       $LAB_DATA_DIR (free: $(free_gb "$(dirname "$LAB_DATA_DIR")" 2>/dev/null || echo '?') GB)"
   echo "  test root:  ${TEST_IMAGES_PATH:-$LAB_DATA_DIR}"
-  echo "  password:   $([ -n "$(lab_password)" ] && echo 'set (Keychain)' || echo 'not set')"
+  echo "  password:   $([ -n "$(lab_password)" ] && echo 'custom (keyring)' || echo "default ($LAB_DEFAULT_PASSWORD)")"
 }
 
 # ----------------------------------------------------------------------------- install
@@ -187,7 +187,11 @@ cmd_configure() {
   load_config
 
   step "Lab password"
-  if [ -n "$(lab_password)" ] && ! confirm "A lab password is already set. Change it?" n; then :; else set_lab_password; fi
+  if [ -n "$(lab_password)" ]; then
+    confirm "A custom lab password is set. Change it (Enter at the prompt goes back to the default)?" n && set_lab_password
+  else
+    confirm "Using the default lab password '$LAB_DEFAULT_PASSWORD'. Set your own instead?" n && set_lab_password
+  fi
   ok "Configured. Next: ./lab.sh linux-targets up"
 }
 
@@ -575,7 +579,9 @@ cmd_state() {
   echo "ram_gb=$(host_ram_gb)"
   echo "docker=$docker_ok"
   echo "vm_tool=$vm_tool"
-  echo "password_set=$([ -n "$(lab_password)" ] && echo yes || echo no)"
+  echo "password_set=yes"
+  echo "password_default=$([ -n "$(lab_password)" ] && echo no || echo yes)"
+  echo "default_password=$LAB_DEFAULT_PASSWORD"
   echo "repo_root=$REPO_ROOT"
   echo "linux_containers=$LINUX_CONTAINERS"
   echo "mordor_presets=$MORDOR_PRESETS"
@@ -595,11 +601,12 @@ cmd_set_config() {
   save_config
 }
 
-# set-password: read the lab password from stdin (never argv) and store it.
+# set-password: read the lab password from stdin (never argv) and store it;
+# an empty line goes back to the default.
 cmd_set_password() {
   local p
   IFS= read -r p || die "No password on stdin"
-  [ "${#p}" -ge 12 ] || die "The lab password needs at least 12 characters"
+  if [ -z "$p" ]; then delete_password; ok "Using the default lab password '$LAB_DEFAULT_PASSWORD'"; return; fi
   case "$p" in *"'"*|*'"'*|*\\*|*' '*) die "Avoid quotes, backslashes and spaces; the password is passed to remote shells" ;; esac
   local where; where="$(store_password "$p")"
   [ -n "$where" ] || die "No keyring available (install libsecret-tools for secret-tool)"

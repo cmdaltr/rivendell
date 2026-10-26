@@ -175,13 +175,13 @@ function Lab() {
     }
   };
 
-  const savePassword = async () => {
+  const savePassword = async (value) => {
     setError(null);
     setMessage(null);
     try {
-      await setLabPassword(password);
+      await setLabPassword(value);
       setPassword('');
-      setMessage('Lab password stored in the host keyring.');
+      setMessage(value ? 'Lab password stored in the host keyring.' : `Using the default lab password '${state.default_password}'.`);
       setState(await getLabState());
     } catch (err) {
       setError(errorText(err));
@@ -238,7 +238,7 @@ function Lab() {
             <tr><th>System</th><td>{host.os_version}, {host.ram_gb} GB RAM</td></tr>
             <tr><th>Docker</th><td>{host.docker === 'yes' ? 'running' : 'not running: start Docker Desktop or OrbStack'}</td></tr>
             <tr><th>VMs</th><td>{host.vm_tool === 'none' ? 'not installed: run ./lab.sh install in a terminal' : host.vm_tool}</td></tr>
-            <tr><th>Lab password</th><td>{state.password_set ? 'stored in the host keyring' : 'not set: set it below before creating targets'}</td></tr>
+            <tr><th>Lab password</th><td>{state.password_default ? <>default: <code>{state.default_password}</code></> : 'custom, stored in the host keyring'}</td></tr>
           </tbody>
         </table>
         <div className="lab-actions">
@@ -276,11 +276,13 @@ function Lab() {
         <button onClick={saveSettings}>Save settings</button>
         <h3>Lab password</h3>
         <p className="lab-note">
-          For the <code>gandalf</code> user on every lab target. At least 12 characters; no quotes, backslashes or spaces.
+          For the <code>gandalf</code> user on every lab target. The default is <code>{state.default_password}</code>;
+          a custom one goes in the host keyring. No quotes, backslashes or spaces. Targets created before a change keep their old password until they're re-created.
         </p>
         <div className="lab-actions">
           <input type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
-          <button onClick={savePassword} disabled={password.length < 12}>{state.password_set ? 'Replace' : 'Set'} password</button>
+          <button onClick={() => savePassword(password)} disabled={!password}>Set custom password</button>
+          {!state.password_default && <button className="secondary" onClick={() => savePassword('')}>Use the default</button>}
         </div>
       </div>
 

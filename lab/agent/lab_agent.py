@@ -268,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {
                 "host": {k: state.get(k) for k in ("profile", "label", "os_version", "ram_gb", "docker", "vm_tool", "repo_root")},
                 "password_set": state.get("password_set") == "yes",
+                "password_default": state.get("password_default") == "yes",
+                "default_password": state.get("default_password", ""),
                 "linux_containers": state.get("linux_containers", "").split(),
                 "mordor_presets": state.get("mordor_presets", "").split(),
                 "config": {k: v for k, v in state.items() if k.isupper()},
