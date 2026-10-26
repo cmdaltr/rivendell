@@ -27,14 +27,6 @@ const SETTINGS = [
   ['ELASTIC_URL', 'Elasticsearch URL', 'Used by the Mordor sensor helpers.'],
 ];
 
-const MORDOR_GROUPS = {
-  'All datasets the tests use': [],
-  'APT29 days 1 and 2': ['apt29/day1', 'apt29/day2'],
-  'Atomic (credential access, evasion, lateral movement, persistence)': [
-    'atomic/credential_access', 'atomic/defense_evasion', 'atomic/lateral_movement', 'atomic/persistence',
-  ],
-};
-
 const formatTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '—');
 
 function AgentPanel({ status, onRecheck }) {
@@ -79,7 +71,7 @@ function RunOutput({ run, onCancel, onClose }) {
   );
 }
 
-function LabBody() {
+function LabManage() {
   const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [state, setState] = useState(null);
@@ -89,10 +81,6 @@ function LabBody() {
   const [run, setRun] = useState(null);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
-  const [collector, setCollector] = useState('bash');
-  const [targets, setTargets] = useState([]);
-  const [mordorGroup, setMordorGroup] = useState(Object.keys(MORDOR_GROUPS)[0]);
-  const [preset, setPreset] = useState('');
   const offsetRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -104,8 +92,6 @@ function LabBody() {
       const st = await getLabState();
       setState(st);
       setSettings(st.config || {});
-      setTargets((prev) => (prev.length ? prev : st.linux_containers || []));
-      setPreset((prev) => prev || (st.mordor_presets || [])[0] || '');
       setRuns(await listLabRuns());
       if (st.busy && !run) {
         offsetRef.current = 0;
@@ -311,65 +297,7 @@ function LabBody() {
       </div>
 
       <div className="card">
-        <h2>Gandalf</h2>
-        <div className="lab-actions">
-          <select value={collector} onChange={(e) => setCollector(e.target.value)}>
-            <option value="bash">Bash (gandalf.sh)</option>
-            <option value="python">Python (gandalf.py)</option>
-            {vagrant && <option value="powershell">PowerShell (Invoke-Gandalf.ps1, Windows VM)</option>}
-            <option value="all">All</option>
-          </select>
-          {(state.linux_containers || []).map((t) => (
-            <label key={t} className="lab-check">
-              <input
-                type="checkbox"
-                checked={targets.includes(t)}
-                onChange={(e) => setTargets(e.target.checked ? [...targets, t] : targets.filter((x) => x !== t))}
-              />
-              {t}
-            </label>
-          ))}
-          {(vagrant || tart) && ['lab-linuxvm', ...(tart ? ['lab-macos'] : [])].map((t) => (
-            <label key={t} className="lab-check">
-              <input
-                type="checkbox"
-                checked={targets.includes(t)}
-                onChange={(e) => setTargets(e.target.checked ? [...targets, t] : targets.filter((x) => x !== t))}
-              />
-              {t}
-            </label>
-          ))}
-          <button disabled={busy || noPassword || (!targets.length && collector !== 'powershell')} onClick={() => start('gandalf-collect', [collector, ...(collector === 'powershell' ? [] : targets)])}>
-            Collect
-          </button>
-        </div>
-        <p className="lab-note">
-          Archives land in <code>{(settings.TEST_IMAGES_PATH || settings.LAB_DATA_DIR)}/gandalf/&lt;collector&gt;_collection/acquisitions/</code>,
-          with each target's <code>expected.json</code>. Then run <em>Rivendell test settings</em> below.
-        </p>
-      </div>
-
-      <div className="card">
-        <h2>Mordor</h2>
-        <div className="lab-actions">
-          <select value={mordorGroup} onChange={(e) => setMordorGroup(e.target.value)}>
-            {Object.keys(MORDOR_GROUPS).map((g) => <option key={g} value={g}>{g}</option>)}
-          </select>
-          <button disabled={busy} onClick={() => start('mordor-download', MORDOR_GROUPS[mordorGroup])}>Download OTRF datasets</button>
-        </div>
-        {vagrant && (
-          <div className="lab-actions">
-            <button className="secondary" disabled={busy} onClick={() => start('mordor-sensor', [], 'Install Sysmon, PowerShell logging and Atomic Red Team in the Windows VM?')}>Install sensor in Windows VM</button>
-            <select value={preset} onChange={(e) => setPreset(e.target.value)}>
-              {(state.mordor_presets || []).map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <button disabled={busy || !preset} onClick={() => start('mordor-capture', [preset], `Run the ${preset} Atomic tests in the Windows VM and capture the logs?`)}>Capture dataset</button>
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>Rivendell</h2>
+        <h2>Maintenance</h2>
         <div className="lab-actions">
           <button className="secondary" disabled={busy} onClick={() => start('rivendell-env')}>Rivendell test settings</button>
           <button className="secondary" disabled={busy} onClick={() => start('teardown', [], 'Remove all lab containers and VMs? Collected data and the lab password are kept.')}>Tear down lab</button>
@@ -402,5 +330,5 @@ function LabBody() {
   );
 }
 
-// Aragorn → Lab: the lab's settings, password, lab.sh commands and their runs
-export default LabBody;
+// Aragorn → Manage: the lab's host, settings, password, targets, maintenance and runs
+export default LabManage;

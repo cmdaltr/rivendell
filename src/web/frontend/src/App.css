@@ -2911,11 +2911,47 @@ button.mt-close:hover { background: none; box-shadow: none; color: #fff; }
 .mt-pager { justify-content: center; }
 button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-left: 0.5rem; }
 
-/* Aragorn: Rivendell and Lab sections */
-.aragorn-jump { display: flex; gap: 0.5rem; }
-.aragorn-jump a { padding: 0.4rem 1rem; border: 1px solid rgba(240, 219, 165, 0.2); border-radius: 4px; color: #f0dba5; text-decoration: none; }
-.aragorn-jump a:hover { border-color: #66d9ef; color: #66d9ef; }
-.aragorn-section { display: flex; flex-direction: column; gap: 1rem; scroll-margin-top: 7rem; }
-.aragorn-section-title { color: #c3e88d; font-size: 1.6rem; letter-spacing: 0.04em; }
+/* Aragorn: Lab | Manage tabs */
+.aragorn-tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #2a2a5a; }
+.aragorn-tab { padding: 0.8rem 1rem; background: none; border: none; border-bottom: 2px solid transparent; color: #f0dba5; font-family: 'Cinzel', serif; font-size: 1.15rem; letter-spacing: 0.06em; cursor: pointer; }
+.aragorn-tab:hover { color: #66d9ef; }
+.aragorn-tab.is-active { color: #c3e88d; border-bottom-color: #8abf4d; background: rgba(138, 191, 77, 0.06); }
+
+/* Aragorn → Lab: the run builder */
+.lb { display: flex; flex-direction: column; gap: 1rem; }
+.lb-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.lb-tool { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; padding: 1.1rem 1rem; background: #1a1a2e; border: 1px solid #2a2a5a; border-radius: 8px; color: #ccc; cursor: pointer; text-align: center; }
+.lb-tool img { width: 56px; height: 56px; object-fit: contain; }
+.lb-tool strong { font-family: 'Cinzel', serif; font-size: 1.1rem; color: #f0dba5; }
+.lb-tool span { font-size: 0.82rem; line-height: 1.4; color: #999; }
+.lb-tool:hover:not(:disabled) { border-color: #66d9ef; }
+.lb-tool.is-active { border-color: #8abf4d; background: rgba(138, 191, 77, 0.08); }
+.lb-tool.is-active strong { color: #c3e88d; }
+.lb-tool:disabled { cursor: not-allowed; opacity: 0.6; }
+.lb-builder { display: flex; flex-direction: column; gap: 1.1rem; }
+.lb-step { display: grid; grid-template-columns: 2rem 1fr; column-gap: 0.75rem; }
+.lb-step-head { display: contents; }
+.lb-step-n { grid-row: span 2; width: 1.8rem; height: 1.8rem; border-radius: 50%; border: 1px solid #66d9ef; color: #66d9ef; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; }
+.lb-step-head h3 { margin: 0.15rem 0 0.5rem; font-size: 1rem; color: #f0dba5; }
+.lb-step-body { grid-column: 2; display: flex; flex-direction: column; gap: 0.6rem; }
+.lb-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.lb-choice { display: inline-flex; align-items: center; padding: 0.4rem 0.9rem; background: transparent; border: 1px solid #3a3a6a; border-radius: 999px; color: #ccc; font-size: 0.85rem; cursor: pointer; }
+.lb-choice:hover:not(:disabled) { border-color: #66d9ef; color: #66d9ef; }
+.lb-choice.is-active { border-color: #8abf4d; color: #c3e88d; background: rgba(138, 191, 77, 0.1); }
+.lb-input { padding: 0.45rem 0.75rem; background: #12121f; border: 1px solid #3a3a6a; border-radius: 4px; color: #eee; font-size: 0.85rem; min-width: 16rem; }
+.lb-input.lb-wide { width: 100%; }
+.lb-select { width: auto; min-width: 16rem; }
+.lb-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #ccc; }
+.lb-warn { color: #d57a54; }
+.lb-plan { border-top: 1px solid #2a2a5a; padding-top: 1rem; }
+.lb-plan h3 { margin: 0 0 0.5rem; font-size: 1rem; color: #66d9ef; }
+.lb-plan ol { margin: 0 0 0.75rem 1.25rem; font-size: 0.88rem; line-height: 1.6; color: #ccc; }
+.lb-plan .lab-status { margin-left: 0.5rem; }
+.lb-blocker { color: #d57a54; font-size: 0.85rem; margin: 0 0 0.75rem; }
+.lb-deploy { padding: 0.6rem 2rem; background: #8abf4d; border: none; border-radius: 4px; color: #1a1a2e; font-weight: 600; letter-spacing: 0.04em; cursor: pointer; }
+.lb-deploy:hover:not(:disabled) { background: #a7db6c; }
+.lb-deploy:disabled { background: #3a3a6a; color: #888; cursor: not-allowed; }
+.lb-output { max-height: 28rem; }
+@media (max-width: 800px) { .lb-tools { grid-template-columns: 1fr; } }
 a.mt-pill-link { display: inline-block; padding: 0.4rem 1rem; border: 1px solid #3a3a6a; border-radius: 999px; color: #66d9ef; text-decoration: none; }
 a.mt-pill-link:hover { border-color: #66d9ef; }
