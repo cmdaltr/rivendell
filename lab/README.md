@@ -27,7 +27,7 @@ cd lab
 ./lab.sh
 ```
 
-Choose **1) Quickstart**. It checks the host, offers to install what's missing, asks where to keep data and VMs, and and sets up the lab password: the `gandalf` user on every target gets it. The default is `mellon`, which is fine because every target listens only on loopback or a host-only network. If you set your own (`./lab.sh configure`, or **Lab** in the web UI), it's stored in your Keychain (or the Secret Service keyring on Linux), never on disk; an empty entry goes back to the default. Targets keep the password they were created with, so re-create them after a change. Then it builds and starts the Linux containers, collects from them with both the Bash and Python collectors, downloads APT29 days 1–2 from OTRF, and writes the settings Rivendell's test runner needs.
+Choose **1) Quickstart**. It checks the host, offers to install what's missing, asks where to keep data and VMs, and and sets up the lab password: the `gandalf` user on every target gets it. The default is `mellon`, which is fine because every target listens only on loopback or a host-only network. If you set your own (`./lab.sh configure`, or **Aragorn → Lab** in the web UI), it's stored in your Keychain (or the Secret Service keyring on Linux), never on disk; an empty entry goes back to the default. Targets keep the password they were created with, so re-create them after a change. Then it builds and starts the Linux containers, collects from them with both the Bash and Python collectors, downloads APT29 days 1–2 from OTRF, and writes the settings Rivendell's test runner needs.
 
 The same steps exist as single commands:
 
@@ -53,7 +53,7 @@ cd lab
 ./lab.sh agent start
 ```
 
-Then sign in to Rivendell as an admin and open **Lab** in the navigation bar. The page shows the host profile, lets you edit settings and set the lab password, and has buttons for every lab step except `install`, which needs your password at a terminal. The command output streams into the page, and a run can be cancelled.
+Then sign in to Rivendell as an admin and open **Aragorn**; its **Lab** section is the lab. It shows the machines (see [The Mordor Page](#the-mordor-page)), the host profile, lets you edit settings and set the lab password, and has buttons for every lab step except `install`, which needs your password at a terminal. The command output streams into the page, and a run can be cancelled.
 
 The agent is a small Python service (standard library only) on loopback port 5691. It accepts only the lab commands, with validated arguments, and runs one at a time. Its access token is regenerated on each start and written to `/tmp/rivendell/.lab-agent/token`, which the Rivendell backend already mounts. The page also stays off until the backend's `SECRET_KEY` is set, because the default JWT secret would let anyone mint an admin token. Stop the agent with `./lab.sh agent stop`.
 
@@ -141,9 +141,9 @@ python3 -m src.mordor.telemetry --guide <Kaggle zip>     # re-summarise Microsof
 
 ### The Mordor Page
 
-**Mordor** in the web UI (`/mordor`) is one page, Archer's Emulate page ported. It shows where the telemetry comes from (the pipeline diagram and a card per public dataset, with **Update** for admins), the lab that records your own, and every recorded technique with the logs its recordings hold, searchable by a value in the recorded events. An OTRF recording in a technique's detail has **Download for Elrond**, which fetches its raw events for `--Mordor` analysis. Its last section, **Downloadable datasets**, is the OTRF catalogue: the datasets that span several techniques (APT29's days) and bulk download.
+**Mordor** in the web UI (`/mordor`) is one page, Archer's Emulate page ported. It shows where the telemetry comes from (the pipeline diagram and a card per public dataset, with **Update** for admins), a link to the lab that records your own, and every recorded technique with the logs its recordings hold, searchable by a value in the recorded events. An OTRF recording in a technique's detail has **Download for Elrond**, which fetches its raw events for `--Mordor` analysis. Its last section, **Downloadable datasets**, is the OTRF catalogue: the datasets that span several techniques (APT29's days) and bulk download.
 
-**Your lab** needs the lab agent and an admin login. It shows this host and the engines it can drive (Docker, Tart, UTM), what you can create on it, and every machine:
+The lab itself is on **Aragorn → Lab** (`/aragorn#lab`; `/lab` goes there too), with the rest of what Rivendell runs on this host. It needs the lab agent and an admin login. Its **Machines** panel shows this host and the engines it can drive (Docker, Tart, UTM), what you can create on it, and every machine:
 
 - **Create a machine**: an Ubuntu container (Docker), an Ubuntu or macOS VM (Tart, Apple silicon). Windows comes from UTM: **Clone existing** copies a built VM; **From ISO** checks a Windows 11 ARM64 ISO and can run `./lab.sh windows-vm create` to build the lab's VM unattended.
 - **Your machines**: Start/Stop, Snapshot, Revert, Clone (UTM), Set OS (a UTM VM the lab didn't build), Set up (audit logging, PowerShell, Atomic Red Team), Record (Atomic Red Team, with a preview and a snapshot confirmation), Logs, and Delete.

@@ -10,7 +10,6 @@ import {
   getLabRun,
   cancelLabRun,
 } from '../api';
-import PageHero from './PageHero';
 
 const errorText = (err) => {
   const detail = err.response?.data?.detail;
@@ -403,15 +402,5 @@ function LabBody() {
   );
 }
 
-function Lab() {
-  return (
-    <div className="journey-detail">
-      <PageHero title="Rivendell Test Lab">
-        Targets for Gandalf and datasets for Mordor, on this machine. Everything here runs lab/lab.sh on the host; the same commands work in a terminal.
-      </PageHero>
-      <LabBody />
-    </div>
-  );
-}
-
-export default Lab;
+// Aragorn → Lab: the lab's settings, password, lab.sh commands and their runs
+export default LabBody;

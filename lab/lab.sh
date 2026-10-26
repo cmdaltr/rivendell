@@ -594,7 +594,7 @@ cmd_agent() {
       nohup python3 "$LAB_ROOT/agent/lab_agent.py" --bind "$(forward_ip)" >"$AGENT_LOG" 2>&1 &
       echo $! > "$AGENT_PID"
       sleep 1
-      kill -0 "$(cat "$AGENT_PID")" 2>/dev/null && ok "Lab agent running (log: $AGENT_LOG). Open Rivendell > Lab." || { fail "Agent failed to start:"; tail -5 "$AGENT_LOG"; }
+      kill -0 "$(cat "$AGENT_PID")" 2>/dev/null && ok "Lab agent running (log: $AGENT_LOG). Open Rivendell > Aragorn > Lab." || { fail "Agent failed to start:"; tail -5 "$AGENT_LOG"; }
       ;;
     stop)
       [ -f "$AGENT_PID" ] && kill "$(cat "$AGENT_PID")" 2>/dev/null && rm -f "$AGENT_PID" && ok "Lab agent stopped" || warn "Lab agent wasn't running"

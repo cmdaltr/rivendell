@@ -13,7 +13,10 @@ import {
   getAragornOp,
   listAragornOps,
 } from '../api';
+import { useLocation } from 'react-router-dom';
 import PageHero from './PageHero';
+import LabMachines from './LabMachines';
+import LabBody from './Lab';
 
 const formatBytes = (n) => {
   if (!n && n !== 0) return '—';
@@ -221,7 +224,7 @@ function AragornBody() {
     return (
       <div className="aragorn">
         <div className="card">
-          <h2>Aragorn</h2>
+          <h2>Containers and images</h2>
           <p>Docker administration is limited to Rivendell administrators. Sign in with an admin account.</p>
         </div>
       </div>
@@ -242,7 +245,7 @@ function AragornBody() {
   return (
     <div className="aragorn">
       <div className="card">
-        <h2>Aragorn</h2>
+        <h2>Containers and images</h2>
         <p className="aragorn-note">
           Rivendell containers and images on <code>{status.socket}</code> (compose project <code>{status.project}</code>).
           Rebuilding Rivendell's own images runs on the host: <code>rivendell aragorn rebuild &lt;service&gt;</code>.
@@ -367,13 +370,44 @@ function AragornBody() {
   );
 }
 
+// Aragorn: everything Rivendell runs on this host. Rivendell is its own containers and images
+// (the aragorn service); Lab is the test lab's machines and commands (the lab agent).
 function Aragorn() {
+  const { user } = useAuth();
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ behavior: 'smooth' });
+  }, [hash]);
   return (
     <div className="journey-detail">
-      <PageHero title="Aragorn Docker Administration">
-        Manage Rivendell's own containers and images: start, stop, restart, update and prune, without leaving Rivendell.
+      <PageHero title="Aragorn">
+        Everything Rivendell runs on this machine: its own containers and images, and the lab's containers and VMs that
+        Gandalf collects from and Mordor records on.
       </PageHero>
-      <AragornBody />
+      <div className="aragorn-jump"><a href="#rivendell">Rivendell</a><a href="#lab">Lab</a></div>
+      <section id="rivendell" className="aragorn-section">
+        <h2 className="aragorn-section-title">Rivendell</h2>
+        <AragornBody />
+      </section>
+      <section id="lab" className="aragorn-section">
+        <h2 className="aragorn-section-title">Lab</h2>
+        {user?.role === 'admin' ? (
+          <>
+            <div className="card">
+              <h2>Machines</h2>
+              <p className="lab-note">
+                Create and manage the containers and VMs Gandalf collects from and Mordor records on. Rivendell drives Docker
+                and Tart for Linux and macOS, and UTM for Windows. The machines are disposable: snapshot one before you turn
+                logging on or run atomics, and revert when you're done. Recordings appear on the Mordor page as Your lab.
+              </p>
+              <LabMachines />
+            </div>
+            <LabBody />
+          </>
+        ) : (
+          <div className="card"><p>The lab is limited to Rivendell administrators. Sign in with an admin account.</p></div>
+        )}
+      </section>
     </div>
   );
 }

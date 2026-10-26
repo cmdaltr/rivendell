@@ -16,7 +16,6 @@ import JobDetails from './components/JobDetails';
 import Archive from './components/Archive';
 import AccountPage from './components/AccountPage';
 import Aragorn from './components/Aragorn';
-import Lab from './components/Lab';
 import './App.css';
 
 function Navigation() {
@@ -99,7 +98,7 @@ function AppContent() {
             <Route path="/archive" element={<Archive />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/aragorn" element={<Aragorn />} />
-            <Route path="/lab" element={<Lab />} />
+            <Route path="/lab" element={<Navigate to="/aragorn#lab" replace />} />
           </Routes>
         </main>
 
