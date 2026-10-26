@@ -121,6 +121,17 @@ class GandalfIngestTests(unittest.TestCase):
         self.assertTrue((self.out / "lab-rocky" / "gandalf_log.audit").is_file())
         self.assertFalse((self.out / gandalf.STAGING_DIR).exists())
 
+    def test_zip_names_and_two_zips_in_one_folder(self):
+        # E19: names lose only their extension (not a character set), and a second zip is fine
+        self.assertEqual(gandalf.archive_stem("zipper.zip"), "zipper")
+        self.assertEqual(gandalf.archive_stem("lab-rocky.tar.gz"), "lab-rocky")
+        (self.acq / "hosts").mkdir(parents=True)
+        for host in ("zipper", "pizza"):
+            with zipfile.ZipFile(self.acq / "hosts" / f"{host}.zip", "w") as z:
+                z.writestr("artefacts/host.info", f"{host}::Linux\n")
+                z.writestr("artefacts/etc+passwd", "root:x:0:0")
+        self.assertEqual(sorted(v for v in self.assess().values()), ["pizza::Linux", "zipper::Linux"])
+
     def test_windows_zip_already_in_elrond_layout(self):
         (self.acq / "WIN11").mkdir(parents=True)
         with zipfile.ZipFile(self.acq / "WIN11" / "WIN11.zip", "w") as z:

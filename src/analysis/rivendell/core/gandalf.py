@@ -284,6 +284,64 @@ def ingest_event_dataset(staging, stem, output_directory, verbosity, allimgs):
     return [host for host, _, _ in placed]
 
 
+ENCRYPTED_SUFFIXES = (".tar.gz.enc", ".zip.enc")
+
+
+def _shadowfax_key(archive):
+    """The key Gandalf saved for an encrypted archive: <host>.shadowfax.key beside it (as
+    gandalf.sh and gandalf.py save it), or shadowfax.key in the same folder."""
+    folder, name = os.path.split(archive)
+    host = name[: -len(".tar.gz.enc")] if name.endswith(".tar.gz.enc") else name[: -len(".zip.enc")]
+    for candidate in (host + ".shadowfax.key", "shadowfax.key"):
+        path = os.path.join(folder, candidate)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def decrypt_archive(archive, staging_root):
+    """
+    Decrypt a Gandalf archive with the key saved beside it, into staging_root; returns the
+    decrypted archive's path, or None after saying what's needed. gandalf.py's .zip.enc is
+    Fernet; gandalf.sh's .tar.gz.enc is openssl AES-256-CBC (PBKDF2). A password-encrypted
+    archive has no key file: it has to be decrypted by hand first.
+    """
+    name = os.path.basename(archive)
+    plain_name = name[:-4]  # drop .enc
+    key = _shadowfax_key(archive)
+    if not key:
+        if name.endswith(".zip.enc"):
+            how = "python3 src/acquisition/python/passkey_decrypt.py (password), or put its <host>.shadowfax.key beside it"
+        else:
+            how = "openssl enc -d -aes-256-cbc -pbkdf2 -in {} -out {}".format(archive, archive[:-4])
+        print("   '{}' is encrypted and there's no shadowfax.key beside it; decrypt it first:\n     {}\n".format(name, how))
+        return None
+    os.makedirs(staging_root, exist_ok=True)
+    out = os.path.join(staging_root, plain_name)
+    try:
+        if name.endswith(".zip.enc"):
+            from cryptography.fernet import Fernet, InvalidToken
+
+            with open(key, "rb") as fh:
+                fernet = Fernet(fh.read().strip())
+            with open(archive, "rb") as fh:
+                data = fernet.decrypt(fh.read())
+            with open(out, "wb") as fh:
+                fh.write(data)
+        else:
+            subprocess.run(
+                ["openssl", "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-in", archive, "-out", out, "-pass", "file:" + key],
+                check=True, capture_output=True,
+            )
+    except Exception as error:  # wrong key, corrupt archive, or openssl missing
+        print("   Couldn't decrypt '{}' with {} ({}); skipping it\n".format(name, os.path.basename(key), error))
+        if os.path.exists(out):
+            os.remove(out)
+        return None
+    print("   Decrypted '{}' with {}".format(name, os.path.basename(key)))
+    return out
+
+
 def assess_gandalf(
     auto,
     gandalf,
@@ -324,16 +382,10 @@ def assess_gandalf(
         for gfile in sorted(gfiles):
             if gfile.startswith("._"):  # macOS AppleDouble metadata, not an archive
                 continue
-            if gfile.endswith(".tar.gz.enc"):
-                key = os.path.join(groot, gfile[: -len(".tar.gz.enc")] + ".shadowfax.key")
-                print(
-                    "   '{}' is encrypted; decrypt it first, e.g.\n     openssl enc -d -aes-256-cbc -pbkdf2 -in {} -out {}{}\n".format(
-                        gfile,
-                        os.path.join(groot, gfile),
-                        os.path.join(groot, gfile[:-4]),
-                        " -pass file:" + key if os.path.exists(key) else "",
-                    )
-                )
+            if gfile.endswith(ENCRYPTED_SUFFIXES):
+                decrypted = decrypt_archive(os.path.join(groot, gfile), staging_root)
+                if decrypted:
+                    ingest_gandalf_archive(decrypted, output_directory, verbosity, allimgs)
                 continue
             if gfile.endswith(ARCHIVE_SUFFIXES):
                 ingest_gandalf_archive(os.path.join(groot, gfile), output_directory, verbosity, allimgs)

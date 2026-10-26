@@ -80,13 +80,9 @@ def generate_passkey():
         "    \033[1;30mEnter password to decrypt acquisition archive:\033[1;m "
     ).encode()
     password = bytes(pswd)
-    salt = input(
+    pswdsalt = input(
         "    \033[1;30mEnter salt [isengard.pork]:\033[1;m "
-    )
-    if salt != "" or salt == "isengard.pork":
-        pswdsalt = "isengard.pork"
-    else:
-        pswdsalt = salt
+    ) or "isengard.pork"
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32, 

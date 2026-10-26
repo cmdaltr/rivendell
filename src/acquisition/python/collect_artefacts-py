@@ -403,12 +403,17 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
     )
 
 
-def encrypt_archive(encryption_object, gandalf_host):
+def encrypt_archive(encryption_key, gandalf_host):
+    """Fernet-encrypt <host>.zip to <host>.zip.enc and remove the plaintext archive.
+    encryption_key is the key itself (gandalf.py writes it into this script), not a Fernet."""
+    from cryptography.fernet import Fernet
+
     with open("{}.zip".format(gandalf_host), "rb") as zipfile:
         zip_archive = zipfile.read()
-    encrypted = encryption_object.encrypt(zip_archive)
+    encrypted = Fernet(encryption_key).encrypt(zip_archive)
     with open("{}.zip.enc".format(gandalf_host), "wb") as encrypted_zipfile:
         encrypted_zipfile.write(encrypted)
+    os.remove("{}.zip".format(gandalf_host))
     print()
 
 

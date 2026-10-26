@@ -256,22 +256,24 @@ else:
     collect_files = "None"
 
 
-def overwrite_key(key_name):
-    with open(key_name, "wb") as keyfile:
-        keyfile.write("YOU SHALL NOT PASS!")
-    os.remove(key_name)  # delete key
-
-
 def generate_filekey():
+    """A new Fernet key. It's saved beside the archive as <host>.shadowfax.key, as gandalf.sh
+    does, which Elrond reads to decrypt; keep it apart from the archive in transit."""
     key = Fernet.generate_key()
-    key_name = "shadowfax.key"
-    with open(key_name, "wb") as keyfile:
+    print("     Encryption key created; it is saved as <host>.shadowfax.key beside the archive.\r")
+    return key
+
+
+def save_filekey(key, directory, host):
+    key_path = os.path.join(directory, "{}.shadowfax.key".format(host))
+    with open(key_path, "wb") as keyfile:
         keyfile.write(key)
-    with open(key_name, "rb") as keyfile:
-        filekey = keyfile.read()
-    print("     Encryption key 'shadowfax.key' created.\r")
-    overwrite_key(key_name)
-    return Fernet(filekey), key_name
+    os.chmod(key_path, 0o600)
+    print(
+        "     \033[1;33mEncryption key: {}\n       Store it apart from the archive; anyone holding both can read it.\033[1;m".format(
+            key_path
+        )
+    )
 
 
 def generate_cipher():
@@ -279,11 +281,7 @@ def generate_cipher():
         "    \033[1;30mEnter password to encrypt acquisition archive:\033[1;m "
     ).encode()
     password = bytes(pswd)
-    salt = input("    \033[1;30mEnter salt [isengard.pork]:\033[1;m ")
-    if salt != "" or salt == "isengard.pork":
-        pswdsalt = "isengard.pork"
-    else:
-        pswdsalt = salt
+    pswdsalt = input("    \033[1;30mEnter salt [isengard.pork]:\033[1;m ") or "isengard.pork"
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
@@ -291,9 +289,8 @@ def generate_cipher():
         iterations=480000,
     )
     key = base64.urlsafe_b64encode(kdf.derive(password))
-    cipher = Fernet(key)
     print("     Cipher created successfully\r")
-    return cipher
+    return key
 
 
 def available_memory_tools():
@@ -319,7 +316,7 @@ def configure_acquisition(
     shutil.copy2(ACQUIRE_TEMPLATE, ACQUIRE_SCRIPT)
     with open(ACQUIRE_SCRIPT, "a") as acquire_artefacts:
         acquire_artefacts.write(
-            '\n\nacquire_artefacts(\n    "{}",\n    {},\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n)\n'.format(
+            '\n\nacquire_artefacts(\n    "{}",\n    {},\n    "{}",\n    "{}",\n    "{}",\n    "{}",\n    {!r},\n    "{}",\n    "{}",\n)\n'.format(
                 encryption_method,
                 system_artefacts,
                 output_directory,
@@ -390,20 +387,7 @@ def main():
         )
         sys.exit()
     if encryption_method.title() == "Key":
-        encryption_object, key_name = generate_filekey()
-        key_confirm = input(
-            "    \033[1;30mHave you obtained a copy of the encryption key? Without it, you won't be able to decrypt the acquisition archive!\033[1;m [Y/n] "
-        ).encode()
-        if key_confirm != "n":
-            confirm_key_delete = input(
-                "     '{}' will now be deleted. Are you sure?! [Y/n] ".format(key_name)
-            )
-            if confirm_key_delete != "n":
-                overwrite_key(key_name)
-            else:
-                pass
-        else:
-            pass
+        encryption_object = generate_filekey()
         print()
     elif encryption_method.title() == "Password":
         encryption_object = generate_cipher()
@@ -430,6 +414,8 @@ def main():
         subprocess.Popen(
             ["sudo", "python3", ACQUIRE_SCRIPT]
         ).communicate()
+        if encryption_method.title() == "Key":
+            save_filekey(encryption_object, output_directory, hostlist[0])
         if output_directory != gandalf_directory:
             if os.path.exists(
                 os.path.join(gandalf_directory, "{}.zip.enc".format(hostlist[0]))
@@ -542,6 +528,8 @@ def main():
                             gandalf_host.split("/")[-1]
                         )
                     )
+                    if encryption_method.title() == "Key":
+                        save_filekey(encryption_object, ".", gandalf_host.split("/")[-1])
                 elif (
                     "{}.zip".format(gandalf_host.split("/")[-1]) in dir_listing
                 ):  # checking for unencrypted archive
