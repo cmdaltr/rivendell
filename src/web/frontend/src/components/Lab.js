@@ -10,6 +10,7 @@ import {
   getLabRun,
   cancelLabRun,
 } from '../api';
+import PageHero from './PageHero';
 
 const errorText = (err) => {
   const detail = err.response?.data?.detail;
@@ -79,7 +80,7 @@ function RunOutput({ run, onCancel, onClose }) {
   );
 }
 
-function Lab() {
+function LabBody() {
   const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [state, setState] = useState(null);
@@ -221,11 +222,6 @@ function Lab() {
 
   return (
     <div className="lab">
-      <h1>Test lab</h1>
-      <p className="lab-note">
-        Targets for Gandalf and datasets for Mordor, on this machine. Everything here runs <code>lab/lab.sh</code>{' '}
-        on the host; the same commands work in a terminal.
-      </p>
 
       {error && <div className="card lab-error">{error} <button className="secondary" onClick={() => setError(null)}>Dismiss</button></div>}
       {message && <div className="card lab-message">{message}</div>}
@@ -403,6 +399,17 @@ function Lab() {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function Lab() {
+  return (
+    <div className="journey-detail">
+      <PageHero title="Rivendell Test Lab">
+        Targets for Gandalf and datasets for Mordor, on this machine. Everything here runs lab/lab.sh on the host; the same commands work in a terminal.
+      </PageHero>
+      <LabBody />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   getAragornOp,
   listAragornOps,
 } from '../api';
+import PageHero from './PageHero';
 
 const formatBytes = (n) => {
   if (!n && n !== 0) return '—';
@@ -81,7 +82,7 @@ function EnablePanel({ status, onRecheck }) {
   );
 }
 
-function Aragorn() {
+function AragornBody() {
   const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [containers, setContainers] = useState([]);
@@ -362,6 +363,17 @@ function Aragorn() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Aragorn() {
+  return (
+    <div className="journey-detail">
+      <PageHero title="Aragorn Docker Administration">
+        Manage Rivendell's own containers and images: start, stop, restart, update and prune, without leaving Rivendell.
+      </PageHero>
+      <AragornBody />
     </div>
   );
 }
