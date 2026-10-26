@@ -1,4 +1,5 @@
 #!/usr/bin/env python3 -tt
+import glob
 import os
 import re
 import shutil
@@ -10,6 +11,41 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 from rivendell.core.identify import identify_disk_image
 from rivendell.utils import safe_input
+
+
+
+def _run_quietly(cmd):
+    """Run a teardown command; (returncode, stdout). A missing tool is (127, "")."""
+    try:
+        done = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        return done.returncode, done.stdout
+    except OSError:
+        return 127, ""
+
+
+def release_loop_devices():
+    """Detach every loop device a job left behind, kpartx's included.
+
+    `losetup -D` alone can't detach a loop device kpartx has mapped partitions onto
+    (/dev/mapper/loopNpM hold it open), so the next Linux job found its mount busy
+    and finished with nothing (E9). The partition mappings go first: unmounted
+    wherever they're still mounted, then removed (kpartx -d, dmsetup as a fallback).
+    Returns the loop devices still attached afterwards, which are reported."""
+    mapped = sorted(glob.glob("/dev/mapper/loop*p*"))
+    for part in mapped:
+        _run_quietly(["umount", part])
+    loops = sorted({re.sub(r"p\d+$", "", os.path.basename(m)) for m in mapped})
+    for loop in loops:
+        _run_quietly(["kpartx", "-d", "/dev/" + loop])
+    for part in mapped:
+        if os.path.exists(part):
+            _run_quietly(["dmsetup", "remove", os.path.basename(part)])
+    _run_quietly(["losetup", "-D"])
+    code, attached = _run_quietly(["losetup", "-a"])
+    left = [line.split(":", 1)[0] for line in attached.splitlines() if line.strip()] if code == 0 else []
+    if left:
+        print("   Warning: loop devices still attached after unmounting: {}".format(", ".join(left)))
+    return left
 
 
 def cleanup_stale_mounts(elrond_mount, ewf_mount):
@@ -58,15 +94,7 @@ def cleanup_stale_mounts(elrond_mount, ewf_mount):
         if os.path.exists(eachewf):
             unmount_location(eachewf + "/")
 
-    # Clean up loop devices
-    try:
-        subprocess.Popen(
-            ["losetup", "-D"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).communicate()
-    except Exception:
-        pass
+    release_loop_devices()
 
 
 def unmount_images(elrond_mount, ewf_mount):
@@ -130,16 +158,7 @@ def unmount_images(elrond_mount, ewf_mount):
             if eachewf != "/mnt/ewf_mount":
                 remove_directories(eachewf)
 
-    # Clean up all loop devices to prevent exhaustion on subsequent runs
-    # This detaches any stale loop devices that weren't properly cleaned up
-    try:
-        subprocess.Popen(
-            ["losetup", "-D"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).communicate()
-    except Exception:
-        pass  # Ignore errors - losetup may not be available or may fail
+    release_loop_devices()
 
 
 def collect_ewfinfo(elrond_mount, ewf_mount, path, intermediate_mount, cwd):

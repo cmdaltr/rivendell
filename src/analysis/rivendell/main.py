@@ -120,6 +120,7 @@ def main(
     mounted_imgs=None,  # Pre-populated imgs dict from mount phase (for collect/process phases)
 ):
     partitions = []
+    unmounted = []  # images found that no mount method could open (E9)
     hashing_enabled = hashall or hashcollected
 
     # Only clear screen in interactive mode
@@ -634,6 +635,7 @@ def main(
                         write_audit_log_entry(verbosity, output_directory, entry, prnt)
                     else:
                         print("   Unfortunately, '{}' could not be mounted".format(f))
+                        unmounted.append(f)
                         entry, prnt = "{},{},{},failed\n".format(
                             datetime.now().isoformat(), f, "mounting"
                         ), " -> {} -> not mounted '{}'".format(
@@ -781,11 +783,17 @@ def main(
             print(
                 "  ----------------------------------------\n  -> Completed Identification Phase.\n"
             )
+    elif unmounted:
+        # E9: a busy or unmountable image used to end here with exit status 0, so the
+        # job "completed" in seconds with no output
+        print("\n   ERROR: no image could be processed; {} could not be mounted: {}\n".format(
+            "it" if len(unmounted) == 1 else "these", ", ".join(unmounted)), flush=True)
+        sys.exit(2)
     else:
         nodisks = safe_input(
             "  No images exist in the provided directory.\n   Please try again."
         )
-        sys.exit()
+        sys.exit(1)
     time.sleep(1)
 
     # PHASE CONTROL: If mount-only phase, return after mounting

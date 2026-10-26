@@ -537,6 +537,7 @@ if __name__ == "__main__":
 
     # Store mounted image data for each source
     mounted_data = {}
+    failed_sources = []
 
     # =========================================================================
     # CLEANUP: Unmount any stale mounts from previous runs
@@ -565,52 +566,59 @@ if __name__ == "__main__":
 
         # Call main with phase="mount" to just mount the image
         # skip_unmount=True so we don't unmount previous images
-        result = main(
-            source_directory,
-            case,
-            analysis,
-            auto,
-            collect,
-            vss,
-            delete,
-            elastic,
-            gandalf,
-            collectfiles,
-            extractiocs,
-            iocsfile,
-            misplaced_binaries,
-            masquerading,
-            keywords,
-            volatility,
-            metacollected,
-            navigator,
-            nsrl,
-            magicbytes,
-            hashall,
-            hashcollected,
-            process,
-            splunk,
-            symlinks,
-            timeline,
-            memorytimeline,
-            userprofiles,
-            veryverbose,
-            verbose,
-            yara,
-            archive,
-            source,
-            cwd,
-            source_sha256,
-            source_allimgs,
-            source_flags,
-            elrond_mount,
-            ewf_mount,
-            system_artefacts,
-            quotes,
-            asciitext,
-            skip_unmount=(idx > 0),  # Don't unmount after first image
-            phase="mount",
-        )
+        # main() exits when a source has nothing it can mount (E9); the other sources go on
+        try:
+            result = main(
+                source_directory,
+                case,
+                analysis,
+                auto,
+                collect,
+                vss,
+                delete,
+                elastic,
+                gandalf,
+                collectfiles,
+                extractiocs,
+                iocsfile,
+                misplaced_binaries,
+                masquerading,
+                keywords,
+                volatility,
+                metacollected,
+                navigator,
+                nsrl,
+                magicbytes,
+                hashall,
+                hashcollected,
+                process,
+                splunk,
+                symlinks,
+                timeline,
+                memorytimeline,
+                userprofiles,
+                veryverbose,
+                verbose,
+                yara,
+                archive,
+                source,
+                cwd,
+                source_sha256,
+                source_allimgs,
+                source_flags,
+                elrond_mount,
+                ewf_mount,
+                system_artefacts,
+                quotes,
+                asciitext,
+                skip_unmount=(idx > 0),  # Don't unmount after first image
+                phase="mount",
+            )
+        except SystemExit as e:
+            if e.code in (None, 0):
+                raise
+            failed_sources.append(source)
+            result = None
 
         # Store the mounted image data for later phases
         if result:
@@ -626,6 +634,9 @@ if __name__ == "__main__":
             }
             print(f"  -> Mounted: {len(imgs)} image(s) from {source}")
 
+    if not mounted_data:
+        print("\n   ERROR: nothing could be mounted from {}\n".format(", ".join(failed_sources) or "the sources"), flush=True)
+        sys.exit(2)
     print("\n  ----------------------------------------\n  -> Completed Identification Phase.\n")
     print("\n  -> \033[1;36mCommencing Collection Phase...\033[1;m\n  ----------------------------------------")
 
