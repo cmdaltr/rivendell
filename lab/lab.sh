@@ -609,7 +609,7 @@ cmd_agent() {
 
 # ------------------------------------------------------- non-interactive (lab agent)
 
-CONFIG_KEYS="LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB WINDOWS_UTM_VM LAB_TART_HOME"
+CONFIG_KEYS="LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB WINDOWS_UTM_VM LAB_TART_HOME LAB_HIDDEN_MACHINES"
 
 # KEY=value lines describing this host and the lab, for the web UI.
 cmd_state() {

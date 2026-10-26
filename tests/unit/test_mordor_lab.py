@@ -206,6 +206,19 @@ def test_listing_shows_only_machines_rivendell_knows(monkeypatch, tmp_path):
     assert machines.listing(["tart"])[0]["os"] == "macos"
 
 
+
+def test_listing_leaves_out_hidden_machines(monkeypatch, tmp_path):
+    # Every UTM VM is listed (Rivendell drives any of them) unless lab.conf hides it
+    monkeypatch.setattr("src.mordor.lab.registry._PATH", str(tmp_path / "machines.json"))
+    monkeypatch.setattr(engines.UTM, "list", lambda self: [
+        {"engine": "utm", "name": "archer-win11", "kind": "vm", "image": "", "os": "", "state": "stopped", "detail": ""},
+        {"engine": "utm", "name": "rivendell-lab-win11", "kind": "vm", "image": "", "os": "", "state": "stopped", "detail": ""},
+    ])
+    monkeypatch.setattr(machines, "HIDDEN", {"archer-win11"})
+    assert [m["name"] for m in machines.listing(["utm"])] == ["rivendell-lab-win11"]
+    monkeypatch.setattr(machines, "HIDDEN", set())
+    assert [m["name"] for m in machines.listing(["utm"])] == ["archer-win11", "rivendell-lab-win11"]
+
 def test_all_host_names_includes_vms_outside_archer(monkeypatch):
     # For clash-free naming: every name on the host, Archer's and not
     monkeypatch.setattr(engines.Docker, "list", lambda self: [

@@ -24,9 +24,10 @@ const SETTINGS = [
   ['WINDOWS_VM_CPUS', 'Windows VM CPUs', ''],
   ['WINDOWS_VM_MEMORY_MB', 'Windows VM memory (MB)', ''],
   ['LINUX_VM_MEMORY_MB', 'Linux VM memory (MB)', ''],
+  ['LAB_HIDDEN_MACHINES', 'Hidden machines', "VMs on this host the lab doesn't show, e.g. another project's (space-separated)."],
 ];
 
-const DIR_KEYS = ['LAB_DATA_DIR', 'TEST_IMAGES_PATH', 'LAB_VM_DIR'];
+const DIR_KEYS = ['LAB_DATA_DIR', 'TEST_IMAGES_PATH', 'LAB_VM_DIR', 'LAB_HIDDEN_MACHINES'];  // the first row
 const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
 const STATUS_ICON = { succeeded: '✅', failed: '❌', cancelled: '⏹️', running: '⏳' };
 const formatTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '—');

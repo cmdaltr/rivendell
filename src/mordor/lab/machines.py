@@ -9,7 +9,7 @@ UTM VM are listed too. Ported from Archer; the lab is admin-only in Rivendell, s
 per-user ownership.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from . import registry
 from .engines import ENGINES, engine_for
@@ -20,6 +20,9 @@ from .templates import BY_ID
 # The lab's own Windows VM (lab.conf WINDOWS_UTM_VM); set by the lab agent. Its set-up and
 # recording go through ./lab.sh over SSH, which it's built for, rather than utmctl exec.
 LAB_WINDOWS_VM = "rivendell-lab-win11"
+# Machines on this host the page never shows (lab.conf LAB_HIDDEN_MACHINES), such as another
+# project's UTM VM; set by the lab agent.
+HIDDEN: Set[str] = set()
 
 
 def lab_machine(engine: str, name: str) -> bool:
@@ -68,7 +71,7 @@ def listing(engines: Optional[List[str]] = None) -> List[Dict]:
         if engines is not None and key not in engines:
             continue
         try:
-            out += [d for d in (_decorate(m) for m in engine.list()) if d["known"]]
+            out += [d for d in (_decorate(m) for m in engine.list()) if d["known"] and d["name"] not in HIDDEN]
         except LabError:
             continue  # an engine that isn't running doesn't stop the others
     out.sort(key=lambda m: (m["engine"], m["name"]))

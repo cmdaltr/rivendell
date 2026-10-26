@@ -8,6 +8,7 @@ mordor-record), which reach it over SSH; any other machine goes through src.mord
 """
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import time
@@ -48,6 +49,7 @@ def configure(lab_state: Callable[[], dict]) -> None:
     tart_home = cfg.get("LAB_TART_HOME") or (f"{cfg['LAB_VM_DIR']}/tart" if cfg.get("LAB_VM_DIR") else "")
     runner.configure({"DOCKER_CONTEXT": _docker_context(), "TART_HOME": tart_home})
     machines.LAB_WINDOWS_VM = cfg.get("WINDOWS_UTM_VM") or "rivendell-lab-win11"
+    machines.HIDDEN = {n for n in re.split(r"[,\s]+", cfg.get("LAB_HIDDEN_MACHINES", "")) if n}
     _config["at"] = time.time()
 
 
