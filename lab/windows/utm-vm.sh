@@ -15,7 +15,7 @@ set -euo pipefail
 . "$(dirname "$0")/../lib/common.sh"
 load_config
 
-action="${1:?create|adopt|start|stop|delete|status|collect|sensor|record}"
+action="${1:?create|adopt|start|stop|delete|status|collect|raw-check|sensor|record}"
 uses_tart || die "The UTM VM is for Apple silicon. On x86-64 hosts the lab uses Vagrant: ./lab.sh windows-vm"
 [ -d /Applications/UTM.app ] || die "UTM is not installed. Run: ./lab.sh install"
 
@@ -331,6 +331,7 @@ wait_ready() {
 collect() {
   require_password
   nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
+  refresh_gandalf
   info "Running Invoke-Gandalf in $VM"
   ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Run-GandalfLocal.ps1 -GandalfSource C:\\lab\\gandalf-src -AcquisitionsRoot C:\\lab\\acquisitions" \
     | grep -v -i password || true
@@ -353,6 +354,32 @@ collect() {
 push_script() {
   LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" scp gandalf 127.0.0.1 "$PORT" "$LAB_ROOT/windows/$1" "C:/lab/scripts/$1" >/dev/null \
     || die "Couldn't copy $1 into $VM"
+}
+
+# C:\lab\gandalf-src is a copy from when the VM was provisioned: replace it with
+# the current src/acquisition (tools\disk_tools.zip included, if built) and the
+# current Run-GandalfLocal.ps1, so a collection tests the code as it is now
+refresh_gandalf() {
+  local tmp
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/lab-gandalf.XXXXXX")"
+  ( cd "$REPO_ROOT/src/acquisition" && COPYFILE_DISABLE=1 zip -qr -X "$tmp/gandalf-src.zip" . -x '*__pycache__*' '*.DS_Store' ) \
+    || die "Couldn't zip src/acquisition"
+  LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" scp gandalf 127.0.0.1 "$PORT" "$tmp/gandalf-src.zip" "C:/lab/gandalf-src.zip" >/dev/null \
+    || die "Couldn't copy Gandalf into $VM"
+  rm -f "$tmp/gandalf-src.zip"; rmdir "$tmp" 2>/dev/null || true
+  ssh_vm "Remove-Item -Recurse -Force C:\\lab\\gandalf-src -ErrorAction SilentlyContinue; Expand-Archive -LiteralPath C:\\lab\\gandalf-src.zip -DestinationPath C:\\lab\\gandalf-src; Remove-Item C:\\lab\\gandalf-src.zip" >/dev/null \
+    || die "Couldn't unpack Gandalf in $VM"
+  push_script Run-GandalfLocal.ps1
+  ok "Gandalf in $VM refreshed from src/acquisition"
+}
+
+# Gandalf's raw NTFS reader against RawCopy on locked files and metafiles (Test-RawReader.ps1)
+raw_check() {
+  require_password
+  nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
+  refresh_gandalf
+  push_script Test-RawReader.ps1
+  ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Test-RawReader.ps1"
 }
 
 sensor() {
@@ -445,6 +472,7 @@ case "$action" in
   status)
     if vm_registered; then echo "$VM: $(vm_status), SSH 127.0.0.1:$PORT ($BUNDLE)"; else echo "$VM: not created"; fi ;;
   collect) collect ;;
+  raw-check) raw_check ;;
   sensor) sensor ;;
   record) shift; record "$@" ;;
   *) die "unknown action $action" ;;
