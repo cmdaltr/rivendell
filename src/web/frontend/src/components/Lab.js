@@ -280,7 +280,7 @@ function LabManage({ section = 'lab', children = null }) {
           <span title={engine[2]}>{img(engine[0], engine[1])}</span>
           <span className="lab-logo-sep" />
           {items.map((it) => (fixedActions || items.length === 1 ? (
-            <span key={it.id} title={it.tip}>{img(it.logo, it.name)}</span>
+            <span key={it.id} title={it.tip} className="lab-logo-toggle is-static">{img(it.logo, it.name)}</span>
           ) : (
             <button key={it.id} type="button" title={`${it.tip}${unpicked[it.id] ? ' (not selected)' : ''}`}
                     className={`lab-logo-toggle${unpicked[it.id] ? ' is-off' : ''}`}

@@ -2956,7 +2956,9 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lab-target > span:first-child .lab-logo, .lab-target > span:first-child .lab-logo-text { margin-right: 0; }
 .lab-logo-toggle { background: none; border: 1px solid transparent; border-radius: 6px; padding: 2px; margin-right: 0.3rem; cursor: pointer; vertical-align: middle; }
 .lab-logo-toggle .lab-logo { margin-right: 0; }
-.lab-logo-toggle:hover { border-color: #66d9ef; }
+.lab-logo-toggle { display: inline-block; }
+.lab-logo-toggle:not(.is-static):hover { border-color: #66d9ef; }
+.lab-logo-toggle.is-static { cursor: help; }
 .lab-logo-toggle.is-off { opacity: 0.3; filter: grayscale(1); }
 .lab-logo-text { display: inline-block; padding: 0.1rem 0.4rem; margin-right: 0.45rem; border: 1px solid #3a3a6a; border-radius: 4px; font-size: 0.72rem; color: #f0dba5; vertical-align: middle; }
 
