@@ -12,6 +12,8 @@ import {
   getMordorLabSteps,
   postMordorLab,
   createJob,
+  getTelemetryStatus,
+  updateTelemetry,
 } from '../api';
 
 const IMG = `${process.env.PUBLIC_URL}/images`;
@@ -24,7 +26,7 @@ const errorText = (err) => {
 const TOOLS = [
   { key: 'gandalf', name: 'Gandalf', img: 'gandalf.png', blurb: 'Collect from lab targets: deploy a collector and bring the acquisition back.' },
   { key: 'elrond', name: 'Elrond', img: 'elrond.png', blurb: "Analyse what the lab collected: process, analyse and map it to ATT&CK." },
-  { key: 'mordor', name: 'Mordor', img: 'middle_earth.png', blurb: 'Record attacks: run Atomic Red Team on a lab machine, or fetch public datasets.' },
+  { key: 'mordor', name: 'Mordor', img: 'middle_earth.png', blurb: 'Record attacks with Atomic Red Team on a lab machine, or fetch and update public datasets.' },
 ];
 const PRESETS = {
   persistence: 'T1547.001,T1053.005,T1543.003',
@@ -88,6 +90,7 @@ function LabBuilder() {
   const [revertTo, setRevertTo] = useState('');
   const [snapped, setSnapped] = useState(false);
   const [group, setGroup] = useState(Object.keys(OTRF_GROUPS)[0]);
+  const [mordorElrond, setMordorElrond] = useState(false);
 
   // Deploy
   const [steps, setSteps] = useState(null);   // [{label, status, run?, job?}]
@@ -120,6 +123,7 @@ function LabBuilder() {
 
   const cfg = state.config || {};
   const acqRoot = `${cfg.TEST_IMAGES_PATH || cfg.LAB_DATA_DIR}/gandalf`;
+  const mordorRoot = `${cfg.TEST_IMAGES_PATH || cfg.LAB_DATA_DIR}/mordor`;
   const tart = state.host?.profile === 'macos-arm64';
   const machines = lab.machines || [];
   const running = (name) => machines.some((m) => m.name === name && m.state === 'running');
@@ -149,12 +153,12 @@ function LabBuilder() {
     }
     if (thenElrond) {
       if (!caseId.trim()) blocker = blocker || 'Give the case ID Elrond should file the analysis under.';
-      plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on ${acqRoot}/${collector}_collection/acquisitions/ as ${caseId || '…'}`, kind: 'elrond', path: `${acqRoot}/${collector}_collection/acquisitions/` });
+      plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on ${acqRoot}/${collector}_collection/acquisitions/ as ${caseId || '…'}`, kind: 'elrond', paths: [`${acqRoot}/${collector}_collection/acquisitions/`] });
     }
   } else if (tool === 'elrond') {
     if (!caseId.trim()) blocker = 'Give a case ID.';
     if (!elrondPath) blocker = 'Give the acquisitions folder.';
-    plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on ${elrondPath || '…'} as ${caseId || '…'}`, kind: 'elrond', path: elrondPath });
+    plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on ${elrondPath || '…'} as ${caseId || '…'}`, kind: 'elrond', paths: [elrondPath] });
   } else if (mode === 'record') {
     if (!picked) blocker = 'No machine with a known OS yet (Lab → Lab machines).';
     else {
@@ -166,11 +170,29 @@ function LabBuilder() {
       if (revertTo && !labWin) plan.push({ label: `Revert ${picked.name} to ${revertTo}`, kind: 'none' });
       if (revertTo && labWin) plan.push({ label: `Revert ${picked.name} to ${revertTo} (UTM snapshot)`, kind: 'revert', machine: picked });
     }
-  } else if (mode === 'capture') {
-    if (tart) blocker = "On Apple silicon, capture runs inside the VM (./lab.sh mordor-capture prints the command); use Record instead.";
-    plan.push({ label: `Run the ${preset} Atomic tests in the Windows VM and export one OTRF-style dataset for Elrond`, kind: 'lab', command: 'mordor-capture', args: [preset] });
+  } else if (mode === 'setup') {
+    if (!picked) blocker = 'No machine with a known OS yet (Lab → Lab machines).';
+    else {
+      if (!snapped) blocker = 'Confirm the machine is snapshotted and disposable.';
+      const labWin = picked.name === lab.lab_windows_vm;
+      plan.push({ label: labWin ? `Set up ${picked.name}: Sysmon, audit logging, Atomic Red Team` : `Set up ${picked.name}: audit logging, then Atomic Red Team`, kind: 'setup', machine: picked });
+    }
+  } else if (mode === 'update') {
+    plan.push({ label: 'Fetch what OTRF, Splunk attack_data and EVTX-ATTACK-SAMPLES changed since the last build, and rebuild the technique index', kind: 'build' });
   } else {
-    plan.push({ label: `Download ${group} from OTRF Security-Datasets`, kind: 'lab', command: 'mordor-download', args: OTRF_GROUPS[group] });
+    let paths = [];
+    if (mode === 'capture') {
+      if (tart) blocker = "On Apple silicon, capture runs inside the VM (./lab.sh mordor-capture prints the command); use Record instead.";
+      plan.push({ label: `Run the ${preset} Atomic tests in the Windows VM and export one OTRF-style dataset for Elrond`, kind: 'lab', command: 'mordor-capture', args: [preset] });
+      paths = [`${mordorRoot}/lab/lab_${preset}/acquisitions/`];
+    } else {
+      plan.push({ label: `Download ${group} from OTRF Security-Datasets`, kind: 'lab', command: 'mordor-download', args: OTRF_GROUPS[group] });
+      paths = OTRF_GROUPS[group].map((g) => `${mordorRoot}/${g}/acquisitions/`);
+    }
+    if (mordorElrond && paths.length) {
+      if (!caseId.trim()) blocker = blocker || 'Give the case ID Elrond should file the analysis under.';
+      plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on ${paths.length === 1 ? paths[0] : `${paths.length} datasets under ${mordorRoot}`} as ${caseId || '…'}`, kind: 'elrond', paths });
+    }
   }
 
   // Run one lab agent job to the end, streaming its log
@@ -185,6 +207,24 @@ function LabBuilder() {
       if (r.status !== 'running') return r.status;
       // eslint-disable-next-line no-await-in-loop
       await new Promise((res) => setTimeout(res, 1500));
+    }
+    return 'cancelled';
+  };
+
+  // The telemetry rebuild runs in the backend, not the agent: poll its status and print new log lines
+  const followBuild = async () => {
+    let seen = [];
+    while (!cancelled.current) {
+      // eslint-disable-next-line no-await-in-loop
+      const { build = {} } = await getTelemetryStatus();
+      const log = build.log || [];
+      const from = seen.length ? log.lastIndexOf(seen[seen.length - 1]) + 1 : 0;
+      const fresh = log.slice(from);
+      if (fresh.length) setOutput((o) => `${o}${fresh.join('\n')}\n`);
+      seen = log;
+      if (build.state !== 'running') return build.state === 'error' ? 'failed' : 'succeeded';
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((res) => setTimeout(res, 3000));
     }
     return 'cancelled';
   };
@@ -227,10 +267,15 @@ function LabBuilder() {
             // eslint-disable-next-line no-await-in-loop
             result = run.id ? await follow(run) : 'succeeded';
           }
+        } else if (p.kind === 'build') {
+          // eslint-disable-next-line no-await-in-loop
+          await updateTelemetry();
+          // eslint-disable-next-line no-await-in-loop
+          result = await followBuild();
         } else if (p.kind === 'elrond') {
           // eslint-disable-next-line no-await-in-loop
           const job = await createJob({
-            case_number: caseId.trim(), source_paths: [p.path], destination_path: null,
+            case_number: caseId.trim(), source_paths: p.paths, destination_path: null,
             options: { local: false, gandalf: true, ...ELROND_PROFILES[profile].options },
           });
           mark(i, { job: job.id });
@@ -333,11 +378,13 @@ function LabBuilder() {
               <Step n="1" title="What">
                 <div className="lb-row">
                   <Choice active={mode === 'record'} onClick={() => setMode('record')}>Record telemetry</Choice>
+                  <Choice active={mode === 'setup'} onClick={() => setMode('setup')}>Set up a machine</Choice>
                   <Choice active={mode === 'capture'} onClick={() => setMode('capture')}>Capture dataset for Elrond</Choice>
                   <Choice active={mode === 'download'} onClick={() => setMode('download')}>Download OTRF datasets</Choice>
+                  <Choice active={mode === 'update'} onClick={() => setMode('update')}>Update telemetry sources</Choice>
                 </div>
               </Step>
-              {mode === 'record' && (
+              {(mode === 'record' || mode === 'setup') && (
                 <Step n="2" title="On">
                   <div className="lb-row">
                     {recordable.map((m) => (
@@ -345,8 +392,9 @@ function LabBuilder() {
                         <span className={`mt-dot is-${m.state}`} /><img className="lb-os" src={osLogo(m)} alt={m.os} title={m.os} />{m.name}
                       </Choice>
                     ))}
-                    <label className="lb-check lb-inline-check"><input type="checkbox" checked={setUp} onChange={(e) => setSetUp(e.target.checked)} /> Set it up first (logging and Atomic Red Team)</label>
+                    {mode === 'record' && <label className="lb-check lb-inline-check"><input type="checkbox" checked={setUp} onChange={(e) => setSetUp(e.target.checked)} /> Set it up first (logging and Atomic Red Team)</label>}
                   </div>
+                  {mode === 'setup' && <label className="lb-check lb-warn"><input type="checkbox" checked={snapped} onChange={(e) => setSnapped(e.target.checked)} /> The machine is snapshotted and disposable: set-up changes it</label>}
                 </Step>
               )}
               {mode === 'capture' && (
@@ -363,7 +411,27 @@ function LabBuilder() {
                   </div>
                 </Step>
               )}
+              {mode === 'update' && (
+                <Step n="2" title="Sources">
+                  <p className="lab-note">OTRF Security-Datasets, Splunk attack_data and EVTX-ATTACK-SAMPLES: only what changed since the last build is fetched. The Mordor page shows the result.</p>
+                </Step>
+              )}
             </div>
+            {(mode === 'capture' || mode === 'download') && (
+              <Step n="3" title="Then">
+                {mode === 'download' && !OTRF_GROUPS[group].length ? (
+                  <p className="lab-note">Pick APT29 or the Atomic sets to analyse them here; for every dataset, use the <Link to="/elrond">Elrond</Link> page per dataset.</p>
+                ) : (
+                  <div className="lb-thirds">
+                    <input type="text" className="lb-input" placeholder="Case ID, e.g. LAB-2026-001" value={caseId} disabled={!mordorElrond} onChange={(e) => setCaseId(e.target.value)} />
+                    <select className="large-select lb-select" value={profile} disabled={!mordorElrond} onChange={(e) => setProfile(e.target.value)}>
+                      {Object.entries(ELROND_PROFILES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    <label className="lb-check"><input type="checkbox" checked={mordorElrond} onChange={(e) => setMordorElrond(e.target.checked)} /> Then analyse it with Elrond</label>
+                  </div>
+                )}
+              </Step>
+            )}
             {mode === 'record' && (
               <div className="lb-pair lb-pair-even">
                 <Step n="3" title="Techniques">
