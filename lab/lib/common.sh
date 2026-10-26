@@ -118,7 +118,7 @@ tart_bin() {
 load_config() {
   # Values exported in the environment win over lab.conf (CI, one-off runs).
   local _v _saved=""
-  for _v in LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB ELASTIC_URL WINDOWS_UTM_VM; do
+  for _v in LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR WINDOWS_VM_MEMORY_MB WINDOWS_VM_CPUS LINUX_VM_MEMORY_MB ELASTIC_URL WINDOWS_UTM_VM LAB_TART_HOME; do
     eval "if [ -n \"\${$_v:-}\" ]; then _saved=\"\$_saved $_v=\$(printf %q \"\${$_v}\")\"; fi"
   done
   # Defaults; lab.conf (written by `./lab.sh configure`) overrides them.
@@ -129,20 +129,23 @@ load_config() {
   LINUX_VM_MEMORY_MB="${LINUX_VM_MEMORY_MB:-2048}"
   ELASTIC_URL="${ELASTIC_URL:-http://host.docker.internal:9200}"
   WINDOWS_UTM_VM="${WINDOWS_UTM_VM:-rivendell-lab-win11}"  # Apple silicon: the UTM VM the lab drives
+  LAB_TART_HOME="${LAB_TART_HOME:-}"  # Tart VMs elsewhere than LAB_VM_DIR (e.g. the internal SSD)
   # shellcheck disable=SC1090
   [ -f "$LAB_CONFIG" ] && . "$LAB_CONFIG"
   if [ -n "$_saved" ]; then eval "$_saved"; fi
   LAB_VM_DIR="${LAB_VM_DIR:-$LAB_DATA_DIR/vms}"
   ACQ_ROOT="${TEST_IMAGES_PATH:-$LAB_DATA_DIR}/gandalf"
   MORDOR_ROOT="${TEST_IMAGES_PATH:-$LAB_DATA_DIR}/mordor"
-  export LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR ACQ_ROOT MORDOR_ROOT
+  export LAB_DATA_DIR TEST_IMAGES_PATH LAB_VM_DIR ACQ_ROOT MORDOR_ROOT LAB_TART_HOME
   set_vm_homes
 }
 
 # Keep VM disks and boxes under LAB_VM_DIR, except where lab VMs already exist in
 # the tools' default locations: those are left in place rather than orphaned.
 set_vm_homes() {
-  if ls -d "$HOME/.tart/vms/rivendell-lab-"* >/dev/null 2>&1; then
+  if [ -n "${LAB_TART_HOME:-}" ]; then
+    export TART_HOME="${TART_HOME:-$LAB_TART_HOME}"
+  elif ls -d "$HOME/.tart/vms/rivendell-lab-"* >/dev/null 2>&1; then
     export TART_HOME="${TART_HOME:-$HOME/.tart}"
   else
     export TART_HOME="${TART_HOME:-$LAB_VM_DIR/tart}"
@@ -180,6 +183,7 @@ WINDOWS_VM_CPUS="$WINDOWS_VM_CPUS"
 LINUX_VM_MEMORY_MB="$LINUX_VM_MEMORY_MB"
 ELASTIC_URL="$ELASTIC_URL"
 WINDOWS_UTM_VM="$WINDOWS_UTM_VM"
+LAB_TART_HOME="$LAB_TART_HOME"
 EOF
   ok "Saved $LAB_CONFIG"
 }

@@ -313,6 +313,8 @@ ssh_vm() { LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" ssh gandalf 127.0.0.1 
 
 wait_ready() {
   local limit="${1:-90}" what="${2:-install and provision itself}" i
+  # ssh_vm needs it; without it every check fails and the wait runs to its limit.
+  require_password
   info "Waiting for Windows to $what (up to $limit minutes)"
   for i in $(seq 1 $((limit * 2))); do
     if nc -z 127.0.0.1 "$PORT" 2>/dev/null && LAB_SSH_TIMEOUT=30 ssh_vm "if (Test-Path C:\\lab\\ready.txt) { 'READY' }" 2>/dev/null | grep -q READY; then

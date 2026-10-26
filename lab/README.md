@@ -138,6 +138,7 @@ Settings live in `~/.config/rivendell-lab/lab.conf`. Edit them with `./lab.sh co
 | `TEST_IMAGES_PATH` | — | When set, data goes to `$TEST_IMAGES_PATH/gandalf` and `/mordor`, the paths `run_test.py` uses |
 | `LAB_VM_DIR` | `$LAB_DATA_DIR/vms` | Vagrant boxes, VirtualBox VMs, Tart images (`tart/`) and UTM bundles (`utm/`). Existing lab VMs in the default locations are left where they are |
 | `WINDOWS_UTM_VM` | `rivendell-lab-win11` | Apple silicon: the UTM VM the lab drives (set by `windows-vm adopt`) |
+| `LAB_TART_HOME` | — | Apple silicon: keep the Tart VMs here instead of `$LAB_VM_DIR/tart`, for example on the internal SSD while testing macOS (a first boot from a USB HDD took about an hour). Move a VM with `rsync -aS` so its sparse disk stays sparse |
 | `WINDOWS_VM_MEMORY_MB` / `WINDOWS_VM_CPUS` | 6144 / 2 | |
 | `LINUX_VM_MEMORY_MB` | 2048 | |
 
