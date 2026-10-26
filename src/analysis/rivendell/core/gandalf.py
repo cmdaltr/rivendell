@@ -8,6 +8,7 @@ from datetime import datetime
 from zipfile import ZipFile
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.core import event_dataset
 from rivendell.core.identify import identify_gandalf_host
 from rivendell.core.identify import identify_memory_image
 
@@ -222,9 +223,13 @@ def ingest_gandalf_archive(archive, output_directory, verbosity, allimgs):
         return None
     host_info = _find_host_info(staging)
     if not host_info:
-        print("   No host.info in '{}'; skipping it\n".format(name))
+        hosts = None
+        if event_dataset.looks_like_event_dataset(staging):
+            hosts = ingest_event_dataset(staging, stem, output_directory, verbosity, allimgs)
+        else:
+            print("   No host.info in '{}'; skipping it\n".format(name))
         _remove_tree(staging)
-        return None
+        return hosts[0] if hosts else None
     gandalf_host, osplatform = identify_gandalf_host(output_directory, verbosity, host_info)
     host_dir = os.path.join(output_directory, gandalf_host)
     artefacts_dir = os.path.join(host_dir, "artefacts")
@@ -241,6 +246,39 @@ def ingest_gandalf_archive(archive, output_directory, verbosity, allimgs):
     print()
     allimgs[os.path.join(artefacts_dir, "raw")] = "{}::{}".format(gandalf_host, osplatform)
     return gandalf_host
+
+
+def ingest_event_dataset(staging, stem, output_directory, verbosity, allimgs):
+    """
+    An archive of Windows events with no host.info (an OTRF/Mordor dataset, or one the lab
+    captured or converted from a recording): one Elrond host per computer its events name, its
+    events in cooked/evt/ as Artemis would leave a disk image's .evtx, tagged with the ATT&CK
+    techniques they show. Returns the hosts, registered in allimgs.
+    """
+    from rivendell.process.extractions.artemis import enrich_with_mitre
+
+    placed = event_dataset.ingest(staging, stem, output_directory)
+    if not placed:
+        write_audit_log_entry(
+            verbosity, output_directory,
+            "{},{},event dataset,no Windows events found\n".format(datetime.now().isoformat(), stem),
+            "   No Windows events in '{}'; skipping it\n".format(stem),
+        )
+        return []
+    write_audit_log_entry(
+        verbosity, output_directory,
+        "{},{},event dataset,{}\n".format(datetime.now().isoformat(), stem, event_dataset.summary(placed)),
+        "   '{}' is an event dataset: {}".format(stem, event_dataset.summary(placed)),
+    )
+    for host, count, evt_file in placed:
+        enrich_with_mitre(evt_file, "eventlogs")
+        allimgs[os.path.join(output_directory, host, "artefacts", "raw")] = event_dataset.platform_entry(host)
+        write_audit_log_entry(
+            verbosity, output_directory,
+            "{},{},identified platform,{}\n".format(datetime.now().isoformat(), host, event_dataset.PLATFORM),
+            "    {}: {:,} events -> {}".format(host, count, evt_file),
+        )
+    return [host for host, _, _ in placed]
 
 
 def assess_gandalf(
