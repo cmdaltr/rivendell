@@ -342,6 +342,40 @@ def decrypt_archive(archive, staging_root):
     return out
 
 
+MEMORY_SUFFIXES = (".mem", ".lime", ".dmp")
+MIN_MEMORY_DUMP = 1 << 20  # anything smaller is a failed dump, not memory
+
+
+def gandalf_memory_dumps(output_directory):
+    """
+    The memory dumps the collectors left among the hosts' artefacts:
+      Invoke-Gandalf (DumpIt)  raw/memory/<host>.raw
+      gandalf.sh (AVML)        raw/memory/<host>.mem
+      gandalf.py (AVML)        raw/<host>.mem
+      gandalf.py (osxpmem)     raw/mem.raw, converted from raw/mem.aff4 (used only without it)
+    """
+    found = []
+    for root, _, files in os.walk(output_directory):
+        names = set(files)
+        for name in sorted(files):
+            lower = name.lower()
+            path = os.path.join(root, name)
+            if lower.endswith(MEMORY_SUFFIXES):
+                pass
+            elif lower.endswith(".raw") and (lower == "mem.raw" or "memory" in path.lower()):
+                pass
+            elif lower.endswith(".aff4") and not any(n.lower() == "mem.raw" for n in names):
+                pass
+            else:
+                continue
+            try:
+                if os.path.getsize(path) >= MIN_MEMORY_DUMP:
+                    found.append(path)
+            except OSError:
+                continue
+    return found
+
+
 def assess_gandalf(
     auto,
     gandalf,
@@ -391,46 +425,32 @@ def assess_gandalf(
                 ingest_gandalf_archive(os.path.join(groot, gfile), output_directory, verbosity, allimgs)
     _remove_tree(staging_root)
     if volatility:
-        for dumpit_root, _, dumpit_files in os.walk(output_directory):
-            for memory_file in dumpit_files:
-                memory_path = os.path.join(dumpit_root, memory_file)
-                if memory_path.endswith(".raw") and "memory" in memory_path:
-                    if memory_path.endswith(".raw") and "memory" in memory_path:
-                        memory_path_moved = os.path.join(
-                            output_directory, memory_file, memory_file
-                        )
-                        if not os.path.exists(memory_path_moved):
-                            os.mkdir(os.path.join(output_directory, memory_file))
-                        try:
-                            shutil.move(memory_path, memory_path_moved)
-                        except:
-                            pass
-                        if memory_path.endswith(".raw") and "memory" in memory_path:
-                            if os.path.exists(memory_path_moved):
-                                ot = identify_memory_image(
-                                    verbosity,
-                                    output_directory,
-                                    flags,
-                                    auto,
-                                    metacollected,
-                                    cwd,
-                                    sha256,
-                                    nsrl,
-                                    memory_file,
-                                    ot,
-                                    d,
-                                    memory_path_moved,
-                                    volchoice,
-                                    vss,
-                                    vssmem,
-                                    memtimeline,
-                                )
-                                allimgs.update(ot)  # in place: the caller's dict
-            for json_file in dumpit_files:
-                json_path = os.path.join(dumpit_root, json_file)
-                if json_path.endswith(".json") and "memory" in memory_path:
-                    try:
-                        shutil.move(memory_path, memory_path_moved)
-                    except:
-                        pass
+        for memory_path in gandalf_memory_dumps(output_directory):
+            memory_file = os.path.basename(memory_path)
+            memory_path_moved = os.path.join(output_directory, memory_file, memory_file)
+            os.makedirs(os.path.dirname(memory_path_moved), exist_ok=True)
+            try:
+                shutil.move(memory_path, memory_path_moved)
+            except OSError as error:
+                print("   Couldn't move memory dump '{}' ({}); skipping it".format(memory_path, error))
+                continue
+            ot = identify_memory_image(
+                verbosity,
+                output_directory,
+                flags,
+                auto,
+                metacollected,
+                cwd,
+                sha256,
+                nsrl,
+                memory_file,
+                ot,
+                d,
+                memory_path_moved,
+                volchoice,
+                vss,
+                vssmem,
+                memtimeline,
+            )
+            allimgs.update(ot)  # in place: the caller's dict
     allimgs.update(ot)

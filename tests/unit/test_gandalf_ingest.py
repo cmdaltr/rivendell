@@ -132,6 +132,32 @@ class GandalfIngestTests(unittest.TestCase):
                 z.writestr("artefacts/etc+passwd", "root:x:0:0")
         self.assertEqual(sorted(v for v in self.assess().values()), ["pizza::Linux", "zipper::Linux"])
 
+    def test_memory_dumps_from_every_collector_are_found(self):
+        # E23: AVML's .mem (gandalf.sh, gandalf.py), osxpmem's mem.raw (not its .aff4 when the
+        # raw is there), DumpIt's raw/memory/<host>.raw; small files and other .raw files aren't
+        def dump(rel, size=gandalf.MIN_MEMORY_DUMP):
+            path = self.out / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "wb") as fh:
+                fh.truncate(size)  # sparse
+            return str(path)
+
+        expected = {dump("lab-rocky/artefacts/raw/memory/lab-rocky.mem"),
+                    dump("lab-ubuntu/artefacts/raw/lab-ubuntu.mem"),
+                    dump("lab-macos/artefacts/raw/mem.raw"),
+                    dump("WIN11/artefacts/raw/memory/WIN11.raw")}
+        dump("lab-macos/artefacts/raw/mem.aff4")                  # mem.raw is used instead
+        dump("lab-ubuntu/artefacts/raw/partial.mem", size=1024)   # a failed dump
+        dump("WIN11/artefacts/raw/registry/disk.raw")             # not memory
+        self.assertEqual(set(gandalf.gandalf_memory_dumps(str(self.out))), expected)
+
+    def test_aff4_is_used_when_there_is_no_raw(self):
+        path = self.out / "lab-macos" / "artefacts" / "raw" / "mem.aff4"
+        path.parent.mkdir(parents=True)
+        with open(path, "wb") as fh:
+            fh.truncate(gandalf.MIN_MEMORY_DUMP)
+        self.assertEqual(gandalf.gandalf_memory_dumps(str(self.out)), [str(path)])
+
     def test_windows_zip_already_in_elrond_layout(self):
         (self.acq / "WIN11").mkdir(parents=True)
         with zipfile.ZipFile(self.acq / "WIN11" / "WIN11.zip", "w") as z:
