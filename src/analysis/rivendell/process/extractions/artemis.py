@@ -15,6 +15,7 @@ See: https://github.com/puffyCid/artemis
 import glob
 import json
 import os
+import re
 import subprocess
 from datetime import datetime
 from typing import Optional, Dict, List
@@ -208,6 +209,13 @@ EVENTLOG_TEXT_INDICATORS = {
     "T1027": ["-encodedcommand", " -enc "],
 }
 EVENTLOG_TEXT_FIELDS = ("CommandLine", "ScriptBlockText", "ImagePath", "ServiceFileName", "HostApplication")
+# Run keys and the Startup folder (T1547.001): written by Sysmon 12-14 (TargetObject), Security
+# 4657 (ObjectName), Sysmon 11 (TargetFilename), or named on a command line or in a script block
+RUN_KEY = re.compile(
+    r"\\microsoft\\windows\\currentversion\\(?:policies\\explorer\\)?run(?:once(?:ex)?|services(?:once)?)?(?![a-z])",
+    re.I)
+STARTUP_FOLDER = re.compile(r"\\(?:start menu|startmenu)\\programs\\startup(?:\\|$)", re.I)
+RUN_KEY_FIELDS = ("TargetObject", "ObjectName", "TargetFilename", "CommandLine", "ScriptBlockText")
 
 
 def _event_fields(record):
@@ -239,6 +247,9 @@ def eventlog_techniques(records) -> set:
             failed_logons += 1
         if channel == "security" and event_id == 4624 and str(data.get("LogonType")) == "10":
             found.add("T1021.001")
+        persistence = " ".join(str(data.get(f, "")) for f in RUN_KEY_FIELDS)
+        if RUN_KEY.search(persistence) or STARTUP_FOLDER.search(persistence):
+            found.add("T1547.001")
         text = " ".join(str(data.get(f, "")) for f in EVENTLOG_TEXT_FIELDS).lower()
         if text.strip():
             for technique, indicators in EVENTLOG_TEXT_INDICATORS.items():

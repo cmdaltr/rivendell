@@ -71,6 +71,25 @@ class EventlogTechniquesTest(unittest.TestCase):
         self.assertEqual(eventlog_techniques([_event("Security", 4624, LogonType="10")]), {"T1021.001"})
 
 
+    def test_run_keys_and_the_startup_folder(self) -> None:
+        sysmon = "Microsoft-Windows-Sysmon/Operational"
+        hit = [
+            _event(sysmon, 13, TargetObject="HKU\\S-1-5-21-1\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\Updater"),
+            _event(sysmon, 12, TargetObject="HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\RunOnce"),
+            _event("Security", 4657, ObjectName="\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run"),
+            _event(sysmon, 1, CommandLine='reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v x /d c:\\x.exe'),
+            _event(sysmon, 11, TargetFilename="C:\\Users\\pam\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\a.lnk"),
+        ]
+        for record in hit:
+            self.assertIn("T1547.001", eventlog_techniques([record]), record)
+        miss = [
+            _event(sysmon, 13, TargetObject="HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunningApps\\x"),
+            _event(sysmon, 13, TargetObject="HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced"),
+            _event(sysmon, 1, CommandLine="notepad.exe C:\\Users\\pam\\Startup notes.txt"),
+        ]
+        for record in miss:
+            self.assertNotIn("T1547.001", eventlog_techniques([record]), record)
+
 class RunKeyRecordsTest(unittest.TestCase):
     # rip.pl output as Elrond sees it: str(bytes), so newlines are literal \n
     SECTION = (
