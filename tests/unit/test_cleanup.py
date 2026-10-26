@@ -53,3 +53,18 @@ def test_one_walk_removes_small_files_and_nested_empty_dirs(tmp_path):
     assert files == 2
     assert not (tmp_path / "h" / "artefacts" / "cooked").exists()
     assert kept.exists() and tmp_path.is_dir()
+
+
+def test_the_case_archive_is_in_the_case_and_survives_deletion(tmp_path):
+    from rivendell.post.clean import archive_artefacts, delete_artefacts
+    import zipfile
+    case = tmp_path / "CASE-1"
+    write(case / "host" / "artefacts" / "raw" / "crontab", "* * * * * x")
+    write(case / "rivendell_audit.log", "")
+    archive_artefacts("", str(case) + "/")
+    delete_artefacts("", str(case) + "/")
+    archive = case / "CASE-1.zip"
+    assert archive.is_file() and not (tmp_path / "CASE-1.zip").exists()
+    with zipfile.ZipFile(archive) as z:
+        assert "host/artefacts/raw/crontab" in z.namelist()
+        assert "CASE-1.zip" not in z.namelist()

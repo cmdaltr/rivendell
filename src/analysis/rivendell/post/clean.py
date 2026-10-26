@@ -17,9 +17,9 @@ def archive_artefacts(verbosity, output_directory):
     # Get case name from output_directory (remove trailing slash)
     case_dir = output_directory.rstrip("/")
     case_name = case_dir.split("/")[-1]
-    # Archive goes alongside the case directory (in parent)
-    parent_dir = "/".join(case_dir.split("/")[:-1]) + "/"
-    archive_path = parent_dir + case_name + ".zip"
+    # In the case directory, beside the hosts (E13: it went in the parent, outside the
+    # job's output, where the job and the web UI never look); deletion keeps it
+    archive_path = os.path.join(case_dir, case_name + ".zip")
 
     print("    Archiving case '{}'...".format(case_name))
     entry, prnt = "{},{},{},commenced\n".format(
@@ -50,7 +50,7 @@ def archive_artefacts(verbosity, output_directory):
                     z.write(filepath, arcname)
                 except (OSError, IOError, PermissionError) as e:
                     # Log permission errors but continue archiving
-                    if verbosity >= 1:
+                    if verbosity:  # '', 'verbose' or 'veryverbose'
                         print(f"     Warning: Could not archive '{zf}': {e}")
                     skipped_files += 1
     z.close()

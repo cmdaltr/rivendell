@@ -1193,14 +1193,14 @@ def main(
             )
             time.sleep(1)
         if archive or delete:
-            for img, mntlocation in imgs.items():
-                if "vss" not in img and "vss" not in mntlocation:
-                    if archive:
-                        archive_artefacts(verbosity, output_directory)
-                        flags.append("11archiving")
-                    if delete:
-                        delete_artefacts(verbosity, output_directory)
-                        flags.append("12deletion")
+            # Once per case, archive before delete: per image, the second image's
+            # archive held a case whose first host was already deleted
+            if archive:
+                archive_artefacts(verbosity, output_directory)
+                flags.append("11archiving")
+            if delete:
+                delete_artefacts(verbosity, output_directory)
+                flags.append("12deletion")
     endtime, fmt, timestringprefix = (
         datetime.now().isoformat(),
         "%Y-%m-%dT%H:%M:%S.%f",
