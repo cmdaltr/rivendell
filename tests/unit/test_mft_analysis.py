@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "analysis"))
 
-from rivendell.analysis.analysis import iter_json_records, mft_findings  # noqa: E402
+from rivendell.analysis.analysis import SETUP_COPIED_NOTE, iter_json_records, mft_findings  # noqa: E402
 
 
 def record(path: str, created: str = "2025-01-01T00:00:00.000Z", fn_created: str = "2025-01-01T00:00:00.000Z", eas=()) -> dict:
@@ -44,13 +44,21 @@ def test_timestomped_script_in_user_writable_path_is_reported() -> None:
     assert [kind for kind, _ in findings] == ["Timestomp"]
 
 
-def test_timestomp_ignored_for_os_managed_paths_and_documents() -> None:
+def test_timestomp_ignored_outside_user_writable_paths_and_for_documents() -> None:
     old = "2019-03-01T00:00:00.000Z"
-    assert mft_findings(record(".\\ProgramData\\Microsoft\\Windows\\x.dll", created=old)) == []
     assert mft_findings(record(".\\Windows\\System32\\x.dll", created=old)) == []
     assert mft_findings(record(".\\Users\\a\\notes.txt", created=old)) == []
 
 
-def test_timestomp_ignored_for_default_profile_copied_at_setup() -> None:
-    path = ".\\Users\\Default\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\Magnify.lnk"
-    assert mft_findings(record(path, created="2024-04-01T08:43:23.000Z", fn_created="2026-10-25T18:04:50.000Z")) == []
+def test_setup_copied_paths_are_reported_as_likely_benign() -> None:
+    for path in (
+        ".\\Users\\Default\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Accessibility\\Magnify.lnk",
+        ".\\ProgramData\\Microsoft\\Windows\\x.dll",
+    ):
+        [(kind, value)] = mft_findings(record(path, created="2024-04-01T08:43:23.000Z", fn_created="2026-10-25T18:04:50.000Z"))
+        assert kind == "Timestomp" and value.endswith(SETUP_COPIED_NOTE)
+
+
+def test_seeded_timestomp_is_not_marked_benign() -> None:
+    [(_, value)] = mft_findings(record(".\\ProgramData\\RivendellLab\\helper.ps1", created="2019-03-14T09:26:53.000Z"))
+    assert SETUP_COPIED_NOTE not in value

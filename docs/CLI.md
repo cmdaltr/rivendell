@@ -225,7 +225,7 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 | Option | Does |
 |---|---|
 | `--Process` | Parse collected artefacts (always runs) |
-| `--Analysis` | MFT analysis: extended attributes other than Windows' own, and timestomping ($SI created before $FN created) of executables and scripts in user-writable paths. ADS only where the MFT export lists stream names (Artemis's does not) |
+| `--Analysis` | MFT analysis: extended attributes other than Windows' own, and timestomping ($SI created before $FN created) of executables and scripts in user-writable paths; hits under `Users\Default` and `ProgramData\Microsoft` are marked likely benign (Windows setup copies them with their original times). ADS only where the MFT export lists stream names (Artemis's does not) |
 | `--Memory` | Volatility 3 analysis of memory images |
 | `--Timeline` | Plaso timeline of the disk image. Very slow (105 min on a 12 GB E01) |
 | `--memorytimeline` | Volatility timeliner on memory images |

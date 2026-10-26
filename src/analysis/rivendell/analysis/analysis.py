@@ -68,8 +68,10 @@ VSS_DIR = re.compile(r"^vss\d+$")
 BENIGN_EA = re.compile(r"^(\$KERNEL\.|\$CI\.CATALOGHINT$|\$LX(UID|GID|MOD|DEV)$|APPLICENSING$)", re.I)
 # Where a timestomped implant is worth flagging: user-writable, not OS-managed
 TIMESTOMP_LOCATIONS = re.compile(r"^\.?[\\/](users|programdata|windows[\\/]temp|\$recycle\.bin|perflogs)[\\/]", re.I)
-# Setup copies these with their original $SI times, which reads as timestomping
-OS_MANAGED = re.compile(r"^\.?[\\/](programdata[\\/]microsoft|users[\\/]default)[\\/]", re.I)
+# Windows setup copies these with their original $SI times, so they read as
+# timestomping on a clean install. Still reported, but marked as safe to ignore.
+SETUP_COPIED = re.compile(r"^\.?[\\/](programdata[\\/]microsoft|users[\\/]default)[\\/]", re.I)
+SETUP_COPIED_NOTE = "likely benign: Windows setup copies files here with their original times"
 EXECUTABLE = re.compile(r"\.(exe|dll|sys|scr|ps1|psm1|bat|cmd|vbs|vbe|js|jse|hta|wsf|lnk|msi)$", re.I)
 MFT_JSON_NAMES = ("mft.json", "mft.jsonl", "rawfiles.json", "rawfiles.jsonl", "journal_mft.json")
 
@@ -137,9 +139,12 @@ def mft_findings(record):
     si_created, fn_created = record.get("created"), record.get("filename_created")
     if (
         si_created and fn_created and type(si_created) is type(fn_created) and si_created < fn_created
-        and TIMESTOMP_LOCATIONS.match(path) and not OS_MANAGED.match(path) and EXECUTABLE.search(path)
+        and TIMESTOMP_LOCATIONS.match(path) and EXECUTABLE.search(path)
     ):
-        findings.append(("Timestomp", "$SI: {}|$FN: {}".format(si_created, fn_created)))
+        value = "$SI: {}|$FN: {}".format(si_created, fn_created)
+        if SETUP_COPIED.match(path):
+            value += "|" + SETUP_COPIED_NOTE
+        findings.append(("Timestomp", value))
     return findings
 
 
@@ -170,6 +175,7 @@ def analyse_artefacts(
         ))
         counts = {"ExtendedAttributes": 0, "AlternateDataStream": 0, "Timestomp": 0}
         records_processed = 0
+        setup_copied = 0
         audit_text = {
             "ExtendedAttributes": "extended attribute",
             "AlternateDataStream": "alternate data stream",
@@ -190,6 +196,8 @@ def analyse_artefacts(
                     with open(anysd + "/analysis.csv", "a") as analysisfile:
                         for kind, value in findings:
                             counts[kind] += 1
+                            if value.endswith(SETUP_COPIED_NOTE):
+                                setup_copied += 1
                             analysisfile.write("{},{},{},{},{}\n".format(
                                 datetime.now().isoformat(), vssimage.replace("'", ""),
                                 filename.replace(",", "%2C"), kind, value.replace(",", "%2C"),
@@ -208,6 +216,8 @@ def analyse_artefacts(
         print(" -> {} -> MFT analysis complete: {} records processed".format(now, records_processed))
         print(" -> {} ->   Extended Attributes (not Windows' own): {} files".format(now, counts["ExtendedAttributes"]))
         print(" -> {} ->   Timestomping indicators ($SI before $FN, executables in user-writable paths): {} files".format(now, counts["Timestomp"]))
+        if setup_copied:
+            print(" -> {} ->     of which {} under Users\\Default or ProgramData\\Microsoft ({})".format(now, setup_copied, SETUP_COPIED_NOTE))
         if counts["AlternateDataStream"]:
             print(" -> {} ->   Alternate Data Streams: {} files".format(now, counts["AlternateDataStream"]))
 
