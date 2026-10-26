@@ -73,6 +73,58 @@ function RunOutput({ run, onCancel, onClose }) {
   );
 }
 
+// Recent runs, as tall as the Targets column beside it, paged by however many rows fit
+function RecentRuns({ runs, onOpen }) {
+  const bodyRef = useRef(null);
+  const [perPage, setPerPage] = useState(8);
+  const [page, setPage] = useState(0);
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const fit = () => {
+      const head = el.querySelector('thead')?.offsetHeight || 36;
+      const row = el.querySelector('tbody tr')?.offsetHeight || 44;
+      setPerPage(Math.max(1, Math.floor((el.clientHeight - head) / row)));
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    fit();
+    return () => ro.disconnect();
+  }, [runs.length]);
+  const pages = Math.max(1, Math.ceil(runs.length / perPage));
+  const current = Math.min(page, pages - 1);
+  const shown = runs.slice(current * perPage, (current + 1) * perPage);
+  return (
+    <div className="card lab-runs">
+      <h2>Recent runs</h2>
+      <div className="lab-runs-body" ref={bodyRef}>
+        {runs.length ? (
+          <table className="lab-table">
+            <thead><tr><th>Command</th><th>Status</th><th>Started</th><th /></tr></thead>
+            <tbody>
+              {shown.map((r) => (
+                <tr key={r.id}>
+                  <td><code>{r.label}</code></td>
+                  <td className="lab-status-icon" title={r.status}>{STATUS_ICON[r.status] || r.status}</td>
+                  <td>{formatTime(r.started)}</td>
+                  <td><button className="secondary" onClick={() => onOpen(r.id)}>Output</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <p className="lab-note">No runs yet. Commands from this page and Deploy show here.</p>}
+      </div>
+      {pages > 1 && (
+        <div className="lab-pager">
+          <button className="secondary" disabled={current === 0} onClick={() => setPage(current - 1)}>‹</button>
+          <span>{current + 1} / {pages}</span>
+          <button className="secondary" disabled={current >= pages - 1} onClick={() => setPage(current + 1)}>›</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // section: 'settings' (host, settings, password) or 'lab' (targets, maintenance, runs)
 function LabManage({ section = 'lab', children = null }) {
   const { user } = useAuth();
@@ -201,7 +253,7 @@ function LabManage({ section = 'lab', children = null }) {
   const vmRow = (command, title, actions, icons) => (
     <tr key={command}>
       {logos(icons, title)}
-      <td className="lab-actions">
+      <td><div className="lab-actions">
         {actions.map((a) => (
           <button
             key={a}
@@ -212,7 +264,7 @@ function LabManage({ section = 'lab', children = null }) {
             {a}
           </button>
         ))}
-      </td>
+      </div></td>
     </tr>
   );
 
@@ -271,6 +323,7 @@ function LabManage({ section = 'lab', children = null }) {
       {section === 'lab' && (
       <>
       <div className="lab-split">
+      <div className="lab-col">
       <div className="card">
         <h2>Targets</h2>
         <table className="lab-table">
@@ -278,12 +331,12 @@ function LabManage({ section = 'lab', children = null }) {
             <tr>
               {logos([['ubuntu.png', 'Ubuntu'], ['rocky.svg', 'Rocky'], ['docker.png', 'Docker']],
                 `Linux containers: ${(state.linux_containers || []).join(', ')} (Ubuntu 24.04, Rocky 9), SSH on 127.0.0.1:2221-2222`)}
-              <td className="lab-actions">
+              <td><div className="lab-actions">
                 <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['up'])}>up</button>
                 <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['down'])}>down</button>
                 <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['reset'], 'Rebuild and re-seed all Linux containers?')}>reset</button>
                 <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['status'])}>status</button>
-              </td>
+              </div></td>
             </tr>
             {(vagrant || tart) && vmRow('linux-vm', `Linux VM: Ubuntu with a real kernel (${tart ? 'Tart' : 'Vagrant'}), SSH on 127.0.0.1:2230`,
               ['create', 'start', 'stop', 'delete', 'status'], [['ubuntu.png', 'Ubuntu'], tart ? ['tart.png', 'Tart'] : ['Vagrant', 'Vagrant']])}
@@ -298,27 +351,7 @@ function LabManage({ section = 'lab', children = null }) {
         <p className="lab-note">Hover over a target for what it is and its SSH port.{noPassword && ' Set the lab password before creating targets.'}</p>
       </div>
 
-      <div className="card">
-        <h2>Recent runs</h2>
-        {runs.length ? (
-          <table className="lab-table">
-            <thead><tr><th>Command</th><th>Status</th><th>Started</th><th /></tr></thead>
-            <tbody>
-              {runs.map((r) => (
-                <tr key={r.id}>
-                  <td><code>{r.label}</code></td>
-                  <td className="lab-status-icon" title={r.status}>{STATUS_ICON[r.status] || r.status}</td>
-                  <td>{formatTime(r.started)}</td>
-                  <td><button className="secondary" onClick={() => openRun(r.id)}>Output</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : <p className="lab-note">No runs yet. Commands from this page and Deploy show here.</p>}
-      </div>
-      </div>
-
-      <div className="card">
+            <div className="card">
         <h2>Maintenance</h2>
         <div>
           <div className="lab-actions">
@@ -330,6 +363,9 @@ function LabManage({ section = 'lab', children = null }) {
             read the lab's data directory. Teardown removes every target; collected data and the password are kept.
           </p>
         </div>
+      </div>
+      </div>
+      <RecentRuns runs={runs} onOpen={openRun} />
       </div>
 
       {children}
