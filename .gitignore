@@ -156,3 +156,6 @@ src/mordor/data/telemetry/
 # Volatility 3 symbol tables (large, per kernel); see symbols/README.md
 symbols/linux/*.json*
 symbols/mac/*.json*
+
+# Third-party Windows tools (RawCopy, Sleuth Kit): only a fallback for the raw volume reader
+src/acquisition/tools/disk_tools.zip

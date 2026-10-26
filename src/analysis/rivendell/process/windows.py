@@ -79,6 +79,8 @@ def process_usn(
         )
         return
 
+    # The $MFT collected beside it gives each entry its full path
+    mft_path = os.path.join(os.path.dirname(usnjrnl_path), "$MFT")
     artemis.extract_usnjrnl(
         verbosity=verbosity,
         vssimage=vssimage,
@@ -87,6 +89,7 @@ def process_usn(
         vss_path_insert=vss_path_insert,
         stage=stage,
         usnjrnl_file=usnjrnl_path,
+        mft_file=mft_path if os.path.isfile(mft_path) else None,
     )
 
 

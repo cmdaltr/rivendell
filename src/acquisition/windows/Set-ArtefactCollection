@@ -220,106 +220,482 @@ function Get-Artefacts {
         Get-Network $ShowProgress $OutputDirectory $Hostnames
         Get-Tasks $ShowProgress $OutputDirectory $Hostnames
     }
-    function Copy-RawMft {
-        Param ($Volume, $Destination)
-        # $MFT straight off the volume: boot sector -> MFT record 0 -> the runs of
-        # its unnamed $DATA attribute. Needs admin. Replaces Sleuth Kit's icat,
-        # whose output Windows PowerShell's > redirection re-encoded as text.
-        if (-Not ("GandalfRawVolume" -as [type])) {
-            Add-Type -TypeDefinition @"
+    function Get-RawVolume {
+        Param ($Volume)
+        # Reads files straight off the NTFS volume, so locks and ACLs don't stop it
+        # (hives, SRUDB.dat, Windows.edb, DetectionHistory) and metafiles ($LogFile,
+        # $UsnJrnl:$J) read like files. Replaces RawCopy and Sleuth Kit's icat. One
+        # reader per volume: the name index is built from $MFT on first use.
+        if (-Not ("GandalfNtfs" -as [type])) {
+            Add-Type -TypeDefinition @'
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32.SafeHandles;
-public static class GandalfRawVolume {
+
+// Reads files straight off an NTFS volume: boot sector -> $MFT -> a file's
+// $DATA runs. Locks and ACLs don't apply (hives, SRUDB.dat, Windows.edb,
+// DetectionHistory), and metafiles ($LogFile, $UsnJrnl:$J) read like files.
+// C# 5, so Windows PowerShell 5.1's Add-Type compiles it.
+public class GandalfNtfs : IDisposable
+{
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    public static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+    static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+
+    const int Align = 4096;  // raw volume reads must be sector-aligned; 4096 covers 4Kn disks
+    Stream disk;
+    long volumeOffset;
+    public long ClusterSize;
+    public int RecordSize;
+    List<long[]> mftRuns;    // {lcn (-1 = sparse), clusters}
+    long mftBytes;
+    Dictionary<long, List<KeyValuePair<string, long>>> children;
+    Dictionary<long, bool> directories;  // not HashSet: that's System.Core
+
+    public GandalfNtfs(string volume)
+    {
+        // GENERIC_READ, FILE_SHARE_READ|FILE_SHARE_WRITE, OPEN_EXISTING
+        SafeFileHandle handle = CreateFile("\\\\.\\" + volume.TrimEnd('\\'), 0x80000000, 3, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        if (handle.IsInvalid) throw new IOException("cannot open \\\\.\\" + volume + " (error " + Marshal.GetLastWin32Error() + ")");
+        Init(new FileStream(handle, FileAccess.Read, 1), 0);
+    }
+
+    public GandalfNtfs(Stream stream, long offset) { Init(stream, offset); }
+
+    void Init(Stream stream, long offset)
+    {
+        disk = stream;
+        volumeOffset = offset;
+        byte[] boot = ReadAt(0, 512);
+        if (Encoding.ASCII.GetString(boot, 3, 4) != "NTFS") throw new IOException("not an NTFS volume");
+        int bytesPerSector = BitConverter.ToUInt16(boot, 0x0B);
+        int sectorsPerCluster = boot[0x0D];
+        if (sectorsPerCluster > 0x80) sectorsPerCluster = 1 << (256 - sectorsPerCluster);
+        ClusterSize = (long)bytesPerSector * sectorsPerCluster;
+        int recordField = (sbyte)boot[0x40];
+        RecordSize = recordField < 0 ? 1 << -recordField : (int)(recordField * ClusterSize);
+
+        long mftOffset = BitConverter.ToInt64(boot, 0x30) * ClusterSize;
+        byte[] record0 = ReadAt(mftOffset, RecordSize);
+        Fixup(record0, 0);
+        // Enough of $MFT to find record 0's extension records, then all of it
+        mftRuns = new List<long[]>();
+        mftBytes = 0;
+        foreach (Segment s in AttributesIn(record0, 0x80, "")) { mftRuns.AddRange(s.Runs); if (s.StartVcn == 0) mftBytes = s.DataSize; }
+        List<Segment> full = DataSegments(0, "");
+        mftRuns = new List<long[]>();
+        foreach (Segment s in full) mftRuns.AddRange(s.Runs);
+    }
+
+    public void Dispose() { if (disk != null) disk.Dispose(); }
+
+    // ---- reading -------------------------------------------------------
+
+    byte[] ReadAt(long offset, int count)
+    {
+        byte[] buffer = new byte[count];
+        ReadAt(offset, buffer, 0, count);
+        return buffer;
+    }
+
+    void ReadAt(long offset, byte[] buffer, int at, int count)
+    {
+        long start = offset - (offset % Align);
+        long end = offset + count;
+        if (end % Align != 0) end += Align - end % Align;
+        byte[] block = new byte[end - start];
+        disk.Position = volumeOffset + start;
+        int got = 0;
+        while (got < block.Length)
+        {
+            int n = disk.Read(block, got, block.Length - got);
+            if (n <= 0) break;
+            got += n;
+        }
+        if (got < offset - start + count) throw new IOException("short read at volume offset " + offset);
+        Buffer.BlockCopy(block, (int)(offset - start), buffer, at, count);
+    }
+
+    // count bytes from a run list's logical offset (one record, or a chunk of $MFT)
+    void ReadVirtual(List<long[]> runs, long virtualOffset, byte[] buffer, int count)
+    {
+        long runStart = 0;
+        int done = 0;
+        foreach (long[] run in runs)
+        {
+            long runBytes = run[1] * ClusterSize;
+            while (done < count && virtualOffset + done < runStart + runBytes)
+            {
+                long within = virtualOffset + done - runStart;
+                int piece = (int)Math.Min(count - done, runBytes - within);
+                if (run[0] < 0) Array.Clear(buffer, done, piece);
+                else ReadAt(run[0] * ClusterSize + within, buffer, done, piece);
+                done += piece;
+            }
+            runStart += runBytes;
+            if (done >= count) return;
+        }
+        throw new IOException("offset " + virtualOffset + " is past the end of the run list");
+    }
+
+    bool Fixup(byte[] buffer, int at)
+    {
+        if (Encoding.ASCII.GetString(buffer, at, 4) != "FILE") return false;
+        int usaOffset = BitConverter.ToUInt16(buffer, at + 4);
+        int usaCount = BitConverter.ToUInt16(buffer, at + 6);
+        if (usaCount < 2) return false;
+        int stride = RecordSize / (usaCount - 1);
+        for (int i = 1; i < usaCount; i++)
+        {
+            int end = at + stride * i - 2;
+            if (buffer[end] != buffer[at + usaOffset] || buffer[end + 1] != buffer[at + usaOffset + 1]) return false;  // torn write
+            buffer[end] = buffer[at + usaOffset + 2 * i];
+            buffer[end + 1] = buffer[at + usaOffset + 2 * i + 1];
+        }
+        return true;
+    }
+
+    byte[] ReadRecord(long number)
+    {
+        byte[] record = new byte[RecordSize];
+        ReadVirtual(mftRuns, number * RecordSize, record, RecordSize);
+        if (!Fixup(record, 0)) throw new IOException("MFT record " + number + " is not a valid FILE record");
+        return record;
+    }
+
+    // ---- attributes ----------------------------------------------------
+
+    class Segment
+    {
+        public long StartVcn;
+        public long DataSize;
+        public long InitSize;
+        public int Flags;
+        public bool Resident;
+        public byte[] Value;
+        public List<long[]> Runs = new List<long[]>();
+    }
+
+    static string NameOf(byte[] r, int attr)
+    {
+        int length = r[attr + 9];
+        return length == 0 ? "" : Encoding.Unicode.GetString(r, attr + BitConverter.ToUInt16(r, attr + 10), length * 2);
+    }
+
+    List<Segment> AttributesIn(byte[] r, uint type, string name)
+    {
+        List<Segment> found = new List<Segment>();
+        int offset = BitConverter.ToUInt16(r, 0x14);
+        while (offset + 16 <= RecordSize)
+        {
+            uint attrType = BitConverter.ToUInt32(r, offset);
+            int length = (int)BitConverter.ToUInt32(r, offset + 4);
+            if (attrType == 0xFFFFFFFF || length <= 0 || offset + length > RecordSize) break;
+            if (attrType == type && (name == null || string.Equals(NameOf(r, offset), name, StringComparison.Ordinal)))
+            {
+                Segment s = new Segment();
+                s.Flags = BitConverter.ToUInt16(r, offset + 12);
+                if (r[offset + 8] == 0)
+                {
+                    s.Resident = true;
+                    int valueLength = (int)BitConverter.ToUInt32(r, offset + 0x10);
+                    s.Value = new byte[valueLength];
+                    Buffer.BlockCopy(r, offset + BitConverter.ToUInt16(r, offset + 0x14), s.Value, 0, valueLength);
+                    s.DataSize = valueLength;
+                    s.InitSize = valueLength;
+                }
+                else
+                {
+                    s.StartVcn = BitConverter.ToInt64(r, offset + 0x10);
+                    s.DataSize = BitConverter.ToInt64(r, offset + 0x30);
+                    s.InitSize = BitConverter.ToInt64(r, offset + 0x38);
+                    s.Runs = DecodeRuns(r, offset + BitConverter.ToUInt16(r, offset + 0x20), offset + length);
+                }
+                found.Add(s);
+            }
+            offset += length;
+        }
+        return found;
+    }
+
+    static List<long[]> DecodeRuns(byte[] r, int pos, int limit)
+    {
+        List<long[]> runs = new List<long[]>();
+        long lcn = 0;
+        while (pos < limit && r[pos] != 0)
+        {
+            int lengthBytes = r[pos] & 0x0F;
+            int offsetBytes = (r[pos] >> 4) & 0x0F;
+            long clusters = 0;
+            for (int j = 0; j < lengthBytes; j++) clusters |= (long)r[pos + 1 + j] << (8 * j);
+            if (offsetBytes == 0)
+            {
+                runs.Add(new long[] { -1, clusters });  // sparse
+            }
+            else
+            {
+                long delta = 0;
+                for (int j = 0; j < offsetBytes; j++) delta |= (long)r[pos + 1 + lengthBytes + j] << (8 * j);
+                if ((r[pos + lengthBytes + offsetBytes] & 0x80) != 0 && offsetBytes < 8) delta -= 1L << (8 * offsetBytes);  // signed
+                lcn += delta;
+                runs.Add(new long[] { lcn, clusters });
+            }
+            pos += 1 + lengthBytes + offsetBytes;
+        }
+        return runs;
+    }
+
+    byte[] ReadSegmentValue(Segment s)
+    {
+        if (s.Resident) return s.Value;
+        byte[] value = new byte[s.DataSize];
+        ReadVirtual(s.Runs, 0, value, (int)s.DataSize);
+        return value;
+    }
+
+    // Every $DATA segment of a stream, following $ATTRIBUTE_LIST into extension records
+    List<Segment> DataSegments(long number, string stream)
+    {
+        byte[] baseRecord = ReadRecord(number);
+        List<Segment> lists = AttributesIn(baseRecord, 0x20, null);
+        List<Segment> data = new List<Segment>();
+        if (lists.Count == 0)
+        {
+            data = AttributesIn(baseRecord, 0x80, stream);
+        }
+        else
+        {
+            byte[] list = ReadSegmentValue(lists[0]);
+            List<long> records = new List<long>();
+            int at = 0;
+            while (at + 0x1A <= list.Length)
+            {
+                uint type = BitConverter.ToUInt32(list, at);
+                int length = BitConverter.ToUInt16(list, at + 4);
+                if (length == 0) break;
+                int nameLength = list[at + 6];
+                string name = nameLength == 0 ? "" : Encoding.Unicode.GetString(list, at + list[at + 7], nameLength * 2);
+                long reference = (long)(BitConverter.ToUInt64(list, at + 0x10) & 0xFFFFFFFFFFFFUL);
+                if (type == 0x80 && name == stream && !records.Contains(reference)) records.Add(reference);
+                at += length;
+            }
+            foreach (long reference in records)
+                data.AddRange(AttributesIn(reference == number ? baseRecord : ReadRecord(reference), 0x80, stream));
+        }
+        data.Sort(delegate (Segment a, Segment b) { return a.StartVcn.CompareTo(b.StartVcn); });
+        return data;
+    }
+
+    // ---- copying -------------------------------------------------------
+
+    // Writes a stream to destination; with skipSparse, sparse ranges are left out
+    // ($UsnJrnl:$J is gigabytes of them). Returns the bytes written.
+    public long CopyRecord(long number, string stream, string destination, bool skipSparse)
+    {
+        List<Segment> segments = DataSegments(number, stream);
+        if (segments.Count == 0) throw new IOException("MFT record " + number + " has no $DATA" + (stream == "" ? "" : ":" + stream));
+        foreach (Segment s in segments)
+            if ((s.Flags & 0x0001) != 0 || (s.Flags & 0x4000) != 0) throw new NotSupportedException("compressed or encrypted $DATA in MFT record " + number);
+
+        long written = 0;
+        using (FileStream output = new FileStream(destination, FileMode.Create, FileAccess.Write))
+        {
+            if (segments[0].Resident)
+            {
+                output.Write(segments[0].Value, 0, segments[0].Value.Length);
+                return segments[0].Value.Length;
+            }
+            long remaining = segments[0].DataSize;
+            // Past the initialised size NTFS reads zeros, whatever is on disk
+            long initialised = segments[0].InitSize;
+            long logical = 0;
+            int chunk = (int)Math.Max(ClusterSize, (1048576 / ClusterSize) * ClusterSize);
+            byte[] buffer = new byte[chunk];
+            foreach (Segment s in segments)
+            {
+                foreach (long[] run in s.Runs)
+                {
+                    long left = Math.Min(run[1] * ClusterSize, remaining);
+                    long position = run[0] * ClusterSize;
+                    while (left > 0)
+                    {
+                        int piece = (int)Math.Min(chunk, left);
+                        if (run[0] < 0)
+                        {
+                            if (!skipSparse) { Array.Clear(buffer, 0, piece); output.Write(buffer, 0, piece); written += piece; }
+                        }
+                        else
+                        {
+                            ReadAt(position, buffer, 0, piece);
+                            if (logical + piece > initialised)
+                            {
+                                int keep = (int)Math.Max(0, initialised - logical);
+                                Array.Clear(buffer, keep, piece - keep);
+                            }
+                            output.Write(buffer, 0, piece);
+                            written += piece;
+                            position += piece;
+                        }
+                        logical += piece;
+                        left -= piece;
+                        remaining -= piece;
+                    }
+                    if (remaining <= 0) return written;
+                }
+            }
+        }
+        return written;
+    }
+
+    // ---- names ---------------------------------------------------------
+
+    // parent record -> (name, record), from every in-use base record's $FILE_NAME
+    void BuildIndex()
+    {
+        children = new Dictionary<long, List<KeyValuePair<string, long>>>();
+        directories = new Dictionary<long, bool>();
+        int perChunk = Math.Max(1, 4194304 / RecordSize);
+        byte[] chunk = new byte[perChunk * RecordSize];
+        long records = mftBytes / RecordSize;
+        for (long first = 0; first < records; first += perChunk)
+        {
+            int count = (int)Math.Min(perChunk, records - first);
+            ReadVirtual(mftRuns, first * RecordSize, chunk, count * RecordSize);
+            for (int i = 0; i < count; i++)
+            {
+                int at = i * RecordSize;
+                if (!Fixup(chunk, at)) continue;
+                int flags = BitConverter.ToUInt16(chunk, at + 0x16);
+                if ((flags & 0x01) == 0 || BitConverter.ToUInt64(chunk, at + 0x20) != 0) continue;  // free, or an extension record
+                long number = first + i;
+                if ((flags & 0x02) != 0) directories[number] = true;
+                byte[] record = new byte[RecordSize];
+                Buffer.BlockCopy(chunk, at, record, 0, RecordSize);
+                foreach (Segment s in AttributesIn(record, 0x30, null))
+                {
+                    if (!s.Resident || s.Value.Length < 0x42) continue;
+                    if (s.Value[0x41] == 2) continue;  // DOS 8.3 alias
+                    long parent = (long)(BitConverter.ToUInt64(s.Value, 0) & 0xFFFFFFFFFFFFUL);
+                    string name = Encoding.Unicode.GetString(s.Value, 0x42, s.Value[0x40] * 2);
+                    List<KeyValuePair<string, long>> list;
+                    if (!children.TryGetValue(parent, out list)) { list = new List<KeyValuePair<string, long>>(); children[parent] = list; }
+                    bool seen = false;
+                    foreach (KeyValuePair<string, long> kv in list) if (kv.Value == number && string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)) seen = true;
+                    if (!seen) list.Add(new KeyValuePair<string, long>(name, number));
+                }
+            }
+        }
+    }
+
+    // "Windows\System32\config\SYSTEM" (drive optional) -> MFT record, or -1
+    public long Resolve(string path)
+    {
+        if (children == null) BuildIndex();
+        string trimmed = path;
+        if (trimmed.Length >= 2 && trimmed[1] == ':') trimmed = trimmed.Substring(2);
+        long current = 5;  // root directory
+        foreach (string part in trimmed.Split(new char[] { '\\', '/' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            List<KeyValuePair<string, long>> list;
+            if (!children.TryGetValue(current, out list)) return -1;
+            long next = -1;
+            foreach (KeyValuePair<string, long> kv in list)
+                if (kv.Value != current && string.Equals(kv.Key, part, StringComparison.OrdinalIgnoreCase)) { next = kv.Value; break; }
+            if (next < 0) return -1;
+            current = next;
+        }
+        return current;
+    }
+
+    public bool IsDirectory(string path)
+    {
+        long number = Resolve(path);
+        return number >= 0 && directories.ContainsKey(number);
+    }
+
+    // Names in a directory (files and subdirectories)
+    public string[] List(string path)
+    {
+        long number = Resolve(path);
+        List<string> names = new List<string>();
+        List<KeyValuePair<string, long>> list;
+        if (number >= 0 && children.TryGetValue(number, out list))
+            foreach (KeyValuePair<string, long> kv in list) if (kv.Value != number && !names.Contains(kv.Key)) names.Add(kv.Key);
+        return names.ToArray();
+    }
+
+    // "C:\$Extend\$UsnJrnl:$J" -> the $J stream of $UsnJrnl
+    public long CopyFile(string path, string destination)
+    {
+        string stream = "";
+        int slash = path.LastIndexOfAny(new char[] { '\\', '/' });
+        int colon = path.IndexOf(':', Math.Max(slash, 2));
+        if (colon > 0) { stream = path.Substring(colon + 1); path = path.Substring(0, colon); }
+        long number = Resolve(path);
+        if (number < 0) throw new FileNotFoundException("not found on the volume: " + path);
+        return CopyRecord(number, stream, destination, stream == "$J");
+    }
 }
-"@
+'@
         }
-        # GENERIC_READ (0x80000000, which PowerShell would read as a negative Int32),
-        # FILE_SHARE_READ|FILE_SHARE_WRITE, OPEN_EXISTING
-        $Handle = [GandalfRawVolume]::CreateFile("\\.\$Volume", [uint32]2147483648, 3, [IntPtr]::Zero, 3, 0, [IntPtr]::Zero)
-        if ($Handle.IsInvalid) { throw "cannot open \\.\$Volume (error $([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" }
-        $Disk = New-Object System.IO.FileStream($Handle, [System.IO.FileAccess]::Read)
-        $Out = $null
-        try {
-            $Boot = New-Object byte[] 4096
-            [void]$Disk.Read($Boot, 0, 4096)
-            if ([System.Text.Encoding]::ASCII.GetString($Boot, 3, 4) -ne "NTFS") { throw "$Volume is not NTFS" }
-            $BytesPerSector = [BitConverter]::ToUInt16($Boot, 0x0B)
-            $SectorsPerCluster = [int]$Boot[0x0D]
-            if ($SectorsPerCluster -gt 0x80) { $SectorsPerCluster = [int][Math]::Pow(2, 256 - $SectorsPerCluster) }
-            $ClusterSize = [int64]$BytesPerSector * $SectorsPerCluster
-            $RecordField = [int]$Boot[0x40]
-            if ($RecordField -gt 0x7F) { $RecordSize = [int][Math]::Pow(2, 256 - $RecordField) } else { $RecordSize = [int]($RecordField * $ClusterSize) }
-
-            $Disk.Position = [BitConverter]::ToInt64($Boot, 0x30) * $ClusterSize
-            $Record = New-Object byte[] ([Math]::Max($RecordSize, 4096))
-            [void]$Disk.Read($Record, 0, $Record.Length)
-            if ([System.Text.Encoding]::ASCII.GetString($Record, 0, 4) -ne "FILE") { throw "MFT record 0 has no FILE signature" }
-            # Update sequence fix-ups: the last two bytes of each stride hold a check value
-            $UsaOffset = [BitConverter]::ToUInt16($Record, 4)
-            $UsaCount = [BitConverter]::ToUInt16($Record, 6)
-            $Stride = $RecordSize / ($UsaCount - 1)
-            for ($i = 1; $i -lt $UsaCount; $i++) {
-                $Record[$Stride * $i - 2] = $Record[$UsaOffset + 2 * $i]
-                $Record[$Stride * $i - 1] = $Record[$UsaOffset + 2 * $i + 1]
-            }
-
-            $Offset = [BitConverter]::ToUInt16($Record, 0x14)
-            $RunsAt = -1
-            while ($Offset -lt $RecordSize - 8) {
-                $Type = [BitConverter]::ToUInt32($Record, $Offset)
-                $Length = [BitConverter]::ToUInt32($Record, $Offset + 4)
-                if ($Type -eq [uint32]::MaxValue -or $Length -eq 0) { break }
-                if ($Type -eq 0x80 -and $Record[$Offset + 8] -eq 1 -and $Record[$Offset + 9] -eq 0) {
-                    $RunsAt = $Offset + [BitConverter]::ToUInt16($Record, $Offset + 0x20)
-                    $DataSize = [BitConverter]::ToInt64($Record, $Offset + 0x30)
-                    break
-                }
-                $Offset += $Length
-            }
-            if ($RunsAt -lt 0) { throw "no non-resident `$DATA attribute in MFT record 0" }
-
-            $Runs = @()
-            $Lcn = [int64]0
-            $Pos = $RunsAt
-            while ($Record[$Pos] -ne 0) {
-                $LengthBytes = $Record[$Pos] -band 0x0F
-                $OffsetBytes = ($Record[$Pos] -shr 4) -band 0x0F
-                $Clusters = [int64]0
-                for ($j = 0; $j -lt $LengthBytes; $j++) { $Clusters += ([int64]$Record[$Pos + 1 + $j]) -shl (8 * $j) }
-                $Delta = [int64]0
-                for ($j = 0; $j -lt $OffsetBytes; $j++) { $Delta += ([int64]$Record[$Pos + 1 + $LengthBytes + $j]) -shl (8 * $j) }
-                if ($OffsetBytes -gt 0 -and $OffsetBytes -lt 8 -and ($Record[$Pos + $LengthBytes + $OffsetBytes] -band 0x80)) {
-                    $Delta -= ([int64]1) -shl (8 * $OffsetBytes)  # offsets are signed
-                }
-                $Lcn += $Delta
-                $Runs += , @($Lcn, $Clusters)
-                $Pos += 1 + $LengthBytes + $OffsetBytes
-            }
-
-            $Out = [System.IO.File]::Create($Destination)
-            $Chunk = [int64][Math]::Max($ClusterSize, [Math]::Floor(1MB / $ClusterSize) * $ClusterSize)
-            $Buffer = New-Object byte[] $Chunk
-            $Remaining = $DataSize
-            ForEach ($Run in $Runs) {
-                $Disk.Position = $Run[0] * $ClusterSize
-                $Left = $Run[1] * $ClusterSize
-                while ($Left -gt 0 -and $Remaining -gt 0) {
-                    $Read = $Disk.Read($Buffer, 0, [int][Math]::Min($Chunk, $Left))
-                    if ($Read -le 0) { throw "short read at cluster $($Run[0])" }
-                    $Out.Write($Buffer, 0, [int][Math]::Min($Read, $Remaining))
-                    $Left -= $Read
-                    $Remaining -= [Math]::Min($Read, $Remaining)
-                }
-            }
-            return ($DataSize - $Remaining)
+        if (-Not $script:RawVolumes) { $script:RawVolumes = @{} }
+        $Key = $Volume.Substring(0, 2).ToUpper()
+        if (-Not $script:RawVolumes.ContainsKey($Key)) { $script:RawVolumes[$Key] = New-Object GandalfNtfs($Key) }
+        return $script:RawVolumes[$Key]
+    }
+    function Copy-Artefact {
+        Param ($Source, $Destination)
+        # A plain copy, else off the raw volume. Returns "copied", "raw" or $null.
+        $Parent = Split-Path -Parent $Destination
+        if (-Not (Test-Path -LiteralPath $Parent)) { New-Item -Path $Parent -ItemType Directory -Force > $null }
+        # .NET resolves relative paths against its own working directory, not PowerShell's location
+        $Destination = Join-Path (Resolve-Path -LiteralPath $Parent).ProviderPath (Split-Path -Leaf $Destination)
+        if ($Source -notmatch ':[^\\]+$' -or $Source.Length -le 3) {
+            try { [System.IO.File]::Copy($Source, $Destination, $true); return "copied" } catch { }
         }
-        finally {
-            if ($Out) { $Out.Dispose() }
-            $Disk.Dispose()
+        try { [void](Get-RawVolume $Source).CopyFile($Source, $Destination); return "raw" } catch { return $null }
+    }
+    function Get-RawTree {
+        Param ($Path, $Recurse)
+        # Files under a directory as the volume records them, for directories
+        # Get-ChildItem can't list (DetectionHistory, other users' recycle bins)
+        $Volume = Get-RawVolume $Path
+        ForEach ($Name in $Volume.List($Path)) {
+            $Child = "$Path\$Name"
+            if ($Volume.IsDirectory($Child)) { if ($Recurse) { Get-RawTree $Child $Recurse } }
+            else { $Child }
         }
+    }
+    function Copy-ArtefactTree {
+        Param ($ShowProgress, $OutputDirectory, $Hostnames, $Label, $Source, $Folder, $Prefix, $Filter, $Recurse, $Raw)
+        # Each file under $Source (matching $Filter) to raw\$Folder\<Prefix>+<path below
+        # $Source, \ as +>. Returns how many were collected.
+        $Collected = 0
+        $Files = @()
+        # Test-Path sees a directory whose ACL refuses a listing; a missing one isn't
+        # worth indexing the volume for
+        if (-Not $Raw -and -Not (Test-Path -LiteralPath $Source)) { return 0 }
+        if (-Not $Raw) {
+            $Listed = @(Get-ChildItem -LiteralPath $Source -File -Force -Recurse:$Recurse -ErrorAction SilentlyContinue -ErrorVariable Denied | ForEach-Object { $_.FullName })
+            if ($Denied.Count -eq 0 -or $Listed.Count -gt 0) { $Files = $Listed } else { $Raw = $true }
+        }
+        if ($Raw) {
+            try { $Files = @(Get-RawTree $Source $Recurse) } catch { $Files = @() }
+        }
+        ForEach ($File in $Files) {
+            $Leaf = Split-Path -Leaf $File
+            if ($Filter -and -Not ($Leaf -like $Filter)) { continue }
+            $Relative = $File.Substring($Source.TrimEnd('\').Length).TrimStart('\') -replace '\\', '+'
+            $Name = if ($Prefix) { "$Prefix+$Relative" } else { $Relative }
+            $How = Copy-Artefact $File "$OutputDirectory\$Hostnames\artefacts\artefacts\raw\$Folder\$Name"
+            if ($How) {
+                $Collected++
+                Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "$Label ($File)" "acquired $Label '$File' ($How) from '$Hostnames'"
+            }
+        }
+        return $Collected
     }
     function Copy-FromShadow {
         Param ($RelativePaths, $Destination)
@@ -352,101 +728,76 @@ public static class GandalfRawVolume {
         Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
         
         $global:ProgressPreference = "SilentlyContinue"
-        # Without disk_tools.zip the raw copies below fail in their own try blocks
+        # disk_tools.zip only adds RawCopy, a fallback for the raw volume reader
         if (Test-Path -LiteralPath "$GandalfHome\tools\disk_tools.zip") {
             Expand-Archive -LiteralPath "$GandalfHome\tools\disk_tools.zip" -DestinationPath "$GandalfHome\tools"
         }
         $global:ProgressPreference = "Continue"
 
-        # Acquiring MFT
-        try { 
-            Write-Progress "Acquiring `$MFT from '$Hostnames'..."
-            $MftOut = Join-Path (Resolve-Path -LiteralPath "$OutputDirectory\$Hostnames\artefacts\artefacts\raw").ProviderPath '$MFT'
-            $MftBytes = Copy-RawMft "C:" $MftOut
-            Write-Host "       Acquired `$MFT from '$Hostnames' ($([Math]::Round($MftBytes / 1MB)) MB)" -ForegroundColor Green
-            Add-LogEntry $ShowProgress $OutputDirectory $Hostnames '$MFT (raw volume read)' "acquired '`$MFT' from '$Hostnames'"
-        }
-        catch { 
-            Write-Host "      FAILURE: '`$MFT' could not be collected: $($_.Exception.Message)" -ForegroundColor Red
-        }
+        $RawOutput = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw"
+        $RawOutputPath = (Resolve-Path -LiteralPath $RawOutput).ProviderPath
 
+        # NTFS metafiles, off the raw volume: $MFT (record 0), $LogFile (record 2) and the
+        # USN journal's $J stream, sparse ranges left out (they run to gigabytes)
+        $Metafiles = @(
+            @{ Name = '$MFT'; Record = 0; Stream = "" },
+            @{ Name = '$LogFile'; Record = 2; Stream = "" },
+            @{ Name = '$UsnJrnl'; Path = 'C:\$Extend\$UsnJrnl:$J' }
+        )
+        ForEach ($Metafile in $Metafiles) {
+            $Name = $Metafile.Name
+            try {
+                Write-Progress "Acquiring $Name from '$Hostnames'..."
+                $Out = Join-Path $RawOutputPath $Name
+                if ($Metafile.ContainsKey("Path")) { $Bytes = (Get-RawVolume "C:").CopyFile($Metafile.Path, $Out) }
+                else { $Bytes = (Get-RawVolume "C:").CopyRecord($Metafile.Record, $Metafile.Stream, $Out, $false) }
+                Write-Host "       Acquired $Name from '$Hostnames' ($([Math]::Round($Bytes / 1MB)) MB)" -ForegroundColor Green
+                Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "$Name (raw volume read)" "acquired '$Name' from '$Hostnames'"
+            }
+            catch {
+                Write-Host "      FAILURE: '$Name' could not be collected: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
         Write-Progress -Activity "_" -Completed
 
         $global:ProgressPreference = "SilentlyContinue"
         $Architecture = Get-ComputerInfo | Select-Object OsArchitecture
         $Architecture = Out-String -InputObject $Architecture
         $Architecture = $Architecture -Replace '[\S\s]+(\d{2})-bit[\S\s]+', '$1'
-
-        # Acquiring UserAccessLogs
         $global:ProgressPreference = "Continue"
+        if ($Architecture -eq "64") { $RawCopyExe = "$GandalfHome\tools\RawCopy64.exe" } else { $RawCopyExe = "$GandalfHome\tools\RawCopy.exe" }
+        $HaveRawCopy = Test-Path -LiteralPath $RawCopyExe
 
+        # User Access Logs (Server), locked by the UAL service
         if (Test-Path -LiteralPath "C:\Windows\System32\LogFiles\Sum") {
-            try { 
-                Write-Progress "Acquiring User Access Logs from '$Hostnames'..."
-                if ($Architecture -eq "64") { 
-                    $RawCopyUAL = { & "$GandalfHome\tools\RawCopy64.exe" /FileNamePath:C:\Windows\System32\LogFiles\Sum\*.mdb /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
-                }
-                else { 
-                    $RawCopyUAL = { & "$GandalfHome\tools\RawCopy.exe" /FileNamePath:C:\Windows\System32\LogFiles\Sum\*.mdb /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
-                }
-                $global:ProgressPreference = "SilentlyContinue"
-                Invoke-Command -ScriptBlock $RawCopyUAL > $null 2>&1
-                $global:ProgressPreference = "Continue"
-                Write-Host "       Acquired User Access Logs from '$Hostnames'" -ForegroundColor Green
-                $Message = "acquired User Access Logs from '$Hostnames'"
-                Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "$Hostnames.raw" $Message
-            }
-            catch { 
-                Write-Host "      FAILURE: User Access Logs could not be collected." -ForegroundColor Red
-            }
+            Write-Progress "Acquiring User Access Logs from '$Hostnames'..."
+            $Ual = Copy-ArtefactTree $ShowProgress $OutputDirectory $Hostnames "User Access Log" "C:\Windows\System32\LogFiles\Sum" "." "" "*.mdb" $false $false
+            if ($Ual -gt 0) { Write-Host "       Acquired User Access Logs from '$Hostnames'" -ForegroundColor Green }
             Write-Progress -Activity "_" -Completed
         }
 
-        $global:ProgressPreference = "Continue"
-        $Artefacts = @("hiberfil.sys", "pagefile.sys", "Windows\AppCompat\Programs\Amcache.hve", "Windows\INF\setupapi.dev.log", "Windows\System32\sru\SRUDB.dat")
-        $RawOutput = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw"
+        # Locked or in-use files: raw volume read, then RawCopy (tools\disk_tools.zip) if
+        # it's there, then a temporary shadow copy
+        $Artefacts = @("hiberfil.sys", "pagefile.sys", "swapfile.sys", "Windows\AppCompat\Programs\Amcache.hve", "Windows\INF\setupapi.dev.log", "Windows\System32\sru\SRUDB.dat")
         $FromShadow = @()
-        $HaveRawCopy = Test-Path -LiteralPath "$GandalfHome\tools\RawCopy64.exe"
-        ForEach ($Artefact in $Artefacts) { 
+        ForEach ($Artefact in $Artefacts) {
             $ArtefactFile = $Artefact.Split("\\")[-1]
-            if (-Not $HaveRawCopy -and (Test-Path -LiteralPath C:\$Artefact)) {
-                if ($ArtefactFile -eq "setupapi.dev.log") {
-                    Copy-Item -LiteralPath C:\$Artefact -Destination $RawOutput -Force -ErrorAction SilentlyContinue
-                    if (Test-Path -LiteralPath $RawOutput\$ArtefactFile) {
-                        Write-Host "       Acquired $ArtefactFile from '$Hostnames'" -ForegroundColor Green
-                        Add-LogEntry $ShowProgress $OutputDirectory $Hostnames $ArtefactFile "acquired '$ArtefactFile' from '$Hostnames'"
-                    }
-                }
-                elseif ($ArtefactFile -in @("Amcache.hve", "SRUDB.dat")) {
-                    $FromShadow += $Artefact
-                }
-                else {
-                    Write-Host "      SKIPPED: '$ArtefactFile' needs RawCopy (tools\disk_tools.zip)." -ForegroundColor Yellow
-                }
+            if (-Not (Test-Path -LiteralPath C:\$Artefact)) { continue }
+            Write-Progress "Acquiring '$ArtefactFile' from '$Hostnames'..."
+            $How = Copy-Artefact "C:\$Artefact" (Join-Path $RawOutputPath $ArtefactFile)
+            if (-Not $How -and $HaveRawCopy) {
+                $global:ProgressPreference = "SilentlyContinue"
+                & $RawCopyExe "/FileNamePath:C:\$Artefact" "/OutputPath:$RawOutputPath" > $null 2>&1
+                $global:ProgressPreference = "Continue"
+                if (Test-Path -LiteralPath (Join-Path $RawOutputPath $ArtefactFile)) { $How = "RawCopy" }
             }
-            elseif (Test-Path -LiteralPath C:\$Artefact) {
-                try { 
-                    Write-Progress "Acquiring '$ArtefactFile' from '$Hostnames'..."
-                    if ($Architecture -eq "64") { 
-                        $RawCopy = { & "$GandalfHome\tools\RawCopy64.exe" /FileNamePath:C:\$Artefact /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
-                    }
-                    else { 
-                        $RawCopy = { & "$GandalfHome\tools\RawCopy.exe" /FileNamePath:C:\$Artefact /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
-                    }
-                    $global:ProgressPreference = "SilentlyContinue"
-                    Invoke-Command -ScriptBlock $RawCopy > $null 2>&1
-                    $global:ProgressPreference = "Continue"
-                    if (Test-Path -LiteralPath $OutputDirectory\$Hostnames\artefacts\artefacts\raw\$ArtefactFile) {
-                        Write-Host "       Acquired $ArtefactFile from '$Hostnames'" -ForegroundColor Green
-                        $Message = "acquired '$ArtefactFile' from '$Hostnames'"
-                        Add-LogEntry $ShowProgress $OutputDirectory $Hostnames $ArtefactFile $Message
-                    }
-                }
-                catch { 
-                    Write-Host "      FAILURE: '$ArtefactFile' could not be collected." -ForegroundColor Red
-                }
-                Write-Progress -Activity "_" -Completed
+            if ($How) {
+                Write-Host "       Acquired $ArtefactFile from '$Hostnames'" -ForegroundColor Green
+                Add-LogEntry $ShowProgress $OutputDirectory $Hostnames $ArtefactFile "acquired '$ArtefactFile' ($How) from '$Hostnames'"
             }
+            elseif ($ArtefactFile -in @("Amcache.hve", "SRUDB.dat")) { $FromShadow += $Artefact }
+            else { Write-Host "      FAILURE: '$ArtefactFile' could not be collected." -ForegroundColor Red }
+            Write-Progress -Activity "_" -Completed
         }
         if ($FromShadow.Count -gt 0) {
             $Copied = Copy-FromShadow $FromShadow $RawOutput
@@ -606,6 +957,61 @@ public static class GandalfRawVolume {
         catch { 
             Write-Host "      FAILURE: registry hives could not be collected; they may be being used by another process." -ForegroundColor Red
         }
+    }
+    function Get-RegistryFiles {
+        Param ($ShowProgress, $OutputDirectory, $Hostnames)
+        # The hive files as they are on disk, with their transaction logs (.LOG1/.LOG2)
+        # and RegBack copies: reg save writes a clean hive, these keep what it drops
+        # (recently written keys still in the logs, deleted keys). Named .original so
+        # they aren't processed twice. Locked, so off the raw volume.
+        Write-Progress "Acquiring registry hive files and transaction logs from '$Hostnames'..."
+        $Count = 0
+        ForEach ($Hive in @("SAM", "SECURITY", "SOFTWARE", "SYSTEM", "DEFAULT")) {
+            ForEach ($Suffix in @("", ".LOG1", ".LOG2")) {
+                $Name = if ($Suffix) { "$Hive$Suffix" } else { "$Hive.original" }
+                if (Copy-Artefact "C:\Windows\System32\config\$Hive$Suffix" "$OutputDirectory\$Hostnames\artefacts\artefacts\raw\registry\original\$Name") { $Count++ }
+            }
+            if (Copy-Artefact "C:\Windows\System32\config\RegBack\$Hive" "$OutputDirectory\$Hostnames\artefacts\artefacts\raw\registry\original\RegBack+$Hive.original") { $Count++ }
+        }
+        ForEach ($User in Get-ChildItem -LiteralPath "C:\Users" -Directory -Force -ErrorAction SilentlyContinue | Where-Object { -Not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) }) {
+            $UserHives = @(
+                @{ Path = "$($User.FullName)\NTUSER.DAT"; Name = "NTUSER.DAT" },
+                @{ Path = "$($User.FullName)\AppData\Local\Microsoft\Windows\UsrClass.dat"; Name = "UsrClass.dat" }
+            )
+            ForEach ($UserHive in $UserHives) {
+                ForEach ($Suffix in @("", ".LOG1", ".LOG2")) {
+                    $Name = if ($Suffix) { "$($User.Name)+$($UserHive.Name)$Suffix" } else { "$($User.Name)+$($UserHive.Name).original" }
+                    if (Copy-Artefact "$($UserHive.Path)$Suffix" "$OutputDirectory\$Hostnames\artefacts\artefacts\raw\registry\original\$Name") { $Count++ }
+                }
+            }
+        }
+        if ($Count -gt 0) {
+            Write-Host "       Acquired $Count registry hive files and transaction logs from '$Hostnames'" -ForegroundColor Green
+            Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "registry hive files" "acquired $Count registry hive files and transaction logs from '$Hostnames'"
+        }
+        Write-Progress -Activity "_" -Completed
+    }
+    function Get-SystemArtefacts {
+        Param ($ShowProgress, $OutputDirectory, $Hostnames)
+        # Label, source, raw\<folder>, name prefix, filter, recurse, raw listing
+        $Sets = @(
+            @("recycle bin", 'C:\$Recycle.Bin', "recyclebin", "", '$I*', $true, $true),
+            @("scheduled task", "C:\Windows\System32\Tasks", "tasks", "", "", $true, $false),
+            @("startup item", "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp", "startup", "All Users", "", $false, $false),
+            @("BITS database", "C:\ProgramData\Microsoft\Network\Downloader", "bits", "", "", $false, $false),
+            @("Windows Search database", "C:\ProgramData\Microsoft\Search\Data\Applications\Windows", "search", "", "", $false, $false),
+            @("Defender log", "C:\ProgramData\Microsoft\Windows Defender\Support", "defender\support", "", "", $false, $false),
+            @("Defender detection", "C:\ProgramData\Microsoft\Windows Defender\Scans\History\Service\DetectionHistory", "defender\detectionhistory", "", "", $true, $true),
+            @("PCA file", "C:\Windows\appcompat\pca", "pca", "", "", $false, $false),
+            @("error report", "C:\ProgramData\Microsoft\Windows\WER", "wer", "System", "Report.wer", $true, $false),
+            @("hosts file", "C:\Windows\System32\drivers\etc", ".", "", "hosts", $false, $false)
+        )
+        ForEach ($Set in $Sets) {
+            Write-Progress "Acquiring $($Set[0])s from '$Hostnames'..."
+            $Count = Copy-ArtefactTree $ShowProgress $OutputDirectory $Hostnames $Set[0] $Set[1] $Set[2] $Set[3] $Set[4] $Set[5] $Set[6]
+            if ($Count -gt 0) { Write-Host "       Acquired $Count $($Set[0]) file(s) from '$Hostnames'" -ForegroundColor Green }
+        }
+        Write-Progress -Activity "_" -Completed
     }
     function Get-Winevt { 
         Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
@@ -777,11 +1183,39 @@ public static class GandalfRawVolume {
             }
         }
 
+        function Get-UserFiles {
+            Param ($ShowProgress, $OutputDirectory, $Hostnames)
+            # Relative to each profile: label, path, raw\<folder>, filter, recurse
+            $Sets = @(
+                @("shortcut", "AppData\Roaming\Microsoft\Windows\Recent", "lnk", "*.lnk", $false),
+                @("shortcut", "AppData\Roaming\Microsoft\Office\Recent", "lnk", "*.lnk", $false),
+                @("shortcut", "Desktop", "lnk", "*.lnk", $false),
+                @("startup item", "AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup", "startup", "", $false),
+                @("RDP bitmap cache", "AppData\Local\Microsoft\Terminal Server Client\Cache", "rdpcache", "", $false),
+                @("thumbnail cache", "AppData\Local\Microsoft\Windows\Explorer", "thumbcache", "*cache_*.db", $false),
+                @("Notepad tab", "AppData\Local\Packages\Microsoft.WindowsNotepad_8wekyb3d8bbwe\LocalState\TabState", "notepad", "*.bin", $false),
+                @("error report", "AppData\Local\Microsoft\Windows\WER", "wer", "Report.wer", $true)
+            )
+            ForEach ($User in Get-ChildItem -LiteralPath "C:\Users" -Directory -Force -ErrorAction SilentlyContinue | Where-Object { -Not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) }) {
+                Write-Progress "Acquiring shortcuts, startup items and caches for '$($User.Name)' from '$Hostnames'..."
+                $Count = 0
+                ForEach ($Set in $Sets) {
+                    # lnk names carry their folder: Recent and Office\Recent hold the same names
+                    $Prefix = if ($Set[2] -eq "lnk") { "$($User.Name)+$(($Set[1].Split('\'))[-1])" } else { $User.Name }
+                    if ($Set[1] -like "*Office\Recent") { $Prefix = "$($User.Name)+OfficeRecent" }
+                    $Count += Copy-ArtefactTree $ShowProgress $OutputDirectory $Hostnames $Set[0] "$($User.FullName)\$($Set[1])" $Set[2] $Prefix $Set[3] $Set[4] $false
+                }
+                if ($Count -gt 0) { Write-Host "       Acquired $Count shortcut, startup, cache and report file(s) for '$($User.Name)' from '$Hostnames'" -ForegroundColor Green }
+            }
+            Write-Progress -Activity "_" -Completed
+        }
+
         $UserDirs = @("$DriveLetter\Users\")
 
         Get-Jumplists $ShowProgress $OutputDirectory $Hostnames $UserDirs
         Get-Browsers $ShowProgress $OutputDirectory $Hostnames $UserDirs
         Get-Clipboard $ShowProgress $OutputDirectory $Hostnames $UserDirs
+        Get-UserFiles $ShowProgress $OutputDirectory $Hostnames
     }
 
     Get-Volatile $ShowProgress $Memory $OutputDirectory $Hostnames
@@ -789,6 +1223,8 @@ public static class GandalfRawVolume {
     Get-Wmi $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-PowerShellHistory $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-Registry $ShowProgress $OutputDirectory $Hostnames
+    Get-RegistryFiles $ShowProgress $OutputDirectory $Hostnames
+    Get-SystemArtefacts $ShowProgress $OutputDirectory $Hostnames
     Get-Winevt $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-Prefetch $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-UserArtefacts $ShowProgress $DriveLetter $OutputDirectory $Hostnames

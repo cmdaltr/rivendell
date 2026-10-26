@@ -751,6 +751,7 @@ def run_artemis(
     alt_file: Optional[str] = None,
     alt_dir: Optional[str] = None,
     output_filename: Optional[str] = None,
+    extra_args: Optional[List[str]] = None,
 ) -> tuple[bool, str]:
     """
     Run Artemis to parse a forensic artifact using CLI acquire mode.
@@ -762,6 +763,7 @@ def run_artemis(
         alt_dir: Alternative directory path for multi-file artifacts
         output_filename: Desired output filename (without .json extension).
                         If provided, output will be renamed to this name.
+        extra_args: Further artifact options, e.g. ["--alt-mft", path] for usnjrnl
 
     Returns:
         Tuple of (success: bool, error_message: str)
@@ -798,7 +800,7 @@ def run_artemis(
         "search": ("--alt-file", None),            # only --alt-file
         "tasks": ("--alt-file", None),             # only --alt-file
         "services": ("--alt-file", None),          # only --alt-file
-        "shortcuts": ("--alt-file", None),         # only --alt-file
+        "shortcuts": (None, "--path"),             # a directory of .lnk files
         "recyclebin": ("--alt-file", None),        # only --alt-file
         "outlook": ("--alt-file", None),           # only --alt-file
     }
@@ -810,6 +812,8 @@ def run_artemis(
         cmd.extend([file_arg, alt_file])
     elif alt_dir and dir_arg:
         cmd.extend([dir_arg, alt_dir])
+    if extra_args:
+        cmd.extend(extra_args)
 
     try:
         import sys
@@ -935,6 +939,7 @@ def extract_with_artemis(
     artifact_dir: Optional[str] = None,
     output_subdir: str = "",
     fixed_output_name: Optional[str] = None,
+    extra_args: Optional[List[str]] = None,
 ) -> bool:
     """
     Extract artifacts using Artemis with proper logging.
@@ -1023,6 +1028,7 @@ def extract_with_artemis(
         alt_file=artifact_file,
         alt_dir=artifact_dir,
         output_filename=output_name,
+        extra_args=extra_args,
     )
 
     if not success:
@@ -1236,8 +1242,9 @@ def extract_usnjrnl(
     vss_path_insert: str,
     stage: str,
     usnjrnl_file: str,
+    mft_file: Optional[str] = None,
 ) -> bool:
-    """Extract USN Journal using Artemis."""
+    """Extract USN Journal using Artemis; with the $MFT, entries get their full paths."""
     return extract_with_artemis(
         verbosity=verbosity,
         vssimage=vssimage,
@@ -1249,6 +1256,7 @@ def extract_usnjrnl(
         artifact_file=usnjrnl_file,
         output_subdir="",  # Output directly to cooked/ as journal_usn.json
         fixed_output_name="journal_usn",  # Force output name to journal_usn.json
+        extra_args=["--alt-mft", mft_file] if mft_file else None,
     )
 
 
@@ -1318,6 +1326,9 @@ def extract_tasks(
         artifact_type="tasks",
         artifact_file=task_file,
         output_subdir="tasks",
+        # Task names hold dots (".NET Framework NGEN v4.0.30319 64"): splitext would
+        # collapse several onto one output
+        fixed_output_name=os.path.basename(task_file),
     )
 
 
@@ -1351,9 +1362,9 @@ def extract_shortcuts(
     img: str,
     vss_path_insert: str,
     stage: str,
-    lnk_file: str,
+    lnk_dir: str,
 ) -> bool:
-    """Extract Windows shortcut (LNK) file using Artemis."""
+    """Every .lnk in a directory using Artemis (it takes the directory, not a file)."""
     return extract_with_artemis(
         verbosity=verbosity,
         vssimage=vssimage,
@@ -1362,7 +1373,7 @@ def extract_shortcuts(
         vss_path_insert=vss_path_insert,
         stage=stage,
         artifact_type="shortcuts",
-        artifact_file=lnk_file,
+        artifact_dir=lnk_dir,
         output_subdir="shortcuts",
     )
 

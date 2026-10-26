@@ -31,6 +31,7 @@ from rivendell.process.windows import process_usb
 from rivendell.process.windows import process_usn
 from rivendell.process.windows import process_wbem
 from rivendell.process.windows import process_wmi
+from rivendell.process.windows_artefacts import process_windows_artefact
 
 
 def process_artefacts(
@@ -82,6 +83,10 @@ def process_artefacts(
                 vss_path_insert,
                 stage,
             )
+        elif process_windows_artefact(
+            verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
+        ):
+            pass  # raw/<recyclebin|tasks|startup|bits|search|defender|pca|wer|lnk|notepad>/, hosts
         elif artefact.endswith("$UsnJrnl"):
             process_usn(
                 verbosity,

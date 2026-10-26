@@ -11,6 +11,11 @@ from rivendell.process.process import determine_vss_image
 from rivendell.process.process import process_artefacts
 from rivendell.utils import safe_listdir, safe_iterdir
 
+# Gandalf's Windows collections beyond the core set (process/windows_artefacts.py)
+WINDOWS_RAW_FOLDERS = re.compile(
+    r"/artefacts/raw(?:/vss\d+)?/(?:recyclebin|tasks|startup|bits|search|defender|pca|wer|lnk|notepad)/"
+)
+
 
 def select_artefacts_to_process(img, process_list, artefacts_list, processed_artefacts):
     for each in process_list:
@@ -77,6 +82,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                         or "/raw/mail" in root + "/" + f
                         or "/raw/browsers" in root + "/" + f
                         or "/carved/" in root
+                        or WINDOWS_RAW_FOLDERS.search(root + "/")
                     ):
                         artefacts_list.append(each + ": " + root + "/" + f)
                         processed_artefacts.append(root + "/" + f)
