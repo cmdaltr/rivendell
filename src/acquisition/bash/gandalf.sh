@@ -676,6 +676,9 @@ encrypt_archive() {
 
                 # Encrypt with key
                 openssl enc -aes-256-cbc -salt -pbkdf2 -in "$archive_file" -out "${archive_file}.enc" -pass file:"$key_file"
+            elif [ -n "${GANDALF_PASSWORD:-}" ]; then
+                # Remote batch: asked once up front; on a descriptor, not argv or the environment
+                openssl enc -aes-256-cbc -salt -pbkdf2 -in "$archive_file" -out "${archive_file}.enc" -pass fd:3 3<<<"$GANDALF_PASSWORD"
             else
                 # Password-based encryption
                 echo -e "${BLUE}[*]${NC} Enter encryption password:"
@@ -754,6 +757,21 @@ acquire_remote() {
         hosts=("$REMOTE_HOST")
     fi
 
+    # Password encryption can't prompt over a non-interactive ssh, so the target
+    # collects unencrypted (the archive travels over scp) and it's encrypted here
+    local remote_encryption="$ENCRYPTION_METHOD"
+    if [ "$(lower "$ENCRYPTION_METHOD")" = "password" ]; then
+        remote_encryption="None"
+        local confirm
+        read -rsp "Encryption password: " GANDALF_PASSWORD; echo >&2
+        read -rsp "Confirm password: " confirm; echo >&2
+        if [ -z "$GANDALF_PASSWORD" ] || [ "$GANDALF_PASSWORD" != "$confirm" ]; then
+            echo -e "${RED}[ERROR]${NC} Passwords are empty or don't match"
+            exit 1
+        fi
+        unset confirm
+    fi
+
     for host in "${hosts[@]}"; do
         echo -e "${GREEN}[+]${NC} Acquiring from remote host: $host"
 
@@ -765,7 +783,7 @@ acquire_remote() {
         }
 
         # Execute remotely
-        if ! ssh "${REMOTE_USER}@${host}" "sudo bash ${remote_script} ${ENCRYPTION_METHOD} Local -o /tmp/gandalf/acquisitions $([ "$MEMORY_DUMP" = true ] && echo -m)"; then
+        if ! ssh "${REMOTE_USER}@${host}" "sudo bash ${remote_script} ${remote_encryption} Local -o /tmp/gandalf/acquisitions $([ "$MEMORY_DUMP" = true ] && echo -m)"; then
             echo -e "${RED}[ERROR]${NC} Remote execution failed on $host"
             ssh "${REMOTE_USER}@${host}" "sudo rm -rf /tmp/gandalf ${remote_script}" || true
             continue
@@ -780,6 +798,10 @@ acquire_remote() {
                         && echo -e "${GREEN}[+]${NC} Encryption key saved: ${OUTPUT_DIR}/${host}.shadowfax.key" \
                         || echo -e "${RED}[ERROR]${NC} Failed to retrieve the encryption key from $host"
                 fi
+                if [ "$remote_encryption" != "$ENCRYPTION_METHOD" ]; then
+                    encrypt_archive "${OUTPUT_DIR}/$(basename "$remote_file")" "$host" \
+                        || echo -e "${RED}[ERROR]${NC} Failed to encrypt the archive from $host"
+                fi
                 echo -e "${GREEN}[+]${NC} Successfully acquired from $host"
             else
                 echo -e "${RED}[ERROR]${NC} Failed to retrieve archive from $host"
@@ -791,6 +813,7 @@ acquire_remote() {
         # Leave nothing of Gandalf's on the target
         ssh "${REMOTE_USER}@${host}" "sudo rm -rf /tmp/gandalf ${remote_script}" || true
     done
+    unset GANDALF_PASSWORD
 }
 
 # Main function
