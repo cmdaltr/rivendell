@@ -193,6 +193,6 @@ A FAIL here includes false passes: jobs the API marked COMPLETED that produced n
 | mordor_atomic_lateral_movement | 🟣 NOT RUN | — | — | Mordor datasets not on the test drive |
 | mordor_atomic_persistence | 🟣 NOT RUN | — | — | Mordor datasets not on the test drive |
 | mordor_full_detection_test | 🟣 NOT RUN | — | — | Mordor datasets not on the test drive |
-| mordor_malware_cobalt_strike | 🟣 NOT RUN | — | — | Mordor datasets not on the test drive |
-| mordor_malware_emotet | 🟣 NOT RUN | — | — | Mordor datasets not on the test drive |
-| mordor_malware_trickbot | 🟣 NOT RUN | — | — | Mordor datasets not on the test drive |
+| mordor_malware_cobalt_strike | ⚪ REMOVED | — | — | OTRF doesn't publish this dataset (P11) |
+| mordor_malware_emotet | ⚪ REMOVED | — | — | OTRF doesn't publish this dataset (P11) |
+| mordor_malware_trickbot | ⚪ REMOVED | — | — | OTRF doesn't publish this dataset (P11) |

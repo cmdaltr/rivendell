@@ -132,17 +132,17 @@ def main(
         print(
             "\n  You MUST use the collect switch (-C) or gandalf switch (-G)\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C)\n   If you have previously collected artefacts having used gandalf, you must invoke the gandalf switch (-G)\n\n  Please try again.\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     if collect and gandalf:
         print(
             "\n  You cannot use the collect switch (-C) and the collect gandalf (-G).\n   If you are processing acquired disk and/or memory images, you must invoke the collect switch (-C).\n   If you have previously collected artefacts using gandalf, you must invoke the gandalf switch (-G).\n\n  Please try again.\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     if volatility and not process:
         print(
             "\n  If you are just processing memory images, you must invoke the process switch (-P) with the memory switch (-M).\n\n  Please try again.\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     if (not collect or gandalf) and (
         vss or collectfiles or symlinks or timeline or userprofiles
     ):
@@ -165,23 +165,23 @@ def main(
                 collectand, gandalforcollect
             )
         )
-        sys.exit()
+        sys.exit(1)
     if memorytimeline and not volatility:
         print(
             "\n\n  You cannot provide the memorytimeline switch (-t) without provided the Volatility switch (-M). Please try again.\n\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     # Skip validation when in phased mode (mount/collect phases don't need process for analysis)
     if analysis and not process and phase not in ("mount", "collect"):
         print(
             "\n\n  You cannot provide the Analysis switch (-A) without provided the Processing switch (-P). Please try again.\n\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     if nsrl and not hashing_enabled:
         print(
             "\n\n  The NSRL switch (-H) requires hashing. Enable either --hashAll or --hashCollected to proceed.\n\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     if yara:
         if not os.path.isdir(yara[0]):
             print(
@@ -189,12 +189,20 @@ def main(
                     yara[0]
                 )
             )
-            sys.exit()
+            sys.exit(1)
+    if keywords and not os.path.isfile(keywords[0]):
+        # Checked later only after mounting and collection, hours in
+        print(
+            "\n\n  '{}' is not a keywords file or does not exist. Please try again.\n\n\n\n".format(
+                keywords[0]
+            )
+        )
+        sys.exit(1)
     if navigator and not splunk:
         print(
             "\n\n  You cannot provide the Navigator switch (-N) without providing the Splunk switch (-S). Please try again.\n\n\n\n"
         )
-        sys.exit()
+        sys.exit(1)
     starttime, ot, imgs, foundimgs, doneimgs, d, vssmem = (
         datetime.now().isoformat(),
         {},
@@ -221,7 +229,7 @@ def main(
                                 collectfiles[8:]
                             )
                         )
-                        sys.exit()
+                        sys.exit(1)
                 elif "," in collectfiles or re.match(r'^[a-zA-Z0-9]+$', collectfiles):
                     # Comma-separated extension list (e.g., "exe,dll,sys") or single extension
                     # This is valid - will be handled as inline extension filter
@@ -234,7 +242,7 @@ def main(
                         "   3. Path to include/exclude file: include:/path/to/file.txt\n"
                         "  Please try again.\n\n"
                     )
-                    sys.exit()
+                    sys.exit(1)
     if yara:
         if not os.path.exists(yara[0]):
             print(
@@ -242,7 +250,7 @@ def main(
                     yara[0]
                 )
             )
-            sys.exit()
+            sys.exit(1)
     # apfs-fuse is now installed by default in the Docker container
     # No need to check or prompt for installation
     if os.path.exists("/opt/elrond/elrond/tools/.profiles"):
@@ -275,7 +283,7 @@ def main(
                             od
                         )
                     )
-                    sys.exit()
+                    sys.exit(1)
                 except Exception as e:
                     if "Input/output error" in str(e):
                         print(
@@ -289,12 +297,12 @@ def main(
                                 od
                             )
                         )
-                    sys.exit()
+                    sys.exit(1)
             else:
                 print(
                     "\n    You have three choices:\n     -> Specify a directory that exists\n     -> Confirm creation of a specified directory\n     -> Provide no output directory (cwd is default)\n\n  Please try again.\n  ----------------------------------------\n\n"
                 )
-                sys.exit()
+                sys.exit(1)
         output_directory = od
     else:
         output_directory = "./"
@@ -320,7 +328,7 @@ def main(
                 d
             )
         )
-        sys.exit()
+        sys.exit(1)
     elif not gandalf and len(os.listdir(d)) > 0 and (  # Gandalf directories hold host folders, not images
         ".e01" not in str(os.listdir(d)).lower()
         and ".vmdk" not in str(os.listdir(d)).lower()
@@ -334,7 +342,7 @@ def main(
                 d
             )
         )
-        sys.exit()
+        sys.exit(1)
     # Unmount any previously mounted images (unless in multi-image phased mode)
     if not skip_unmount:
         unmount_images(elrond_mount, ewf_mount)

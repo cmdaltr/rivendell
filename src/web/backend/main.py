@@ -692,12 +692,14 @@ async def bulk_archive_jobs(job_ids: list[str]):
 
 
 @app.post("/api/jobs/bulk/restart")
-async def bulk_restart_jobs(job_ids: list[str]):
+async def bulk_restart_jobs(job_ids: list[str], fresh: bool = False):
     """
     Restart multiple failed, cancelled, or completed jobs at once.
 
     Args:
         job_ids: List of job IDs to restart
+        fresh: Remove each job's previous output before it runs again, so a failed
+            run's partial output doesn't mix with the new one
 
     Returns:
         Results for each job
@@ -722,7 +724,9 @@ async def bulk_restart_jobs(job_ids: list[str]):
             job.error = None
             job.started_at = None
             job.completed_at = None
-            job.log.append(f"[{datetime.now().isoformat()}] Job restarted by user (bulk operation)")
+            if fresh:
+                job.options.force_overwrite = True
+            job.log.append(f"[{datetime.now().isoformat()}] Job restarted by user (bulk operation{', fresh output' if fresh else ''})")
             job_storage.save_job(job)
 
             # Start new analysis task

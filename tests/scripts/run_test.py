@@ -6,29 +6,29 @@ This module defines test scenarios for various forensic image processing combina
 Each test case specifies source images and processing options to validate.
 
 Usage:
-    python tests/run_test.py --list                    # List all test cases
-    python tests/run_test.py --status                  # Show job status (running/pending/completed/failed)
-    python tests/run_test.py --pause <job_id>          # SIGSTOP a running job's Elrond process group
-    python tests/run_test.py --resume <job_id>         # SIGCONT a paused job
-    python tests/run_test.py --run <name>              # Run specific test
-    python tests/run_test.py --run <name> -y           # Run and auto-confirm overwrite
-    python tests/run_test.py --run <name> --wait       # Run and wait for completion
-    python tests/run_test.py --queue <n1> <n2> <n3>    # Queue multiple tests
-    python tests/run_test.py --run-tags <tag>          # Run all tests with tag
-    python tests/run_test.py --generate-jobs           # Generate job JSON files for Web UI
+    python tests/scripts/run_test.py --list                    # List all test cases
+    python tests/scripts/run_test.py --status                  # Show job status (running/pending/completed/failed)
+    python tests/scripts/run_test.py --pause <job_id>          # SIGSTOP a running job's Elrond process group
+    python tests/scripts/run_test.py --resume <job_id>         # SIGCONT a paused job
+    python tests/scripts/run_test.py --run <name>              # Run specific test
+    python tests/scripts/run_test.py --run <name> -y           # Run and auto-confirm overwrite
+    python tests/scripts/run_test.py --run <name> --wait       # Run and wait for completion
+    python tests/scripts/run_test.py --queue <n1> <n2> <n3>    # Queue multiple tests
+    python tests/scripts/run_test.py --run-tags <tag>          # Run all tests with tag
+    python tests/scripts/run_test.py --generate-jobs           # Generate job JSON files for Web UI
 
 Examples:
     # Check job status
-    python tests/run_test.py --status
+    python tests/scripts/run_test.py --status
 
     # Run a single test with auto-confirm
-    python tests/run_test.py --run win_brisk -y
+    python tests/scripts/run_test.py --run win_brisk -y
 
     # Queue several tests (returns immediately, jobs run sequentially)
-    python tests/run_test.py --queue win_brisk win_archive win_keywords -y
+    python tests/scripts/run_test.py --queue win_brisk win_archive win_keywords -y
 
     # Queue all Windows tests
-    python tests/run_test.py --run-tags windows -y
+    python tests/scripts/run_test.py --run-tags windows -y
 
 Test images should be placed in the path specified by TEST_IMAGES_PATH environment variable,
 or defaults to /Volumes/Media5TB/rivendell_imgs/
@@ -133,9 +133,9 @@ TEST_OUTPUT_PATH = os.environ.get("TEST_OUTPUT_PATH", f"{TEST_IMAGES_PATH}/tests
 # API URL - override with RIVENDELL_API_URL env var
 API_URL = os.environ.get("RIVENDELL_API_URL", "http://localhost:5688")
 
-# Sample files for testing
-# These paths are INSIDE the Docker container (copied during build)
-CONTAINER_FILES_PATH = "/tmp/rivendell/files"
+# Sample files for testing: the repo's fixtures/, which docker-compose.yml mounts
+# read-only into the worker at /tmp/rivendell/fixtures
+CONTAINER_FILES_PATH = "/tmp/rivendell/fixtures"
 SAMPLE_KEYWORDS_FILE = f"{CONTAINER_FILES_PATH}/keywords.txt"
 SAMPLE_YARA_DIR = f"{CONTAINER_FILES_PATH}/yara_rules"
 SAMPLE_IOCS_FILE = f"{CONTAINER_FILES_PATH}/iocs.txt"
@@ -168,7 +168,7 @@ AZURE_BLOB_MEMORY_IMAGE = os.environ.get(
 MORDOR_DATASETS_PATH = os.environ.get("MORDOR_DATASETS_PATH", f"{TEST_IMAGES_PATH}/mordor")
 
 # Local files path (mounted to container via docker-compose, fallback to copy)
-LOCAL_FILES_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "files")
+LOCAL_FILES_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "fixtures")
 
 # Track if samples have been copied to container this session
 _samples_copied = False
@@ -177,7 +177,7 @@ _samples_copied = False
 def copy_samples_to_container():
     """Copy analysis files (keywords, yara rules, IOC watchlists) to the Docker container.
 
-    Note: docker-compose.yml mounts ./files to /tmp/rivendell/files,
+    Note: docker-compose.yml mounts ./fixtures to /tmp/rivendell/fixtures (read-only),
     so this function is a fallback for cases where the volume mount isn't available.
     """
     global _samples_copied
@@ -213,6 +213,15 @@ def copy_samples_to_container():
     if not os.path.isdir(LOCAL_FILES_PATH):
         print(f"  WARNING: files directory not found: {LOCAL_FILES_PATH}")
         return False
+
+    # Already there through the compose mount (read-only, so docker cp would fail)
+    mounted = subprocess.run(
+        ["docker", "exec", container_name, "test", "-f", SAMPLE_KEYWORDS_FILE],
+        capture_output=True,
+    )
+    if mounted.returncode == 0:
+        _samples_copied = True
+        return True
 
     # Create target directory in container
     subprocess.run(
@@ -1976,7 +1985,6 @@ MORDOR_TESTS = [
         images=[
             f"{MORDOR_DATASETS_PATH}/apt29/day1/acquisitions/",
             f"{MORDOR_DATASETS_PATH}/atomic/credential_access/acquisitions/",
-            f"{MORDOR_DATASETS_PATH}/malware/emotet/acquisitions/",
         ],
         options={
             "gandalf": True,
@@ -1991,45 +1999,8 @@ MORDOR_TESTS = [
         tags=["mordor", "exhaustive", "detection", "siem", "gandalf", "very_slow"],
         estimated_duration_minutes=180,
     ),
-    TestCase(
-        name="mordor_malware_cobalt_strike",
-        description="Mordor - Cobalt Strike beacon analysis dataset",
-        images=[f"{MORDOR_DATASETS_PATH}/malware/cobalt_strike/acquisitions/"],
-        options={
-            "gandalf": True,
-            "analysis": True,
-            "yara_dir": SAMPLE_YARA_DIR,
-        },
-        expected_outputs=["artefacts/cooked/", "analysis/"],
-        tags=["mordor", "malware", "cobalt_strike", "c2", "gandalf", "yara"],
-        estimated_duration_minutes=60,
-    ),
-    TestCase(
-        name="mordor_malware_emotet",
-        description="Mordor - Emotet malware analysis dataset",
-        images=[f"{MORDOR_DATASETS_PATH}/malware/emotet/acquisitions/"],
-        options={
-            "gandalf": True,
-            "analysis": True,
-            "yara_dir": SAMPLE_YARA_DIR,
-        },
-        expected_outputs=["artefacts/cooked/", "analysis/"],
-        tags=["mordor", "malware", "emotet", "gandalf", "yara"],
-        estimated_duration_minutes=60,
-    ),
-    TestCase(
-        name="mordor_malware_trickbot",
-        description="Mordor - TrickBot malware analysis dataset",
-        images=[f"{MORDOR_DATASETS_PATH}/malware/trickbot/acquisitions/"],
-        options={
-            "gandalf": True,
-            "analysis": True,
-            "yara_dir": SAMPLE_YARA_DIR,
-        },
-        expected_outputs=["artefacts/cooked/", "analysis/"],
-        tags=["mordor", "malware", "trickbot", "gandalf", "yara"],
-        estimated_duration_minutes=60,
-    ),
+    # No malware/* tests: OTRF Security-Datasets doesn't publish Cobalt Strike, Emotet or
+    # TrickBot datasets (P11). Lab recordings (./lab/lab.sh mordor-dataset) can stand in.
 ]
 
 
@@ -2597,8 +2568,10 @@ def rerun_failed_jobs(api_url: str, wait: bool = False):
             return
 
         print(f"Found {len(to_restart)} failed jobs to restart...")
+        # fresh: the failed run's partial output is removed first, not run over
         response = requests.post(
             f"{api_url}/api/jobs/bulk/restart",
+            params={"fresh": "true"},
             json=to_restart,
             headers={"Content-Type": "application/json"},
             timeout=60,

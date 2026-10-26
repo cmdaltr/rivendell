@@ -615,7 +615,7 @@ if __name__ == "__main__":
                 phase="mount",
             )
         except SystemExit as e:
-            if e.code in (None, 0):
+            if e.code != 2:  # 2: nothing in this source mounted; anything else ends the run
                 raise
             failed_sources.append(source)
             result = None
