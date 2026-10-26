@@ -98,10 +98,10 @@ function Get-Artefacts {
                 Write-Progress "Acquiring raw memory dump from '$Hostnames'..."
                 $global:ProgressPreference = "SilentlyContinue"
                 if ($Architecture -eq "64") { 
-                    $dumpit = { C:\TEMP\gandalf\gandalf\tools\memory\DumpIt.exe /O $OutputDirectory\$Hostnames\artefacts\artefacts\raw\memory\$Hostnames.raw /C /N /Q }
+                    $dumpit = { & "$GandalfHome\tools\memory\DumpIt.exe" /O $OutputDirectory\$Hostnames\artefacts\artefacts\raw\memory\$Hostnames.raw /C /N /Q }
                 }
                 else { 
-                    $dumpit = { C:\TEMP\gandalf\gandalf\tools\memory\DumpItx86.exe /O $OutputDirectory\$Hostnames\artefacts\artefacts\raw\memory\$Hostnames.raw /C /N /Q }
+                    $dumpit = { & "$GandalfHome\tools\memory\DumpItx86.exe" /O $OutputDirectory\$Hostnames\artefacts\artefacts\raw\memory\$Hostnames.raw /C /N /Q }
                 }
                 Invoke-Command -ScriptBlock $dumpit > $null 2>&1
                 $global:ProgressPreference = "Continue"
@@ -353,8 +353,8 @@ public static class GandalfRawVolume {
         
         $global:ProgressPreference = "SilentlyContinue"
         # Without disk_tools.zip the raw copies below fail in their own try blocks
-        if (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip") {
-            Expand-Archive -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip" -DestinationPath "C:\TEMP\gandalf\gandalf\tools"
+        if (Test-Path -LiteralPath "$GandalfHome\tools\disk_tools.zip") {
+            Expand-Archive -LiteralPath "$GandalfHome\tools\disk_tools.zip" -DestinationPath "$GandalfHome\tools"
         }
         $global:ProgressPreference = "Continue"
 
@@ -384,10 +384,10 @@ public static class GandalfRawVolume {
             try { 
                 Write-Progress "Acquiring User Access Logs from '$Hostnames'..."
                 if ($Architecture -eq "64") { 
-                    $RawCopyUAL = { C:\TEMP\gandalf\gandalf\tools\RawCopy64.exe /FileNamePath:C:\Windows\System32\LogFiles\Sum\*.mdb /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
+                    $RawCopyUAL = { & "$GandalfHome\tools\RawCopy64.exe" /FileNamePath:C:\Windows\System32\LogFiles\Sum\*.mdb /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
                 }
                 else { 
-                    $RawCopyUAL = { C:\TEMP\gandalf\gandalf\tools\RawCopy.exe /FileNamePath:C:\Windows\System32\LogFiles\Sum\*.mdb /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
+                    $RawCopyUAL = { & "$GandalfHome\tools\RawCopy.exe" /FileNamePath:C:\Windows\System32\LogFiles\Sum\*.mdb /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
                 }
                 $global:ProgressPreference = "SilentlyContinue"
                 Invoke-Command -ScriptBlock $RawCopyUAL > $null 2>&1
@@ -406,7 +406,7 @@ public static class GandalfRawVolume {
         $Artefacts = @("hiberfil.sys", "pagefile.sys", "Windows\AppCompat\Programs\Amcache.hve", "Windows\INF\setupapi.dev.log", "Windows\System32\sru\SRUDB.dat")
         $RawOutput = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw"
         $FromShadow = @()
-        $HaveRawCopy = Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\RawCopy64.exe"
+        $HaveRawCopy = Test-Path -LiteralPath "$GandalfHome\tools\RawCopy64.exe"
         ForEach ($Artefact in $Artefacts) { 
             $ArtefactFile = $Artefact.Split("\\")[-1]
             if (-Not $HaveRawCopy -and (Test-Path -LiteralPath C:\$Artefact)) {
@@ -428,10 +428,10 @@ public static class GandalfRawVolume {
                 try { 
                     Write-Progress "Acquiring '$ArtefactFile' from '$Hostnames'..."
                     if ($Architecture -eq "64") { 
-                        $RawCopy = { C:\TEMP\gandalf\gandalf\tools\RawCopy64.exe /FileNamePath:C:\$Artefact /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
+                        $RawCopy = { & "$GandalfHome\tools\RawCopy64.exe" /FileNamePath:C:\$Artefact /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
                     }
                     else { 
-                        $RawCopy = { C:\TEMP\gandalf\gandalf\tools\RawCopy.exe /FileNamePath:C:\$Artefact /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
+                        $RawCopy = { & "$GandalfHome\tools\RawCopy.exe" /FileNamePath:C:\$Artefact /OutputPath:$OutputDirectory\$Hostnames\artefacts\artefacts\raw }
                     }
                     $global:ProgressPreference = "SilentlyContinue"
                     Invoke-Command -ScriptBlock $RawCopy > $null 2>&1
@@ -798,7 +798,7 @@ public static class GandalfRawVolume {
 function Get-Files {
     Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
 
-    $Filelist = Get-Content "C:\TEMP\gandalf\gandalf\lists\files.list"
+    $Filelist = Get-Content "$GandalfHome\lists\files.list"
     ForEach ($Filename in $Filelist) {
         if (-Not ($Filename.Startswith("#"))) {
             Write-Progress "Searching '$Hostnames' for '$Filename'..."
@@ -806,7 +806,7 @@ function Get-Files {
             $Fullfiles = $Files.FullName
             if ($null -ne $Fullfiles) {
                 ForEach ($Fullfile in $Fullfiles) {
-                    if (-Not ($Fullfile | Select-String -Pattern "TEMP\gandalf\" -SimpleMatch)) {
+                    if (-Not ($Fullfile | Select-String -Pattern $GandalfHome -SimpleMatch)) {
                         Write-Host "       Found '$Fullfile'"
                         $FileDirectory = $Fullfile.Split("\\")[-1]
                         $FileHash = (Get-FileHash $Fullfile).Hash # obtain sha256 of each file found

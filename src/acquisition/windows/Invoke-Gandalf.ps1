@@ -235,10 +235,11 @@ function Set-Defaults {
 }
 
 function Set-ArtefactParams {
-    Param ($EncryptionObject, $OutputDirectory, $ShowProgress, $Memory, $CollectFiles, $Hostnames, $ArchiveObject, $GandalfRoot)
+    # $TargetHome: where tools\ and lists\ are on the machine the collection runs on
+    Param ($EncryptionObject, $OutputDirectory, $ShowProgress, $Memory, $CollectFiles, $Hostnames, $ArchiveObject, $GandalfHome, $TargetHome)
 
-    $InvokeArtefactAcquisition = [IO.Path]::Combine($GandalfRoot, "gandalf", "tools", "Invoke-ArtefactAcquisition.ps1"); $SetArtefactCollection = Join-Path $PSScriptRoot "Set-ArtefactCollection"
-    $ArtefactParams = "Param(`$EncryptionObject = '$EncryptionObject', `$OutputDirectory = '$OutputDirectory', `$ShowProgress = '$ShowProgress', `$Memory = '$Memory', `$CollectFiles = '$CollectFiles', `$Hostnames = '$Hostnames', `$ArchiveObject = '$ArchiveObject')"
+    $InvokeArtefactAcquisition = [IO.Path]::Combine($GandalfHome, "tools", "Invoke-ArtefactAcquisition.ps1"); $SetArtefactCollection = Join-Path $PSScriptRoot "Set-ArtefactCollection"
+    $ArtefactParams = "Param(`$EncryptionObject = '$EncryptionObject', `$OutputDirectory = '$OutputDirectory', `$ShowProgress = '$ShowProgress', `$Memory = '$Memory', `$CollectFiles = '$CollectFiles', `$Hostnames = '$Hostnames', `$ArchiveObject = '$ArchiveObject', `$GandalfHome = '$TargetHome')"
     $ArtefactCollection = Get-Content -Path $SetArtefactCollection
 
     Add-Content -Path $InvokeArtefactAcquisition -Value $ArtefactParams
@@ -246,11 +247,11 @@ function Set-ArtefactParams {
 }
 
 function Invoke-RemoteArtefactCollection {
-    Param ($EncryptionObject, $OutputDirectory, $ShowProgress, $Memory, $CollectFiles, $DriveLetter, $Hostnames, $Session, $ArchiveObject, $GandalfRoot)
+    Param ($EncryptionObject, $OutputDirectory, $ShowProgress, $Memory, $CollectFiles, $DriveLetter, $Hostnames, $Session, $ArchiveObject, $GandalfHome)
 
-    Set-ArtefactParams $EncryptionObject $OutputDirectory $ShowProgress $Memory $CollectFiles $Hostnames $ArchiveObject $GandalfRoot
+    Set-ArtefactParams $EncryptionObject $OutputDirectory $ShowProgress $Memory $CollectFiles $Hostnames $ArchiveObject $GandalfHome "C:\TEMP\gandalf\gandalf"
 
-    $ToolsPath = [IO.Path]::Combine($GandalfRoot, "gandalf", "tools"); $DiskTools = [IO.Path]::Combine($ToolsPath, "disk_tools.zip"); $DumpIt = [IO.Path]::Combine($ToolsPath, "memory", "DumpIt.exe"); $DumpItx86 = [IO.Path]::Combine($ToolsPath, "memory", "DumpItx86.exe"); $InvokeArtefactAcquisition = [IO.Path]::Combine($ToolsPath, "Invoke-ArtefactAcquisition.ps1")
+    $ToolsPath = [IO.Path]::Combine($GandalfHome, "tools"); $DiskTools = [IO.Path]::Combine($ToolsPath, "disk_tools.zip"); $DumpIt = [IO.Path]::Combine($ToolsPath, "memory", "DumpIt.exe"); $DumpItx86 = [IO.Path]::Combine($ToolsPath, "memory", "DumpItx86.exe"); $InvokeArtefactAcquisition = [IO.Path]::Combine($ToolsPath, "Invoke-ArtefactAcquisition.ps1")
 
     Invoke-Command -Session $Session -ScriptBlock { if (Test-Path -LiteralPath "C:\TEMP\gandalf") { Remove-Item "C:\TEMP\gandalf" -Recurse -Force } }
     Invoke-Command -Session $Session -ScriptBlock { New-Item -Path "C:\TEMP\gandalf" -ItemType Directory > $null }; Invoke-Command -Session $Session -ScriptBlock { New-Item -Path "C:\TEMP\gandalf\gandalf" -ItemType Directory > $null }; Invoke-Command -Session $Session -ScriptBlock { New-Item -Path "C:\TEMP\gandalf\acquisitions" -ItemType Directory > $null }; Invoke-Command -Session $Session -ScriptBlock { New-Item -Path "C:\TEMP\gandalf\gandalf\tools" -ItemType Directory > $null }; Invoke-Command -Session $Session -ScriptBlock { New-Item -Path "C:\TEMP\gandalf\gandalf\tools\memory" -ItemType Directory > $null }; Invoke-Command -Session $Session -ScriptBlock { New-Item -Path "C:\TEMP\gandalf\gandalf\lists" -ItemType Directory > $null }
@@ -261,18 +262,19 @@ function Invoke-RemoteArtefactCollection {
     }
 
     if ($CollectFiles -And $CollectFiles -ne "False") {
-        Copy-Item -ToSession $Session -Path [IO.Path]::Combine($GandalfRoot, "gandalf", "lists", "files.list") -Destination "C:\TEMP\gandalf\gandalf\lists\files.list" -Force
+        Copy-Item -ToSession $Session -Path ([IO.Path]::Combine($GandalfHome, "lists", "files.list")) -Destination "C:\TEMP\gandalf\gandalf\lists\files.list" -Force
     }
 
-    Invoke-Command -Session $Session -FilePath C:\TEMP\gandalf\gandalf\tools\.\Invoke-ArtefactAcquisition.ps1
+    # -FilePath is read here and sent: the copy generated in this install
+    Invoke-Command -Session $Session -FilePath ([IO.Path]::Combine($GandalfHome, "tools", "Invoke-ArtefactAcquisition.ps1"))
     Remove-PSSession -Session $Session
-    Invoke-RemoteArchiveCollection $OutputDirectory $Hostnames $ArchiveObject $GandalfRoot
+    Invoke-RemoteArchiveCollection $OutputDirectory $Hostnames $ArchiveObject $GandalfHome
 }
 
 function Invoke-RemoteArchiveCollection {
-    Param ($OutputDirectory, $Hostnames, $ArchiveObject, $GandalfRoot)
+    Param ($OutputDirectory, $Hostnames, $ArchiveObject, $GandalfHome)
 
-    $FilePath = [IO.Path]::Combine($GandalfRoot, "gandalf", $OutputDirectory, $Hostnames)
+    $FilePath = [IO.Path]::Combine($GandalfHome, $OutputDirectory, $Hostnames)
     $Session = New-PSSession -ComputerName $Hostnames -Credential $RemoteCredentials
 
     Write-Progress "Collecting acquired artefacts from '$Hostnames'..."
@@ -311,11 +313,15 @@ if (($Environment -like "*XPC_*" -Or $Environment -like "*com.apple.Terminal*" -
 else {
     $GandalfRoot = [IO.Path]::Combine("C:\", "TEMP", "gandalf")
 }
+# The install: tools\, lists\ and windows\ (this script) side by side. It used to have
+# to be C:\TEMP\gandalf\gandalf (G13); that is now only the staging folder on remote targets.
+$GandalfHome = Split-Path -Parent $PSScriptRoot
+$DiskToolsPath = [IO.Path]::Combine($GandalfHome, "tools", "disk_tools.zip")
 
 # Checking existance of disk_tools.zip
-if (-Not (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip")) {
+if (-Not (Test-Path -LiteralPath $DiskToolsPath)) {
     Clear-Host
-    Write-Host "`n`n`n`n      WARNING: 'C:\TEMP\gandalf\gandalf\tools\disk_tools.zip' does not exist." -Foreground Yellow; Write-Host "       As a result, hiberfil.sys and pagefile.sys will not be collected (`$MFT is read directly; Amcache and SRUM come from a shadow copy)." -Foreground White
+    Write-Host "`n`n`n`n      WARNING: '$DiskToolsPath' does not exist." -Foreground Yellow; Write-Host "       As a result, hiberfil.sys and pagefile.sys will not be collected (`$MFT is read directly; Amcache and SRUM come from a shadow copy)." -Foreground White
     if ($NoPrompt) { $ContinueWithoutDiskTools = "y" } else { $ContinueWithoutDiskTools = Read-Host "      Do you wish to continue? y/N [N] " }
     if ($ContinueWithoutDiskTools -ne "y") {
         Write-Host "`n`n       Read the " -NoNewLine; Write-Host "Configuration" -Foreground Grey -NoNewLine; Write-Host " section in the README.md before trying again.`n`n"
@@ -324,8 +330,8 @@ if (-Not (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip")
 }
 
 # Removing files which if exist during second attempt will cause failures
-$ArtefactAquisitionPath = [IO.Path]::Combine($GandalfRoot, "gandalf", "tools", "Invoke-ArtefactAcquisition.ps1")
-$RemnantFiles = @("C:\TEMP\gandalf\gandalf\tools\RawCopy.exe", "C:\TEMP\gandalf\gandalf\tools\RawCopy64.exe", "C:\TEMP\gandalf\gandalf\tools\sleuthkit-4.12.1-win32", "C:\TEMP\gandalf\gandalf\tools\sleuthkit-4.12.1-win32.zip", "C:\TEMP\gandalf\gandalf\tools\icat", "C:\TEMP\gandalf\gandalf\tools\tsk", $ArtefactAquisitionPath)
+$ArtefactAquisitionPath = [IO.Path]::Combine($GandalfHome, "tools", "Invoke-ArtefactAcquisition.ps1")
+$RemnantFiles = @("$GandalfHome\tools\RawCopy.exe", "$GandalfHome\tools\RawCopy64.exe", "$GandalfHome\tools\sleuthkit-4.12.1-win32", "$GandalfHome\tools\sleuthkit-4.12.1-win32.zip", "$GandalfHome\tools\icat", "$GandalfHome\tools\tsk", $ArtefactAquisitionPath)
 ForEach ($RemnantFile in $RemnantFiles) {
     if (Test-Path -LiteralPath $RemnantFile) {
         Remove-Item $RemnantFile -Recurse -Force
@@ -364,8 +370,8 @@ Write-Host `r
 
 if ($Acquisition -eq "Local") {
     $Hostnames = $env:COMPUTERNAME
-    Set-ArtefactParams $EncryptionObject $OutputDirectory $ShowProgress $Memory $CollectFiles $Hostnames $ArchiveObject $GandalfRoot
-    C:\TEMP\gandalf\gandalf\tools\.\Invoke-ArtefactAcquisition.ps1
+    Set-ArtefactParams $EncryptionObject $OutputDirectory $ShowProgress $Memory $CollectFiles $Hostnames $ArchiveObject $GandalfHome $GandalfHome
+    & $ArtefactAquisitionPath
 }
 else {
     $RemoteCredentials = $host.ui.PromptForCredential("Local Admin authentication required", "Please enter credentials for PowerShell remoting", "", "")
@@ -394,7 +400,7 @@ else {
     }
     else {
         Write-Host "      Session(s) opened for '$Hostnames'" -ForegroundColor Green
-        Invoke-RemoteArtefactCollection $EncryptionObject $OutputDirectory $ShowProgress $Memory $CollectFiles $DriveLetter $Hostnames $Session $ArchiveObject $GandalfRoot
+        Invoke-RemoteArtefactCollection $EncryptionObject $OutputDirectory $ShowProgress $Memory $CollectFiles $DriveLetter $Hostnames $Session $ArchiveObject $GandalfHome
     }
 }
 

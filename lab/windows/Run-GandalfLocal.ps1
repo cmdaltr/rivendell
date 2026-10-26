@@ -41,8 +41,8 @@ function global:Read-Host {
 $entry = Join-Path $GandalfSource "windows\Invoke-Gandalf.ps1"
 if (-not (Test-Path $entry)) { throw "Invoke-Gandalf.ps1 not found at $entry (is the repo shared into the VM?)" }
 
-# Invoke-Gandalf expects to be installed at C:\TEMP\gandalf\gandalf (its tools
-# and disk_tools.zip paths are hard-coded there).
+# Invoke-Gandalf runs from wherever it's installed; C:\TEMP\gandalf\gandalf keeps the lab's
+# runs alike (and out of the seeded files Get-Files searches C:\ for).
 $work = "C:\TEMP\gandalf\gandalf"
 Remove-Item -Recurse -Force "C:\TEMP\gandalf" -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path (Split-Path $work) | Out-Null
