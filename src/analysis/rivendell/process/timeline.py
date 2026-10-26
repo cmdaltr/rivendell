@@ -72,6 +72,9 @@ def convert_plaso_timeline(verbosity, output_directory, stage, img):
     write_audit_log_entry(verbosity, output_directory, entry, prnt)
 
 
+PSTEAL_SOURCE_OPTIONS = ["--partitions", "all", "--volumes", "all", "--vss_stores", "none", "--unattended"]
+
+
 def find_psteal():
     """Find the psteal.py script location."""
     # Try common locations
@@ -168,7 +171,11 @@ def create_plaso_timeline(verbosity, output_directory, stage, img, d, timelineim
     else:
         cmd = [psteal_path]
 
-    cmd.extend([
+    # Without a terminal psteal can't answer its own partition/volume prompts: it
+    # read EOF and exited 0 with an empty CSV on any multi-partition image (E12).
+    # Every partition and volume (LVM, APFS) is processed; shadow copies aren't,
+    # as before (they were never reachable unattended either).
+    cmd.extend(PSTEAL_SOURCE_OPTIONS + [
         "--source",
         timelineimagepath,
         "-o",
@@ -183,12 +190,14 @@ def create_plaso_timeline(verbosity, output_directory, stage, img, d, timelineim
     env["PYTHONPATH"] = ""
 
     print(f"     Running: {' '.join(cmd)} (with clean PYTHONPATH)")
-    result = subprocess.Popen(cmd, env=env).communicate()[0]
+    psteal = subprocess.Popen(cmd, env=env, stdin=subprocess.DEVNULL)
+    psteal.communicate()
     os.chdir("..")
 
     # Check if timeline was created
-    if not os.path.exists("./.plaso/plaso_timeline.csvtmp"):
-        error_msg = "ERROR: Plaso failed to create timeline file"
+    timeline_tmp = "./.plaso/plaso_timeline.csvtmp"
+    if psteal.returncode != 0 or not os.path.exists(timeline_tmp) or os.path.getsize(timeline_tmp) == 0:
+        error_msg = "ERROR: Plaso failed to create timeline file (psteal exit {})".format(psteal.returncode)
         print(f"     {error_msg}")
         entry = "{},{},{},failed - no output\n".format(
             datetime.now().isoformat(), timelineimage, stage
