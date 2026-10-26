@@ -20,10 +20,23 @@ Usage:
     local = storage.list_local_datasets()
 """
 
-from .catalog import MordorCatalog
-from .downloader import MordorDownloader
-from .storage import MordorStorage
-from .models import MordorDataset, DatasetFile, CatalogIndex
+import importlib
+
+# Loaded on first use, so src.mordor.telemetry (stdlib only) imports without pydantic
+_EXPORTS = {
+    'MordorCatalog': '.catalog',
+    'MordorDownloader': '.downloader',
+    'MordorStorage': '.storage',
+    'MordorDataset': '.models',
+    'DatasetFile': '.models',
+    'CatalogIndex': '.models',
+}
+
+
+def __getattr__(name):
+    if name in _EXPORTS:
+        return getattr(importlib.import_module(_EXPORTS[name], __name__), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     'MordorCatalog',

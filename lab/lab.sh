@@ -400,9 +400,9 @@ cmd_mordor_download() {
 }
 
 cmd_mordor_sensor() {
-  if is_arm; then warn "In the UTM VM, elevated: C:\\lab\\scripts\\Install-MordorSensor.ps1"; return; fi
   warn "This installs Atomic Red Team and disables Defender real-time protection inside the lab VM."
   confirm "Continue?" n || return
+  if uses_tart; then "$LAB_ROOT/windows/utm-vm.sh" sensor; return; fi
   vagrant_env
   vagrant winrm win -e -c "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Install-MordorSensor.ps1"
 }
@@ -449,6 +449,49 @@ cmd_mordor_capture() {
   vagrant_env
   vagrant winrm win -e -c "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Invoke-MordorCapture.ps1 -Name $name -Techniques $techniques" \
     && ok "Dataset: $MORDOR_ROOT/lab/$name (expected.json lists the techniques that ran)"
+}
+
+# Recorded telemetry (src/mordor/telemetry): each Atomic Red Team test's logs on their own, so
+# the telemetry engine knows which log records which technique. mordor-capture above makes one
+# dataset of a whole run for Elrond to analyse; this keeps the tests apart.
+TELEMETRY_LAB="${RIVENDELL_TELEMETRY_LAB:-$REPO_ROOT/src/mordor/data/telemetry/lab}"
+
+cmd_mordor_record() {
+  local preset techniques run
+  # Non-interactive: mordor-record <preset> | mordor-record custom <name> <T1,T2>
+  if [ -n "${1:-}" ]; then
+    if [ "$1" = custom ]; then
+      preset="${2:?name}"; techniques="${3:?techniques}"
+    else
+      preset="$1"; techniques="$(preset_techniques "$1")"; [ -n "$techniques" ] || die "Presets: $MORDOR_PRESETS"
+    fi
+  else
+    menu "Record telemetry: Atomic Red Team in the Windows VM, each test's logs kept apart" \
+      "Persistence: T1547.001, T1053.005, T1543.003" \
+      "Credential access: T1003.001, T1552.001" \
+      "Defence evasion: T1070.001, T1562.001, T1218.011" \
+      "Discovery: T1082, T1087.001, T1016" \
+      "Custom technique list"
+    case "$MENU_CHOICE" in
+      1) preset=persistence ;; 2) preset=credential_access ;; 3) preset=defense_evasion ;; 4) preset=discovery ;;
+      5) ask preset "Run name" "custom"; ask techniques "Techniques (comma-separated)" "T1059.001" ;;
+      *) return ;;
+    esac
+    [ -n "${techniques:-}" ] || techniques="$(preset_techniques "$preset")"
+  fi
+  case "$preset$techniques" in *[!A-Za-z0-9_.,-]*) die "Names and technique IDs may only use letters, digits, _ . , -" ;; esac
+  run="lab-win11-$preset-$(date +%Y%m%d-%H%M)"
+  if uses_tart; then
+    "$LAB_ROOT/windows/utm-vm.sh" record "$techniques" "$run" "$TELEMETRY_LAB" || return 1
+  else
+    vagrant_env
+    # C:\lab\mordor is the shared $MORDOR_ROOT
+    vagrant winrm win -e -c "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& C:\\lab\\scripts\\Invoke-MordorRecord.ps1 -Techniques $techniques -Run $run -Out C:\\lab\\mordor\\telemetry\"" || return 1
+    [ -f "$MORDOR_ROOT/telemetry/$run/manifest.json" ] || die "Nothing was recorded ($MORDOR_ROOT/telemetry/$run)"
+    mkdir -p "$TELEMETRY_LAB" && cp -R "$MORDOR_ROOT/telemetry/$run" "$TELEMETRY_LAB/"
+  fi
+  ( cd "$REPO_ROOT" && RIVENDELL_TELEMETRY_LAB="$TELEMETRY_LAB" python3 -m src.mordor.telemetry --build --source lab ) \
+    && ok "Recorded telemetry: $TELEMETRY_LAB/$run (source 'Your lab'; see /api/mordor/telemetry)"
 }
 
 # ----------------------------------------------------------------------- rivendell
@@ -631,6 +674,7 @@ Usage: ./lab.sh [command]
   mordor-download [test paths...]   e.g. apt29/day1 atomic/persistence
   mordor-sensor       Sysmon + Atomic Red Team in the Windows VM
   mordor-capture      Run atomics and export a dataset
+  mordor-record [preset | custom <name> <T1,T2>]   Record each atomic test's logs for the telemetry engine
   rivendell-env       Write the env file for run_test.py and check mounts
   agent [start|stop|status]   Host agent so the Rivendell web UI can drive the lab
   status | teardown
@@ -667,6 +711,7 @@ main_menu() {
       "Mordor: download OTRF datasets" \
       "Mordor: install sensor + Atomic Red Team (Windows VM)" \
       "Mordor: generate a dataset" \
+      "Mordor: record telemetry (each test's logs)" \
       "Rivendell: test environment and mounts" \
       "Web UI: start/stop the lab agent" \
       "Status" \
@@ -676,9 +721,9 @@ main_menu() {
       1) cmd_quickstart ;;   2) cmd_check ;;        3) cmd_install ;;     4) cmd_configure ;;
       5) cmd_linux_targets ;; 6) cmd_linux_vm ;;    7) cmd_macos_vm ;;    8) cmd_windows_vm ;;
       9) cmd_gandalf_collect ;; 10) cmd_mordor_download ;; 11) cmd_mordor_sensor ;; 12) cmd_mordor_capture ;;
-      13) cmd_rivendell_env ;;
-      14) menu "Lab agent" "Start" "Stop" "Status"; case "$MENU_CHOICE" in 1) cmd_agent start ;; 2) cmd_agent stop ;; 3) cmd_agent status ;; esac ;;
-      15) cmd_status ;; 16) cmd_teardown ;;
+      13) cmd_mordor_record ;; 14) cmd_rivendell_env ;;
+      15) menu "Lab agent" "Start" "Stop" "Status"; case "$MENU_CHOICE" in 1) cmd_agent start ;; 2) cmd_agent stop ;; 3) cmd_agent status ;; esac ;;
+      16) cmd_status ;; 17) cmd_teardown ;;
     esac
   done
 }
@@ -699,6 +744,7 @@ case "${1:-}" in
   mordor-download) shift; cmd_mordor_download "$@" ;;
   mordor-sensor) cmd_mordor_sensor ;;
   mordor-capture) shift; cmd_mordor_capture "$@" ;;
+  mordor-record) shift; cmd_mordor_record "$@" ;;
   agent) shift; cmd_agent "$@" ;;
   rivendell-env) cmd_rivendell_env ;;
   state) cmd_state ;;

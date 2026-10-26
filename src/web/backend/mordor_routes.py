@@ -707,3 +707,105 @@ async def verify_dataset_endpoint(dataset_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# Recorded attack telemetry (src/mordor/telemetry, ported from Archer)
+# ============================================
+# Which logs record each ATT&CK technique, from OTRF Security-Datasets, Splunk
+# attack_data, EVTX-to-MITRE-Attack and the lab's own recordings
+# (./lab.sh mordor-record). Read-only: rebuilds run from the CLI,
+# python -m src.mordor.telemetry --build.
+
+TELEMETRY_ROOT = os.environ.get("RIVENDELL_SRC_ROOT", "/opt/rivendell")
+
+
+def _telemetry():
+    """(check, datasets), reloading the data if a build has rewritten it since."""
+    import sys
+
+    if TELEMETRY_ROOT not in sys.path:
+        sys.path.append(TELEMETRY_ROOT)  # appended: /app's modules keep priority
+    try:
+        from src.mordor.telemetry import check, datasets as ds
+    except ImportError as e:
+        raise HTTPException(status_code=503, detail=f"Telemetry package not mounted at {TELEMETRY_ROOT}: {e}")
+    stamp = tuple(os.path.getmtime(p) if os.path.exists(p) else 0
+                  for p in (ds.SUMMARY_PATH, ds.VALUES_PATH, ds.LOCAL_SUMMARY_PATH, ds.LOCAL_VALUES_PATH))
+    if ds._cache.get("stamp") != stamp:
+        ds._cache.clear()
+        ds._cache["stamp"] = stamp
+    return check, ds
+
+
+def _telemetry_filters(ds, collections: str, platforms: str):
+    picked_collections = [c for c in (collections or "").split(",") if c in ds.COLLECTIONS] or None
+    picked_platforms = [p for p in (platforms or "").split(",") if p in ds.PLATFORMS] or None
+    return picked_collections, picked_platforms
+
+
+class TelemetryDetection(BaseModel):
+    """A detection to check against the recordings: indicators by kind (cmd, file, reg, network, ...)."""
+    technique_id: str
+    name: str = ""
+    indicators: Dict[str, List[str]] = Field(default_factory=dict)
+
+
+class TelemetryNoisyRequest(BaseModel):
+    indicators: List[str] = Field(default_factory=list)
+    technique_id: Optional[str] = None
+
+
+@router.get("/telemetry/status")
+async def telemetry_status():
+    """The sources built, how many recordings and techniques, and whether field values are here."""
+    _, ds = _telemetry()
+    summary = ds.load()
+    return {"sources": summary.get("sources", {}), "datasets": len(summary["datasets"]),
+            "techniques": len(ds.covered()), "values": ds.values() is not None}
+
+
+@router.get("/telemetry/techniques")
+async def telemetry_techniques(collections: str = Query(""), platforms: str = Query("")):
+    """Every recorded technique, one row each."""
+    check, ds = _telemetry()
+    picked = _telemetry_filters(ds, collections, platforms)
+    return {"techniques": check.overview(*picked), "collections": ds.COLLECTIONS, "platforms": ds.PLATFORMS}
+
+
+@router.get("/telemetry/technique/{technique_id}")
+async def telemetry_technique(technique_id: str, collections: str = Query(""), platforms: str = Query("")):
+    """A technique's recordings, the event types they hold and the Defender/UDM sources they need."""
+    check, ds = _telemetry()
+    return check.technique(technique_id[:20], *_telemetry_filters(ds, collections, platforms))
+
+
+@router.get("/telemetry/data-sources")
+async def telemetry_data_sources(collections: str = Query(""), platforms: str = Query("")):
+    """For each Defender table / UDM event type, the techniques it records."""
+    check, ds = _telemetry()
+    return check.by_data_source(*_telemetry_filters(ds, collections, platforms))
+
+
+@router.get("/telemetry/search")
+async def telemetry_search(q: str = Query(..., min_length=3)):
+    """{technique: [logs]} whose recorded events hold a field value containing q ('…' for a gap)."""
+    check, _ = _telemetry()
+    found = check.search(q[:200])
+    if found is None:
+        raise HTTPException(status_code=404, detail="No field values on this machine (run --build)")
+    return {"techniques": found}
+
+
+@router.post("/telemetry/check")
+async def telemetry_check(detection: TelemetryDetection):
+    """A detection's indicators against its technique's recordings and everyone else's."""
+    check, _ = _telemetry()
+    return check.check(detection.model_dump())
+
+
+@router.post("/telemetry/noisy")
+async def telemetry_noisy(req: TelemetryNoisyRequest):
+    """Which indicators also turn up while many unrelated techniques ran."""
+    check, _ = _telemetry()
+    return check.noisy(indicators=req.indicators or None, technique_id=req.technique_id or "")

@@ -103,6 +103,7 @@ COMMANDS = {
     "mordor-download": (_datasets, True),
     "mordor-sensor": (_none, True),
     "mordor-capture": (_capture, True),
+    "mordor-record": (_capture, True),
     "teardown": (_none, True),
 }
 # Commands that change or destroy something; the UI confirms these first.

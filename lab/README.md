@@ -108,7 +108,7 @@ To watch an install, set `WINDOWS_VM_VNC=1` before `create`: QEMU then also serv
 
 `mordor-download` fetches only the OTRF Security-Datasets that Rivendell's tests reference: a sparse, blob-less clone, so you don't pull the multi-gigabyte repository. It unpacks them under `<data>/mordor/<test path>/` and writes a `manifest.json`. `--list` shows the mapping without downloading.
 
-On x86-64 hosts you can also generate your own datasets:
+You can also generate your own datasets in the Windows VM. `mordor-sensor` runs on both Vagrant and UTM; `mordor-capture` runs on x86-64 hosts and prints the command to run inside the VM on Apple silicon:
 
 ```bash
 ./lab.sh mordor-sensor               # Sysmon (sysmon-modular), PowerShell logging, Atomic Red Team
@@ -117,6 +117,26 @@ On x86-64 hosts you can also generate your own datasets:
 ```
 
 Each capture runs the Atomic tests, exports the Sysmon, Security and PowerShell logs as OTRF-style JSONL, and writes a zip with an `expected.json` of the techniques run. Elrond's `--Mordor` mode can't ingest OTRF JSON yet (bug E6), so the Mordor tests will fail until it can.
+
+### Recorded Telemetry
+
+`mordor-capture` makes one dataset from a whole run, for Elrond to analyse. `mordor-record` keeps each Atomic test's logs apart, so the telemetry engine (`src/mordor/telemetry`, ported from Archer) knows which log records which technique:
+
+```bash
+./lab.sh mordor-sensor                                 # once per VM
+./lab.sh mordor-record persistence                     # same presets as mordor-capture
+./lab.sh mordor-record custom my_run T1059.001,T1003.001
+```
+
+It copies `Invoke-MordorRecord.ps1` into the VM and runs each test of each technique: prerequisites, then the test, then a 20-second settle (`MORDOR_SETTLE`), then cleanup. Each test's Windows event logs (Security, System, PowerShell, Sysmon, Task Scheduler, WMI, Defender, BITS) are saved as `events.xml`. The run is copied to `src/mordor/data/telemetry/lab/lab-win11-<preset>-<time>/` and the `lab` source is rebuilt. The recordings hold the VM's host name, so they're gitignored and never written to the shipped files. `RIVENDELL_TELEMETRY_LAB` puts them somewhere else.
+
+The shipped data already covers 1,632 recordings across 354 techniques (OTRF Security-Datasets, Splunk attack_data, EVTX-to-MITRE-Attack). The API is under `/api/mordor/telemetry` (see [docs/API.md](../docs/API.md#mordor-recorded-attack-telemetry)). From the repository root:
+
+```bash
+python3 -m src.mordor.telemetry                          # sources and technique count
+python3 -m src.mordor.telemetry --build --source lab     # re-read your recordings
+python3 -m src.mordor.telemetry --build                  # re-fetch the public sources (~1.2 GB first time; needs requests and PyYAML)
+```
 
 ## Running Rivendell's Tests Against the Lab
 

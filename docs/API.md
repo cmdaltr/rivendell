@@ -16,10 +16,11 @@
 5. [Job Management](#job-management)
 6. [File System](#file-system)
 7. [Docker Administration (Aragorn)](#docker-administration-aragorn)
-8. [Health Check](#health-check)
-9. [Request/Response Formats](#requestresponse-formats)
-10. [Error Handling](#error-handling)
-11. [Code Examples](#code-examples)
+8. [Mordor: Recorded Attack Telemetry](#mordor-recorded-attack-telemetry)
+9. [Health Check](#health-check)
+10. [Request/Response Formats](#requestresponse-formats)
+11. [Error Handling](#error-handling)
+12. [Code Examples](#code-examples)
 
 ---
 
@@ -1030,6 +1031,38 @@ Stopping, restarting, updating or recreating `celery-worker`, `postgres` or `red
 ```
 
 Aragorn won't stop, restart or recreate its own container from the API. Use `rivendell aragorn disable` on the host.
+
+---
+
+## Mordor: Recorded Attack Telemetry
+
+**Authentication:** none (read-only)
+
+Which logs record each ATT&CK technique, from attacks emulated in labs, and whether a detection's indicators appear in the recorded events. The engine is `src/mordor/telemetry`, ported from Archer. It ships with 1,632 recordings covering 354 techniques: OTRF Security-Datasets (Mordor), Splunk attack_data and EVTX-to-MITRE-Attack. Your own recordings from `./lab.sh mordor-record` show up as the source `lab`. Nothing here touches the network; rebuilds run from the CLI (`python -m src.mordor.telemetry --build`) and the API picks up the new files on the next request.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/mordor/telemetry/status` | Sources built, recording and technique counts, whether field values are present |
+| `GET` | `/api/mordor/telemetry/techniques` | Every recorded technique, one row each |
+| `GET` | `/api/mordor/telemetry/technique/{technique_id}` | A technique's recordings (exact, else its sub-techniques or parent), their event types, and the Defender XDR tables and Chronicle UDM types they need |
+| `GET` | `/api/mordor/telemetry/data-sources` | For each Defender table and UDM event type, the techniques it records |
+| `GET` | `/api/mordor/telemetry/search?q=` | `{technique: [logs]}` whose events hold a field value containing `q` (3–200 characters; `…` matches a variable span, as in `C:\Users\…\AppData`) |
+| `POST` | `/api/mordor/telemetry/check` | One detection's indicators against its technique's recordings and everyone else's: seen, not seen or noisy per indicator |
+| `POST` | `/api/mordor/telemetry/noisy` | Which indicators also appear while many unrelated techniques ran. Body: `{"indicators": [...]}`, or `{"technique_id": "T1053.005"}` to derive candidates from that technique's own recordings |
+
+The GET endpoints take `collections` (`native`, `sysmon`, `edr`, `osquery`, `cloud`) and `platforms` (`windows`, `linux`, `macos`, `esxi`, `cloud`), comma-separated; both default to all.
+
+A detection for `/check`:
+
+```json
+{
+  "technique_id": "T1053.005",
+  "name": "Scheduled task created from the command line",
+  "indicators": {"cmd": ["schtasks /create"], "file": ["schtasks.exe"]}
+}
+```
+
+Indicator kinds are `cmd`, `file`, `sw`, `path`, `reg`, `network`, `domain`, `ip`, `port`, `service`, `acct`, `evt`, `api` and `op`/`operation`.
 
 ---
 

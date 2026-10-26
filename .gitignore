@@ -148,3 +148,7 @@ credentials.*
 
 # Test lab: generated per machine
 lab/docker-compose.lab.yml
+
+# Recorded telemetry (src/mordor/telemetry): build state, and lab recordings that hold host names
+src/mordor/data/cache/
+src/mordor/data/telemetry/

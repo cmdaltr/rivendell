@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Apple silicon only: an unattended Windows 11 ARM VM in UTM.
 #   utm-vm.sh create|adopt [bundle.utm]|start|stop|delete|status|collect
+#   utm-vm.sh sensor | record <T1,T2> <run> <dest-dir>   (Atomic Red Team telemetry)
 # adopt takes a Windows VM that's already installed (a .utm in $LAB_VM_DIR/utm,
 # e.g. a Vagrant/Packer build with OpenSSH): it adds the SSH port forward, logs
 # in with $ADOPT_USER/$ADOPT_PASSWORD (default vagrant/vagrant) and provisions it.
@@ -14,7 +15,7 @@ set -euo pipefail
 . "$(dirname "$0")/../lib/common.sh"
 load_config
 
-action="${1:?create|adopt|start|stop|delete|status|collect}"
+action="${1:?create|adopt|start|stop|delete|status|collect|sensor|record}"
 uses_tart || die "The UTM VM is for Apple silicon. On x86-64 hosts the lab uses Vagrant: ./lab.sh windows-vm"
 [ -d /Applications/UTM.app ] || die "UTM is not installed. Run: ./lab.sh install"
 
@@ -348,6 +349,41 @@ collect() {
   ok "Windows acquisition: $dest/$host"
 }
 
+# The VM's C:\lab\scripts is from when it was provisioned: copy the current one in
+push_script() {
+  LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" scp gandalf 127.0.0.1 "$PORT" "$LAB_ROOT/windows/$1" "C:/lab/scripts/$1" >/dev/null \
+    || die "Couldn't copy $1 into $VM"
+}
+
+sensor() {
+  require_password
+  nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
+  push_script Install-MordorSensor.ps1
+  ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Install-MordorSensor.ps1"
+}
+
+# Atomic Red Team tests, each test's logs recorded (Invoke-MordorRecord.ps1), copied to <dest>/<run>
+record() {
+  local techniques="${1:?techniques}" run="${2:?run name}" dest="${3:?destination}" tmp
+  require_password
+  nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
+  push_script Invoke-MordorRecord.ps1
+  info "Recording $techniques in $VM (each test, then a ${MORDOR_SETTLE:-20}s settle, then its cleanup)"
+  # -Command, not -File: -File passes "T1,T2" as one string, not a list. A technique can have a
+  # dozen tests, so allow two hours rather than ssh.exp's 15 minutes
+  LAB_SSH_TIMEOUT="${LAB_SSH_TIMEOUT:-7200}" ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -Command \"& C:\\lab\\scripts\\Invoke-MordorRecord.ps1 -Techniques $techniques -Run $run -Out C:\\lab\\mordor\\telemetry -Settle ${MORDOR_SETTLE:-20}\"" \
+    | grep -v -i password || true
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/lab-rec.XXXXXX")"
+  LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" pull gandalf 127.0.0.1 "$PORT" "C:/lab/mordor/telemetry/$run" "$tmp/" >/dev/null \
+    || die "Couldn't copy the recording out of $VM"
+  [ -f "$tmp/$run/manifest.json" ] || die "Nothing was recorded (see $tmp/$run)"
+  mkdir -p "$dest"
+  [ -e "$dest/$run" ] && die "$dest/$run already exists (left in $tmp/$run)"
+  mv "$tmp/$run" "$dest/"
+  rmdir "$tmp" 2>/dev/null || true
+  ok "Recorded: $dest/$run"
+}
+
 case "$action" in
   create)
     # create always builds the lab's own VM, whatever WINDOWS_UTM_VM says
@@ -409,5 +445,7 @@ case "$action" in
   status)
     if vm_registered; then echo "$VM: $(vm_status), SSH 127.0.0.1:$PORT ($BUNDLE)"; else echo "$VM: not created"; fi ;;
   collect) collect ;;
+  sensor) sensor ;;
+  record) shift; record "$@" ;;
   *) die "unknown action $action" ;;
 esac

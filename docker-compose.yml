@@ -61,6 +61,7 @@ services:
       - ARAGORN_URL=http://aragorn:5690
     volumes:
       - ./src/web/backend:/app
+      - ./src/mordor:/opt/rivendell/src/mordor # Mordor: recorded attack telemetry (/api/mordor/telemetry)
       - aragorn_token:/run/aragorn:ro # Written by aragorn
       # Platform-specific mounts - uncomment for your OS:
       # - /mnt:/mnt:ro              # Linux: Mount points (read-only)
