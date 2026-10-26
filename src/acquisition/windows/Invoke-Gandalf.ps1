@@ -315,7 +315,7 @@ else {
 # Checking existance of disk_tools.zip
 if (-Not (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip")) {
     Clear-Host
-    Write-Host "`n`n`n`n      WARNING: 'C:\TEMP\gandalf\gandalf\tools\disk_tools.zip' does not exist." -Foreground Yellow; Write-Host "       As a result, some disk artefacts (inc. the `$MFT will not be collected." -Foreground White
+    Write-Host "`n`n`n`n      WARNING: 'C:\TEMP\gandalf\gandalf\tools\disk_tools.zip' does not exist." -Foreground Yellow; Write-Host "       As a result, hiberfil.sys and pagefile.sys will not be collected (`$MFT is read directly; Amcache and SRUM come from a shadow copy)." -Foreground White
     if ($NoPrompt) { $ContinueWithoutDiskTools = "y" } else { $ContinueWithoutDiskTools = Read-Host "      Do you wish to continue? y/N [N] " }
     if ($ContinueWithoutDiskTools -ne "y") {
         Write-Host "`n`n       Read the " -NoNewLine; Write-Host "Configuration" -Foreground Grey -NoNewLine; Write-Host " section in the README.md before trying again.`n`n"

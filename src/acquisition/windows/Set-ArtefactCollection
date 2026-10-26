@@ -220,6 +220,107 @@ function Get-Artefacts {
         Get-Network $ShowProgress $OutputDirectory $Hostnames
         Get-Tasks $ShowProgress $OutputDirectory $Hostnames
     }
+    function Copy-RawMft {
+        Param ($Volume, $Destination)
+        # $MFT straight off the volume: boot sector -> MFT record 0 -> the runs of
+        # its unnamed $DATA attribute. Needs admin. Replaces Sleuth Kit's icat,
+        # whose output Windows PowerShell's > redirection re-encoded as text.
+        if (-Not ("GandalfRawVolume" -as [type])) {
+            Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class GandalfRawVolume {
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    public static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+}
+"@
+        }
+        # GENERIC_READ (0x80000000, which PowerShell would read as a negative Int32),
+        # FILE_SHARE_READ|FILE_SHARE_WRITE, OPEN_EXISTING
+        $Handle = [GandalfRawVolume]::CreateFile("\\.\$Volume", [uint32]2147483648, 3, [IntPtr]::Zero, 3, 0, [IntPtr]::Zero)
+        if ($Handle.IsInvalid) { throw "cannot open \\.\$Volume (error $([Runtime.InteropServices.Marshal]::GetLastWin32Error()))" }
+        $Disk = New-Object System.IO.FileStream($Handle, [System.IO.FileAccess]::Read)
+        $Out = $null
+        try {
+            $Boot = New-Object byte[] 4096
+            [void]$Disk.Read($Boot, 0, 4096)
+            if ([System.Text.Encoding]::ASCII.GetString($Boot, 3, 4) -ne "NTFS") { throw "$Volume is not NTFS" }
+            $BytesPerSector = [BitConverter]::ToUInt16($Boot, 0x0B)
+            $SectorsPerCluster = [int]$Boot[0x0D]
+            if ($SectorsPerCluster -gt 0x80) { $SectorsPerCluster = [int][Math]::Pow(2, 256 - $SectorsPerCluster) }
+            $ClusterSize = [int64]$BytesPerSector * $SectorsPerCluster
+            $RecordField = [int]$Boot[0x40]
+            if ($RecordField -gt 0x7F) { $RecordSize = [int][Math]::Pow(2, 256 - $RecordField) } else { $RecordSize = [int]($RecordField * $ClusterSize) }
+
+            $Disk.Position = [BitConverter]::ToInt64($Boot, 0x30) * $ClusterSize
+            $Record = New-Object byte[] ([Math]::Max($RecordSize, 4096))
+            [void]$Disk.Read($Record, 0, $Record.Length)
+            if ([System.Text.Encoding]::ASCII.GetString($Record, 0, 4) -ne "FILE") { throw "MFT record 0 has no FILE signature" }
+            # Update sequence fix-ups: the last two bytes of each stride hold a check value
+            $UsaOffset = [BitConverter]::ToUInt16($Record, 4)
+            $UsaCount = [BitConverter]::ToUInt16($Record, 6)
+            $Stride = $RecordSize / ($UsaCount - 1)
+            for ($i = 1; $i -lt $UsaCount; $i++) {
+                $Record[$Stride * $i - 2] = $Record[$UsaOffset + 2 * $i]
+                $Record[$Stride * $i - 1] = $Record[$UsaOffset + 2 * $i + 1]
+            }
+
+            $Offset = [BitConverter]::ToUInt16($Record, 0x14)
+            $RunsAt = -1
+            while ($Offset -lt $RecordSize - 8) {
+                $Type = [BitConverter]::ToUInt32($Record, $Offset)
+                $Length = [BitConverter]::ToUInt32($Record, $Offset + 4)
+                if ($Type -eq [uint32]::MaxValue -or $Length -eq 0) { break }
+                if ($Type -eq 0x80 -and $Record[$Offset + 8] -eq 1 -and $Record[$Offset + 9] -eq 0) {
+                    $RunsAt = $Offset + [BitConverter]::ToUInt16($Record, $Offset + 0x20)
+                    $DataSize = [BitConverter]::ToInt64($Record, $Offset + 0x30)
+                    break
+                }
+                $Offset += $Length
+            }
+            if ($RunsAt -lt 0) { throw "no non-resident `$DATA attribute in MFT record 0" }
+
+            $Runs = @()
+            $Lcn = [int64]0
+            $Pos = $RunsAt
+            while ($Record[$Pos] -ne 0) {
+                $LengthBytes = $Record[$Pos] -band 0x0F
+                $OffsetBytes = ($Record[$Pos] -shr 4) -band 0x0F
+                $Clusters = [int64]0
+                for ($j = 0; $j -lt $LengthBytes; $j++) { $Clusters += ([int64]$Record[$Pos + 1 + $j]) -shl (8 * $j) }
+                $Delta = [int64]0
+                for ($j = 0; $j -lt $OffsetBytes; $j++) { $Delta += ([int64]$Record[$Pos + 1 + $LengthBytes + $j]) -shl (8 * $j) }
+                if ($OffsetBytes -gt 0 -and $OffsetBytes -lt 8 -and ($Record[$Pos + $LengthBytes + $OffsetBytes] -band 0x80)) {
+                    $Delta -= ([int64]1) -shl (8 * $OffsetBytes)  # offsets are signed
+                }
+                $Lcn += $Delta
+                $Runs += , @($Lcn, $Clusters)
+                $Pos += 1 + $LengthBytes + $OffsetBytes
+            }
+
+            $Out = [System.IO.File]::Create($Destination)
+            $Chunk = [int64][Math]::Max($ClusterSize, [Math]::Floor(1MB / $ClusterSize) * $ClusterSize)
+            $Buffer = New-Object byte[] $Chunk
+            $Remaining = $DataSize
+            ForEach ($Run in $Runs) {
+                $Disk.Position = $Run[0] * $ClusterSize
+                $Left = $Run[1] * $ClusterSize
+                while ($Left -gt 0 -and $Remaining -gt 0) {
+                    $Read = $Disk.Read($Buffer, 0, [int][Math]::Min($Chunk, $Left))
+                    if ($Read -le 0) { throw "short read at cluster $($Run[0])" }
+                    $Out.Write($Buffer, 0, [int][Math]::Min($Read, $Remaining))
+                    $Left -= $Read
+                    $Remaining -= [Math]::Min($Read, $Remaining)
+                }
+            }
+            return ($DataSize - $Remaining)
+        }
+        finally {
+            if ($Out) { $Out.Dispose() }
+            $Disk.Dispose()
+        }
+    }
     function Copy-FromShadow {
         Param ($RelativePaths, $Destination)
         # Without RawCopy, locked files (Amcache.hve, SRUDB.dat) are copied from a
@@ -254,26 +355,19 @@ function Get-Artefacts {
         # Without disk_tools.zip the raw copies below fail in their own try blocks
         if (Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip") {
             Expand-Archive -LiteralPath "C:\TEMP\gandalf\gandalf\tools\disk_tools.zip" -DestinationPath "C:\TEMP\gandalf\gandalf\tools"
-            Rename-Item -Path "C:\TEMP\gandalf\gandalf\tools\sleuthkit-4.12.1-win32" -NewName "C:\TEMP\gandalf\gandalf\tools\tsk"
         }
         $global:ProgressPreference = "Continue"
 
         # Acquiring MFT
         try { 
             Write-Progress "Acquiring `$MFT from '$Hostnames'..."
-
-            $global:ProgressPreference = "SilentlyContinue"
-            $icat = { C:\TEMP\gandalf\gandalf\tools\tsk\bin\icat.exe \\.\c: 0 > $OutputDirectory\$Hostnames\artefacts\artefacts\raw\`$MFT }
-            Invoke-Command -ScriptBlock $icat
-
-            $global:ProgressPreference = "Continue"
-            Write-Host "       Acquired `$MFT from '$Hostnames'" -ForegroundColor Green
-            $Message = "acquired '`$MFT' from '$Hostnames'"
-
-            Add-LogEntry $ShowProgress $OutputDirectory $Hostnames $ArtefactFile $Message
+            $MftOut = Join-Path (Resolve-Path -LiteralPath "$OutputDirectory\$Hostnames\artefacts\artefacts\raw").ProviderPath '$MFT'
+            $MftBytes = Copy-RawMft "C:" $MftOut
+            Write-Host "       Acquired `$MFT from '$Hostnames' ($([Math]::Round($MftBytes / 1MB)) MB)" -ForegroundColor Green
+            Add-LogEntry $ShowProgress $OutputDirectory $Hostnames '$MFT (raw volume read)' "acquired '`$MFT' from '$Hostnames'"
         }
         catch { 
-            Write-Host "      FAILURE: '`$MFT' could not be collected." -ForegroundColor Red
+            Write-Host "      FAILURE: '`$MFT' could not be collected: $($_.Exception.Message)" -ForegroundColor Red
         }
 
         Write-Progress -Activity "_" -Completed
