@@ -285,15 +285,13 @@ function LabBuilder() {
             </div>
             <Step n="3" title="Acquire to">
               <p className="lab-note"><code>{acqRoot}/{collector}_collection/acquisitions/&lt;host&gt;/</code>, each target with its <code>expected.json</code> (the lab's seeded attacks).</p>
-              <label className="lb-check"><input type="checkbox" checked={thenElrond} onChange={(e) => setThenElrond(e.target.checked)} /> Then analyse it with Elrond</label>
-              {thenElrond && (
-                <div className="lb-row">
-                  <input type="text" className="lb-input" placeholder="Case ID, e.g. LAB-2026-001" value={caseId} onChange={(e) => setCaseId(e.target.value)} />
-                  <select className="large-select lb-select" value={profile} onChange={(e) => setProfile(e.target.value)}>
-                    {Object.entries(ELROND_PROFILES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                </div>
-              )}
+              <div className="lb-thirds">
+                <input type="text" className="lb-input" placeholder="Case ID, e.g. LAB-2026-001" value={caseId} disabled={!thenElrond} onChange={(e) => setCaseId(e.target.value)} />
+                <select className="large-select lb-select" value={profile} disabled={!thenElrond} onChange={(e) => setProfile(e.target.value)}>
+                  {Object.entries(ELROND_PROFILES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                <label className="lb-check"><input type="checkbox" checked={thenElrond} onChange={(e) => setThenElrond(e.target.checked)} /> Then analyse it with Elrond</label>
+              </div>
             </Step>
           </>
         )}
