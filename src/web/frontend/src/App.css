@@ -62,14 +62,18 @@ body {
   overflow: visible;
 }
 
-/* Left links, a gap the page's logo sits in, right links: each group grows away from the
-   centre, so the admin-only links (Aragorn, Lab) can't push the right group under the logo */
+/* Left links, a gap the page's logo sits in, right links. Each group spans from the edge of
+   the page content (.App-main: max-width 1600px, 2rem side padding) to the logo, so the outer
+   links line up with the content below and the admin-only link can't push a group under the logo.
+   The padding takes off the header's own 0.8rem and the links' 0.75rem so the text, not the
+   link box, sits on the content edge. */
 .App-header nav {
   display: grid;
-  grid-template-columns: 1fr 12rem 1fr;
+  grid-template-columns: 1fr 13rem 1fr;
   align-items: center;
   width: 100%;
-  max-width: 1600px;
+  max-width: calc(1600px - 1.6rem);
+  padding: 0 calc(2rem - 0.8rem - 0.75rem);
   position: relative;
   z-index: 20;
 }
@@ -77,19 +81,12 @@ body {
 .nav-left,
 .nav-right {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
+  justify-content: space-between;
 }
 
-.nav-left {
-  grid-column: 1;
-  justify-content: flex-end;
-}
-
-.nav-right {
-  grid-column: 3;
-  justify-content: flex-start;
-}
+.nav-left { grid-column: 1; }
+.nav-right { grid-column: 3; }
 
 @media (max-width: 1000px) {
   .App-header nav { grid-template-columns: 1fr 8rem 1fr; }
@@ -2575,7 +2572,7 @@ select.large-select:disabled {
   border: none;
   color: #f0dba5;
   cursor: pointer;
-  padding: 0.5rem 1rem;
+  padding: 0.5rem 0.75rem;  /* as the links, so the icon sits on the content edge */
   border-radius: 4px;
   display: flex;
   align-items: center;

@@ -35,14 +35,13 @@ function Navigation() {
         <Link to="/gandalf">Gandalf</Link>
         <Link to="/elrond">Elrond</Link>
         <Link to="/mordor">Mordor</Link>
+        {user?.role === 'admin' && <Link to="/aragorn">Aragorn</Link>}
       </div>
       <div className="nav-right">
-        <Link to={isAuthenticated ? "/account" : "/login"}>Account</Link>
-        <Link to="/jobs">Jobs</Link>
         <Link to="/ai">Ask Eru</Link>
-        {user?.role === 'admin' && <Link to="/aragorn">Aragorn</Link>}
-        {user?.role === 'admin' && <Link to="/lab">Lab</Link>}
+        <Link to="/jobs">Jobs</Link>
         <Link to="/help">About</Link>
+        <Link to={isAuthenticated ? "/account" : "/login"}>Account</Link>
         <button
           onClick={isAuthenticated ? handleLogout : undefined}
           className={`logout-icon-btn ${!isAuthenticated ? 'disabled' : ''}`}
