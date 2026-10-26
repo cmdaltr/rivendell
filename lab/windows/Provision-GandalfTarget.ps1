@@ -66,6 +66,23 @@ $stomp = Get-Date "2019-03-14 09:26:53"
 (Get-Item "$lab\helper.ps1").CreationTime = $stomp
 (Get-Item "$lab\helper.ps1").LastWriteTime = $stomp
 
+# T1564.004: a script hidden in an alternate data stream of a text file.
+"Rivendell lab readme" | Set-Content -Path "C:\Users\Public\Documents\readme.txt"
+"Write-Output rivendell-lab" | Set-Content -Path "C:\Users\Public\Documents\readme.txt" -Stream "update.ps1"
+
+# T1546.003: WMI event subscription persistence; the consumer only runs "cmd /c exit 0".
+Get-WmiObject -Namespace root\subscription -Class __FilterToConsumerBinding | Where-Object { $_.Filter -like "*LabUpdaterFilter*" } | Remove-WmiObject
+Get-WmiObject -Namespace root\subscription -Class __EventFilter -Filter "Name = 'LabUpdaterFilter'" | Remove-WmiObject
+Get-WmiObject -Namespace root\subscription -Class CommandLineEventConsumer -Filter "Name = 'LabUpdaterConsumer'" | Remove-WmiObject
+$wmiFilter = Set-WmiInstance -Namespace root\subscription -Class __EventFilter -Arguments @{
+    Name = "LabUpdaterFilter"; EventNamespace = "root\cimv2"; QueryLanguage = "WQL"
+    Query = "SELECT * FROM __InstanceModificationEvent WITHIN 3600 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System'"
+}
+$wmiConsumer = Set-WmiInstance -Namespace root\subscription -Class CommandLineEventConsumer -Arguments @{
+    Name = "LabUpdaterConsumer"; CommandLineTemplate = "cmd.exe /c exit 0"
+}
+Set-WmiInstance -Namespace root\subscription -Class __FilterToConsumerBinding -Arguments @{ Filter = $wmiFilter; Consumer = $wmiConsumer } | Out-Null
+
 # T1547.001: Run key persistence (the command only echoes).
 $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes("Write-Output rivendell-lab"))
 New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "LabUpdater" `
@@ -113,6 +130,8 @@ reg query HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
     {"artefact": "C:\\ProgramData\\RivendellLab\\helper.ps1", "attack": "T1070.006", "expect": ["Timestomp"]},
     {"artefact": "C:\\Users\\Public\\Documents\\notes.txt", "attack": "T1003.001", "yara": ["Potential_Credential_Access"]},
     {"artefact": "Service LabHelper", "attack": "T1543.003"},
+    {"artefact": "C:\\Users\\Public\\Documents\\readme.txt:update.ps1", "attack": "T1564.004", "expect": ["AlternateDataStream"]},
+    {"artefact": "WMI subscription LabUpdaterFilter -> LabUpdaterConsumer", "attack": "T1546.003", "expect": ["LabUpdaterConsumer"]},
     {"artefact": "Security 4625 x10 (labattacker)", "attack": "T1110.001"},
     {"artefact": "PSReadLine ConsoleHost_history.txt (gandalf)", "attack": "T1059.001", "expect": ["Invoke-WebRequest http"]}
   ],

@@ -19,6 +19,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tarfile
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,19 +86,43 @@ def place(repo: Path, src_dir: str, dest: Path) -> List[dict]:
     acq.mkdir(parents=True, exist_ok=True)
     js.mkdir(parents=True, exist_ok=True)
     placed = []
-    for z in sorted((repo / src_dir).rglob("*.zip")):
-        target = acq / z.name
-        shutil.copy2(z, target)
-        try:
-            with zipfile.ZipFile(z) as zf:
-                for member in zf.namelist():
-                    if member.endswith(".json") and not member.startswith("__MACOSX"):
-                        out = js / Path(member).name
-                        with zf.open(member) as src, open(out, "wb") as dst:
-                            shutil.copyfileobj(src, dst)
-        except zipfile.BadZipFile:
-            print(f"[!] {z.name} is not a valid zip; kept as downloaded")
-        placed.append({"file": z.name, "bytes": z.stat().st_size, "source": str(z.relative_to(repo))})
+    archives = sorted(
+        p for p in (repo / src_dir).rglob("*")
+        if p.is_file() and (p.name.endswith(".zip") or p.name.endswith((".tar.gz", ".tgz")))
+    )
+    for z in archives:
+        if z.name.endswith(".zip"):
+            target = acq / z.name
+            shutil.copy2(z, target)
+            try:
+                with zipfile.ZipFile(z) as zf:
+                    for member in zf.namelist():
+                        if member.endswith(".json") and not member.startswith("__MACOSX"):
+                            out = js / Path(member).name
+                            with zf.open(member) as src, open(out, "wb") as dst:
+                                shutil.copyfileobj(src, dst)
+            except zipfile.BadZipFile:
+                print(f"[!] {z.name} is not a valid zip; kept as downloaded")
+        else:
+            # A few OTRF sets are tarballs; Elrond reads zips, so repack them.
+            # Members are written by basename only, so a hostile path can't escape.
+            target = acq / (z.name[:-len(".tar.gz")] if z.name.endswith(".tar.gz") else z.name[:-len(".tgz")])
+            target = target.with_name(target.name + ".zip")
+            try:
+                with tarfile.open(z, "r:gz") as tf, zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for member in tf.getmembers():
+                        name = Path(member.name).name
+                        if not member.isfile() or not name or name.startswith("._"):
+                            continue
+                        data = tf.extractfile(member).read()
+                        zf.writestr(name, data)
+                        if name.endswith(".json"):
+                            (js / name).write_bytes(data)
+            except (tarfile.TarError, OSError) as e:
+                print(f"[!] {z.name} couldn't be repacked ({e}); skipped")
+                target.unlink(missing_ok=True)
+                continue
+        placed.append({"file": target.name, "bytes": target.stat().st_size, "source": str(z.relative_to(repo))})
     return placed
 
 
