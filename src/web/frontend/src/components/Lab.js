@@ -326,7 +326,7 @@ function LabManage({ section = 'lab', children = null }) {
       <div className="lab-col">
       <div className="card">
         <h2>Targets</h2>
-        <table className="lab-table">
+        <table className="lab-table lab-targets">
           <tbody>
             <tr>
               {logos([['ubuntu.png', 'Ubuntu'], ['rocky.svg', 'Rocky'], ['docker.png', 'Docker']],
