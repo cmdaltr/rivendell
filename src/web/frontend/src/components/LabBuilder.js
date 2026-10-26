@@ -345,8 +345,8 @@ function LabBuilder() {
                         <span className={`mt-dot is-${m.state}`} /><img className="lb-os" src={osLogo(m)} alt={m.os} title={m.os} />{m.name}
                       </Choice>
                     ))}
+                    <label className="lb-check lb-inline-check"><input type="checkbox" checked={setUp} onChange={(e) => setSetUp(e.target.checked)} /> Set it up first (logging and Atomic Red Team)</label>
                   </div>
-                  <label className="lb-check"><input type="checkbox" checked={setUp} onChange={(e) => setSetUp(e.target.checked)} /> Set it up first (logging and Atomic Red Team)</label>
                 </Step>
               )}
               {mode === 'capture' && (
