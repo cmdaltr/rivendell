@@ -225,6 +225,11 @@ services:
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var
       - /tmp/rivendell:/tmp/elrond/output:ro # Mount output directory for monitoring
+      # Custom output destinations, mounted where the worker mounts them (E10); add
+      # any other root to SPLUNK_MONITOR_ROOTS on the worker
+      - /Volumes:/Volumes:ro # macOS: External drives - COMMENT OUT ON LINUX/WINDOWS
+      # - /mnt:/mnt:ro            # Linux
+      # - /media:/media:ro        # Linux: Ubuntu/Debian mounts
     networks:
       - rivendell-network
     restart: unless-stopped

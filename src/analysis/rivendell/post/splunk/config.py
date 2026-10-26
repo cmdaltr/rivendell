@@ -30,6 +30,23 @@ except ImportError:
     build_app_treemap = None
 
 
+
+# Where the Splunk container sees the output, as docker-compose.yml mounts it into the
+# splunk service (the same paths as the worker's)
+DEFAULT_MONITOR_ROOTS = "/tmp/elrond/output,/Volumes"
+
+
+def monitor_roots():
+    """The paths the Splunk container mounts: SPLUNK_MONITOR_ROOTS, comma-separated."""
+    roots = os.environ.get("SPLUNK_MONITOR_ROOTS", DEFAULT_MONITOR_ROOTS)
+    return [os.path.normpath(r.strip()) for r in roots.split(",") if r.strip()]
+
+
+def splunk_can_see(path):
+    """Whether a worker path is inside one of the Splunk container's mounts."""
+    path = os.path.normpath(path)
+    return any(path == root or path.startswith(root.rstrip("/") + "/") for root in monitor_roots())
+
 def splunk_service(splunk_install_path, action):
     subprocess.Popen(
         ["/" + splunk_install_path + "splunk/bin/./splunk", action],
@@ -377,14 +394,21 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
             inputs_conf_path = "/" + remote_splunk_path + "splunk/etc/apps/elrond/default/inputs.conf"
             os.makedirs(os.path.dirname(inputs_conf_path), exist_ok=True)
 
-            # Build inputs.conf entries for all images
-            # Path structure: /tmp/elrond/output/<case>/<image_name>/artefacts/cooked/
+            # Build inputs.conf entries for all images. The Splunk container mounts the
+            # output where the worker does, so it monitors the worker's own path (E10:
+            # it was always /tmp/elrond/output/<case>/, so custom destinations indexed 0)
             inputs_entries = []
             for _, img in allimgs.items():
                 img_name = img.split("::")[0]
-                # Use container path /tmp/elrond/output/<case>/<image> for Splunk container
-                base_path = "/tmp/elrond/output/{}/{}".format(case, img_name)
+                base_path = os.path.join(os.path.normpath(output_directory), img_name)
                 cooked_path = "{}/artefacts/cooked".format(base_path)
+                if not splunk_can_see(base_path):
+                    entry, prnt = "{},{},not indexed: '{}' is outside the Splunk container's mounts ({})\n".format(
+                        datetime.now().isoformat(), "splunk", base_path, ", ".join(monitor_roots()),
+                    ), " -> {} -> WARNING: '{}' won't be indexed: Splunk only mounts {} (set SPLUNK_MONITOR_ROOTS and mount the path into the splunk service)".format(
+                        datetime.now().isoformat().replace("T", " "), base_path, ", ".join(monitor_roots()),
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
 
                 # Log indexing for this image
                 entry, prnt = "{},{},indexing artefacts for '{}'\n".format(
