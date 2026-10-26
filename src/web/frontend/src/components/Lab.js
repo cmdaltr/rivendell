@@ -24,7 +24,6 @@ const SETTINGS = [
   ['WINDOWS_VM_MEMORY_MB', 'Windows VM memory (MB)', ''],
   ['WINDOWS_VM_CPUS', 'Windows VM CPUs', ''],
   ['LINUX_VM_MEMORY_MB', 'Linux VM memory (MB)', ''],
-  ['ELASTIC_URL', 'Elasticsearch URL', 'Used by the Mordor sensor helpers.'],
 ];
 
 const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
