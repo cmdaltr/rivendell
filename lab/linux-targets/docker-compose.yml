@@ -1,6 +1,6 @@
 # Gandalf test targets and the collector that runs against them.
 # Compose project 'rivendell-lab' (set by lab.sh), so Rivendell's own tooling
-# (including Aragorn) never treats these as Rivendell containers.
+# (including Anduril) never treats these as Rivendell containers.
 #
 # Targets are reached by hostname on the private lab network, so this works the
 # same on Docker Desktop and OrbStack, Intel and Apple silicon. Each target's SSH

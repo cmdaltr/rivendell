@@ -21,7 +21,7 @@ try:
     from .auth.routes_simple import router as auth_router  # Simple file-based auth
     from .ai_routes import router as ai_router  # AI assistant routes
     from .mordor_routes import router as mordor_router  # Mordor dataset management
-    from .aragorn_routes import router as aragorn_router  # Aragorn Docker administration
+    from .anduril_routes import router as anduril_router  # Anduril Docker administration
     from .lab_routes import router as lab_router  # Test lab, via the host's lab agent
     from .models.job import (
         Job,
@@ -39,7 +39,7 @@ except ImportError:
     from auth.routes_simple import router as auth_router  # Simple file-based auth
     from ai_routes import router as ai_router  # AI assistant routes
     from mordor_routes import router as mordor_router  # Mordor dataset management
-    from aragorn_routes import router as aragorn_router  # Aragorn Docker administration
+    from anduril_routes import router as anduril_router  # Anduril Docker administration
     from lab_routes import router as lab_router  # Test lab, via the host's lab agent
     from models.job import (
         Job,
@@ -127,8 +127,9 @@ app.include_router(ai_router)
 app.include_router(mordor_router)
 app.include_router(lab_router)
 
-# Include Aragorn (Docker administration) routes
-app.include_router(aragorn_router)
+# Include Anduril (Docker administration) routes; /api/aragorn is the name before the rename
+app.include_router(anduril_router, prefix="/api/anduril")
+app.include_router(anduril_router, prefix="/api/aragorn", include_in_schema=False)
 
 
 @app.get("/")

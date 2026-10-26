@@ -15,7 +15,7 @@ Every command below runs from the repository root. The Python modules are run wi
 5. [Cloud Forensics](#cloud-forensics)
 6. [AI Agent](#ai-agent)
 7. [SIEM Integration](#siem-integration)
-8. [Docker Administration (Aragorn)](#docker-administration-aragorn)
+8. [Docker Administration (Anduril)](#docker-administration-anduril)
 9. [Utility Commands](#utility-commands)
 10. [Configuration](#configuration)
 11. [Common Workflows](#common-workflows)
@@ -456,33 +456,33 @@ In Docker the worker gets `SPLUNK_HOST`, `SPLUNK_PASSWORD` and `ELASTICSEARCH_HO
 
 ---
 
-## Docker Administration (Aragorn)
+## Docker Administration (Anduril)
 
-`rivendell aragorn` manages Rivendell's own containers and images on Docker Desktop or OrbStack. It finds the engine running Rivendell, even when another Docker context is active. It only lists or touches containers labelled with the `rivendell` compose project and named `rivendell-*`, plus the images they use. Nothing else on the engine is visible to it.
-
-```bash
-rivendell aragorn status                    # containers, state, health, image
-rivendell aragorn images                    # Rivendell images, size, built or pulled, users
-rivendell aragorn logs celery-worker -n 200
-rivendell aragorn stats backend
-rivendell aragorn restart frontend
-rivendell aragorn update redis              # pull the upstream image; recreate if newer
-rivendell aragorn pull postgres:15-alpine
-rivendell aragorn rebuild celery-worker     # docker compose build, then up -d --no-deps
-rivendell aragorn rmi <image-id>            # unused Rivendell images only, never forced
-rivendell aragorn prune                     # dangling images built for Rivendell
-```
-
-Containers can be named by service (`celery-worker`) or container name (`rivendell-celery-worker`). Destructive commands ask first; `-y` answers yes. Stopping, restarting, updating or rebuilding `celery-worker`, `postgres` or `redis` while an analysis job is running is refused unless you pass `--force`, and that confirmation is never answered by `-y`. If Docker isn't running, or your user can't reach its socket, Aragorn says so and offers to start Docker Desktop or OrbStack, or to add you to the `docker` group on Linux.
-
-The web UI's **Aragorn** page (admins only) needs the Aragorn service, which is the only container that holds the Docker socket:
+`rivendell anduril` manages Rivendell's own containers and images on Docker Desktop or OrbStack. It finds the engine running Rivendell, even when another Docker context is active. It only lists or touches containers labelled with the `rivendell` compose project and named `rivendell-*`, plus the images they use. Nothing else on the engine is visible to it. `rivendell aragorn` still works as an alias, from before Anduril had its own name.
 
 ```bash
-rivendell aragorn enable    # explains what it grants, asks, then starts the aragorn service
-rivendell aragorn disable   # stops it and removes its socket access
+rivendell anduril status                    # containers, state, health, image
+rivendell anduril images                    # Rivendell images, size, built or pulled, users
+rivendell anduril logs celery-worker -n 200
+rivendell anduril stats backend
+rivendell anduril restart frontend
+rivendell anduril update redis              # pull the upstream image; recreate if newer
+rivendell anduril pull postgres:15-alpine
+rivendell anduril rebuild celery-worker     # docker compose build, then up -d --no-deps
+rivendell anduril rmi <image-id>            # unused Rivendell images only, never forced
+rivendell anduril prune                     # dangling images built for Rivendell
 ```
 
-`enable` reuses the compose files Rivendell was started with (read from the containers' labels), so overrides stay applied. If the backend still uses the default `SECRET_KEY`, `enable` warns you, and the web page stays disabled until it's set, since anyone could otherwise forge an admin login. The HTTP API is in [API.md](API.md#docker-administration-aragorn).
+Containers can be named by service (`celery-worker`) or container name (`rivendell-celery-worker`). Destructive commands ask first; `-y` answers yes. Stopping, restarting, updating or rebuilding `celery-worker`, `postgres` or `redis` while an analysis job is running is refused unless you pass `--force`, and that confirmation is never answered by `-y`. If Docker isn't running, or your user can't reach its socket, Anduril says so and offers to start Docker Desktop or OrbStack, or to add you to the `docker` group on Linux.
+
+The web UI's **Aragorn → Settings** tab (admins only) needs the Anduril service, which is the only container that holds the Docker socket:
+
+```bash
+rivendell anduril enable    # explains what it grants, asks, then starts the anduril service
+rivendell anduril disable   # stops it and removes its socket access
+```
+
+`enable` reuses the compose files Rivendell was started with (read from the containers' labels), so overrides stay applied. If the backend still uses the default `SECRET_KEY`, `enable` warns you, and the web page stays disabled until it's set, since anyone could otherwise forge an admin login. The HTTP API is in [API.md](API.md#docker-administration-anduril).
 
 ---
 

@@ -1,7 +1,7 @@
 """Minimal Docker Engine API client over a unix socket (stdlib only).
 
 Docker Desktop and OrbStack both expose the same Engine API, so nothing here
-is runtime-specific. Kept dependency-free so the Aragorn image stays small and
+is runtime-specific. Kept dependency-free so the Anduril image stays small and
 the host CLI runs without extra packages.
 """
 

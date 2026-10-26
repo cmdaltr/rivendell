@@ -1,9 +1,9 @@
 """
-rivendell aragorn - administer Rivendell's Docker containers and images.
+rivendell anduril - administer Rivendell's Docker containers and images.
 
 Runs on the host against the Docker Desktop or OrbStack socket, applying the
-same Rivendell-only scope as the Aragorn service behind the web UI. Rebuilds
-and enabling Aragorn itself happen here because they need the compose files
+same Rivendell-only scope as the Anduril service behind the web UI. Rebuilds
+and enabling Anduril itself happen here because they need the compose files
 on the host.
 """
 
@@ -20,9 +20,9 @@ from typing import Callable, List, Optional
 # shadows the stdlib module, so this file uses sys.platform instead.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "common"))
 
-from aragorn import BusyError, DockerAdmin, EngineError, EngineUnavailable, ScopeError, find_socket  # noqa: E402
-from aragorn.scope import (  # noqa: E402
-    ARAGORN_SERVICE,
+from anduril import BusyError, DockerAdmin, EngineError, EngineUnavailable, ScopeError, find_socket  # noqa: E402
+from anduril.scope import (  # noqa: E402
+    ANDURIL_SERVICE,
     check_action,
     NAME_PREFIX,
     PROJECT,
@@ -182,12 +182,12 @@ def backend_secret_is_default(admin: DockerAdmin) -> bool:
     return env.get("SECRET_KEY", DEFAULT_SECRET) in ("", DEFAULT_SECRET)
 
 
-def backend_has_aragorn(admin: DockerAdmin) -> bool:
+def backend_has_anduril(admin: DockerAdmin) -> bool:
     try:
         info = admin.engine.inspect_container(admin.resolve("backend")["Id"])
     except (ScopeError, EngineError):
         return False
-    return "rivendell-aragorn" in ((info.get("NetworkSettings") or {}).get("Networks") or {})
+    return "rivendell-anduril" in ((info.get("NetworkSettings") or {}).get("Networks") or {})
 
 
 # --- commands ------------------------------------------------------------------------
@@ -196,15 +196,15 @@ def backend_has_aragorn(admin: DockerAdmin) -> bool:
 def cmd_status(admin: DockerAdmin, args: argparse.Namespace) -> None:
     rows = []
     for c in admin.list_containers():
-        note = "job running" if c["job_processes"] else ("Aragorn" if c["protected"] else "")
+        note = "job running" if c["job_processes"] else ("Anduril" if c["protected"] else "")
         rows.append([c["name"], c["service"], c["state"], c["status"], ", ".join(c["ports"]), note])
     print(f"Docker engine: {admin.engine.socket_path}  (project '{admin.project}', containers named {NAME_PREFIX}*)\n")
     table(rows, ["CONTAINER", "SERVICE", "STATE", "STATUS", "PORTS", "NOTE"])
     for c in admin.list_containers():
         for p in c["job_processes"]:
             print(f"\n[!] Elrond running in {c['name']}: {p}")
-    enabled = any(c["service"] == ARAGORN_SERVICE and c["state"] == "running" for c in admin.list_containers())
-    print(f"\nAragorn (web UI administration): {'enabled' if enabled else 'not enabled - run: rivendell aragorn enable'}")
+    enabled = any(c["service"] == ANDURIL_SERVICE and c["state"] == "running" for c in admin.list_containers())
+    print(f"\nAnduril (web UI administration): {'enabled' if enabled else 'not enabled - run: rivendell anduril enable'}")
 
 
 def cmd_images(admin: DockerAdmin, args: argparse.Namespace) -> None:
@@ -239,7 +239,7 @@ def cmd_stats(admin: DockerAdmin, args: argparse.Namespace) -> None:
 
 
 def cmd_lifecycle(admin: DockerAdmin, args: argparse.Namespace) -> None:
-    allow_self = True  # the host CLI may manage Aragorn itself
+    allow_self = True  # the host CLI may manage Anduril itself
     if args.command_name == "start":
         print(f"[+] {admin.start(args.name, allow_self=allow_self)}")
         return
@@ -259,7 +259,7 @@ def cmd_update(admin: DockerAdmin, args: argparse.Namespace) -> None:
 
 def cmd_pull(admin: DockerAdmin, args: argparse.Namespace) -> None:
     image_id = admin.pull(args.ref, progress=lambda m: print(f"    {m}"))
-    print(f"[+] Pulled {args.ref} ({image_id.split(':')[-1][:12]}). Run `rivendell aragorn update <service>` to use it.")
+    print(f"[+] Pulled {args.ref} ({image_id.split(':')[-1][:12]}). Run `rivendell anduril update <service>` to use it.")
 
 
 def cmd_rmi(admin: DockerAdmin, args: argparse.Namespace) -> None:
@@ -282,7 +282,7 @@ def cmd_rebuild(admin: DockerAdmin, args: argparse.Namespace) -> None:
     service = container_service(c)
     image = next((i for i in admin.engine.images() if i["Id"] == c.get("ImageID")), {})
     if not image_is_built(image, admin.project):
-        raise ScopeError(f"{service} uses an upstream image; use `rivendell aragorn update {service}` instead")
+        raise ScopeError(f"{service} uses an upstream image; use `rivendell anduril update {service}` instead")
     try:
         check_action(service, "rebuild", admin.job_processes(), args.force, allow_self=True)
     except BusyError as exc:
@@ -300,99 +300,100 @@ def cmd_rebuild(admin: DockerAdmin, args: argparse.Namespace) -> None:
 
 def cmd_enable(admin: DockerAdmin, args: argparse.Namespace) -> None:
     print(
-        "Aragorn lets admin users of the Rivendell web UI start, stop, restart, update and remove\n"
+        "Anduril lets admin users of the Rivendell web UI start, stop, restart, update and remove\n"
         "Rivendell's own containers and images. To do that it needs:\n\n"
-        "  - the Docker socket (/var/run/docker.sock) mounted into the rivendell-aragorn container.\n"
-        "    Socket access is root-equivalent on the Docker VM, so Aragorn is the only container\n"
+        "  - the Docker socket (/var/run/docker.sock) mounted into the rivendell-anduril container.\n"
+        "    Socket access is root-equivalent on the Docker VM, so Anduril is the only container\n"
         "    that holds it, it is reachable only from the backend on an internal network, and it\n"
         f"    refuses anything not labelled com.docker.compose.project={admin.project} and named {NAME_PREFIX}*.\n"
-        "  - the backend recreated so it joins that network and can read Aragorn's token.\n"
+        "  - the backend recreated so it joins that network and can read Anduril's token.\n"
     )
     if backend_secret_is_default(admin):
         print(
             "[!] The backend is using the default JWT secret, so anyone could forge an admin token.\n"
-            "    The web UI keeps Aragorn disabled until you set SECRET_KEY (in your shell or a .env\n"
-            "    file next to docker-compose.yml) and re-run `rivendell aragorn enable`.\n"
+            "    The web UI keeps Anduril disabled until you set SECRET_KEY (in your shell or a .env\n"
+            "    file next to docker-compose.yml) and re-run `rivendell anduril enable`.\n"
         )
-    if not confirm("Grant Docker socket access to Aragorn and enable it?", args.yes):
+    if not confirm("Grant Docker socket access to Anduril and enable it?", args.yes):
         raise Aborted()
-    compose(admin, "--profile", "aragorn", "up", "-d", "--build", "--no-deps", ARAGORN_SERVICE)
-    if not backend_has_aragorn(admin) or args.recreate_backend:
+    compose(admin, "--profile", "anduril", "up", "-d", "--build", "--no-deps", ANDURIL_SERVICE)
+    if not backend_has_anduril(admin) or args.recreate_backend:
         compose(admin, "up", "-d", "--no-deps", "backend")
-    print("[+] Aragorn enabled. Admin users will see it under Aragorn in the web UI.")
+    print("[+] Anduril enabled. Admin users will see it on Aragorn → Settings in the web UI.")
 
 
 def cmd_disable(admin: DockerAdmin, args: argparse.Namespace) -> None:
-    if not confirm("Stop Aragorn and remove its Docker socket access?", args.yes):
+    if not confirm("Stop Anduril and remove its Docker socket access?", args.yes):
         raise Aborted()
-    compose(admin, "--profile", "aragorn", "rm", "--stop", "--force", ARAGORN_SERVICE)
-    print("[+] Aragorn disabled. The web UI will show it as not enabled.")
+    compose(admin, "--profile", "anduril", "rm", "--stop", "--force", ANDURIL_SERVICE)
+    print("[+] Anduril disabled. The web UI will show it as not enabled.")
 
 
 # --- argument parsing ------------------------------------------------------------
 
 
 def add_parser(subparsers: argparse._SubParsersAction) -> None:
-    """Register `rivendell aragorn ...` on the main CLI."""
-    p = subparsers.add_parser("aragorn", help="Administer Rivendell Docker containers and images")
+    """Register `rivendell anduril ...` on the main CLI."""
+    p = subparsers.add_parser("anduril", aliases=["aragorn"],
+                              help="Administer Rivendell Docker containers and images (Anduril)")
     p.add_argument("-y", "--yes", action="store_true", help="Answer yes to confirmation prompts (never to interrupting a job)")
     p.add_argument("--socket", help="Docker socket to use (default: the engine running Rivendell)")
-    sub = p.add_subparsers(dest="aragorn_command", metavar="COMMAND")
+    sub = p.add_subparsers(dest="anduril_command", metavar="COMMAND")
 
-    sub.add_parser("status", help="Rivendell containers and their state").set_defaults(aragorn_func=cmd_status)
-    sub.add_parser("images", help="Rivendell images").set_defaults(aragorn_func=cmd_images)
+    sub.add_parser("status", help="Rivendell containers and their state").set_defaults(anduril_func=cmd_status)
+    sub.add_parser("images", help="Rivendell images").set_defaults(anduril_func=cmd_images)
 
     s = sub.add_parser("logs", help="Tail a container's logs")
     s.add_argument("name")
     s.add_argument("-n", "--tail", type=int, default=200)
-    s.set_defaults(aragorn_func=cmd_logs)
+    s.set_defaults(anduril_func=cmd_logs)
 
     s = sub.add_parser("stats", help="CPU, memory, network and disk usage")
     s.add_argument("names", nargs="*")
-    s.set_defaults(aragorn_func=cmd_stats)
+    s.set_defaults(anduril_func=cmd_stats)
 
     for name in ("start", "stop", "restart"):
         s = sub.add_parser(name, help=f"{name.title()} a Rivendell container")
         s.add_argument("name", help="Container or service name, e.g. rivendell-backend or backend")
         s.add_argument("--force", action="store_true", help="Proceed even if Elrond is running")
-        s.set_defaults(aragorn_func=cmd_lifecycle, command_name=name)
+        s.set_defaults(anduril_func=cmd_lifecycle, command_name=name)
 
     s = sub.add_parser("update", help="Pull a container's upstream image and recreate it if newer")
     s.add_argument("name")
     s.add_argument("--force", action="store_true")
-    s.set_defaults(aragorn_func=cmd_update)
+    s.set_defaults(anduril_func=cmd_update)
 
     s = sub.add_parser("pull", help="Pull a new version of an upstream image Rivendell uses")
     s.add_argument("ref", help="e.g. postgres:16-alpine")
-    s.set_defaults(aragorn_func=cmd_pull)
+    s.set_defaults(anduril_func=cmd_pull)
 
     s = sub.add_parser("rebuild", help="Rebuild a Rivendell-built image and recreate its container")
-    s.add_argument("service", help="backend, celery-worker, frontend or aragorn")
+    s.add_argument("service", help="backend, celery-worker, frontend or anduril")
     s.add_argument("--no-cache", action="store_true")
     s.add_argument("--force", action="store_true")
-    s.set_defaults(aragorn_func=cmd_rebuild)
+    s.set_defaults(anduril_func=cmd_rebuild)
 
     s = sub.add_parser("rmi", help="Remove an unused Rivendell image")
     s.add_argument("image", help="Image ID (at least 12 characters)")
-    s.set_defaults(aragorn_func=cmd_rmi)
+    s.set_defaults(anduril_func=cmd_rmi)
 
-    sub.add_parser("prune", help="Remove dangling images built for Rivendell").set_defaults(aragorn_func=cmd_prune)
+    sub.add_parser("prune", help="Remove dangling images built for Rivendell").set_defaults(anduril_func=cmd_prune)
 
-    s = sub.add_parser("enable", help="Enable Aragorn for the web UI (grants it Docker socket access)")
+    s = sub.add_parser("enable", help="Enable Anduril for the web UI (grants it Docker socket access)")
     s.add_argument("--recreate-backend", action="store_true", help="Recreate the backend even if already connected")
-    s.set_defaults(aragorn_func=cmd_enable)
-    sub.add_parser("disable", help="Stop Aragorn and remove its socket access").set_defaults(aragorn_func=cmd_disable)
+    s.set_defaults(anduril_func=cmd_enable)
+    sub.add_parser("disable", help="Stop Anduril and remove its socket access").set_defaults(anduril_func=cmd_disable)
 
-    p.set_defaults(func=run, aragorn_parser=p)
+    p.set_defaults(func=run, anduril_parser=p)
 
 
 def run(args: argparse.Namespace) -> int:
-    if not getattr(args, "aragorn_func", None):
-        args.aragorn_parser.print_help()
+    if not getattr(args, "anduril_func", None):
+        args.anduril_parser.print_help()
         return 0
     try:
         admin = get_admin(args.yes, args.socket)
-        args.aragorn_func(admin, args)
+        args.anduril_func(admin, args)
         return 0
     except Aborted:
         print("[-] Cancelled.")

@@ -14,7 +14,7 @@ SERVICE_LABEL = "com.docker.compose.service"
 PROJECT = os.environ.get("RIVENDELL_COMPOSE_PROJECT", "rivendell")
 NAME_PREFIX = "rivendell-"
 
-ARAGORN_SERVICE = "aragorn"
+ANDURIL_SERVICE = "anduril"
 # Stopping these while Elrond runs orphans the job: the worker loses its
 # broker or database and marks the job failed while elrond.py keeps going.
 JOB_SENSITIVE_SERVICES = frozenset({"celery-worker", "postgres", "redis"})
@@ -81,8 +81,8 @@ def check_image_removable(image: dict, containers: Iterable[dict], scoped_image_
 
 def check_action(service: str, action: str, job_processes: list[str], force: bool, allow_self: bool = False) -> None:
     """Refuse actions that would cut off administration or interrupt a job."""
-    if service == ARAGORN_SERVICE and not allow_self:
-        raise ScopeError("Aragorn can only be stopped or updated from the host CLI (rivendell aragorn disable)")
+    if service == ANDURIL_SERVICE and not allow_self:
+        raise ScopeError("Anduril can only be stopped or updated from the host CLI (rivendell anduril disable)")
     if service in JOB_SENSITIVE_SERVICES and job_processes and not force:
         raise BusyError(
             f"Refusing to {action} {service}: Elrond is running in the worker "

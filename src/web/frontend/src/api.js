@@ -261,33 +261,33 @@ export const getMordorStats = async () => {
 };
 
 // ============================================
-// Aragorn (Docker administration) API
+// Anduril (Docker administration) API
 // ============================================
 
-export const getAragornStatus = async () => (await api.get('/api/aragorn/status')).data;
+export const getAndurilStatus = async () => (await api.get('/api/anduril/status')).data;
 
-export const listAragornContainers = async () => (await api.get('/api/aragorn/containers')).data;
+export const listAndurilContainers = async () => (await api.get('/api/anduril/containers')).data;
 
-export const listAragornImages = async () => (await api.get('/api/aragorn/images')).data;
+export const listAndurilImages = async () => (await api.get('/api/anduril/images')).data;
 
-export const getAragornLogs = async (name, tail = 200) =>
-  (await api.get(`/api/aragorn/containers/${encodeURIComponent(name)}/logs`, { params: { tail } })).data;
+export const getAndurilLogs = async (name, tail = 200) =>
+  (await api.get(`/api/anduril/containers/${encodeURIComponent(name)}/logs`, { params: { tail } })).data;
 
-export const getAragornStats = async (name) =>
-  (await api.get(`/api/aragorn/containers/${encodeURIComponent(name)}/stats`)).data;
+export const getAndurilStats = async (name) =>
+  (await api.get(`/api/anduril/containers/${encodeURIComponent(name)}/stats`)).data;
 
-export const aragornContainerAction = async (name, action, force = false) =>
-  (await api.post(`/api/aragorn/containers/${encodeURIComponent(name)}/${action}`, { force })).data;
+export const andurilContainerAction = async (name, action, force = false) =>
+  (await api.post(`/api/anduril/containers/${encodeURIComponent(name)}/${action}`, { force })).data;
 
-export const aragornPullImage = async (ref) => (await api.post('/api/aragorn/images/pull', { ref })).data;
+export const andurilPullImage = async (ref) => (await api.post('/api/anduril/images/pull', { ref })).data;
 
-export const aragornRemoveImage = async (id) => (await api.post('/api/aragorn/images/remove', { id })).data;
+export const andurilRemoveImage = async (id) => (await api.post('/api/anduril/images/remove', { id })).data;
 
-export const aragornPruneImages = async () => (await api.post('/api/aragorn/images/prune')).data;
+export const andurilPruneImages = async () => (await api.post('/api/anduril/images/prune')).data;
 
-export const getAragornOp = async (opId) => (await api.get(`/api/aragorn/ops/${opId}`)).data;
+export const getAndurilOp = async (opId) => (await api.get(`/api/anduril/ops/${opId}`)).data;
 
-export const listAragornOps = async () => (await api.get('/api/aragorn/ops')).data;
+export const listAndurilOps = async () => (await api.get('/api/anduril/ops')).data;
 
 export default api;
 

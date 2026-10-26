@@ -58,11 +58,11 @@ services:
       - DATABASE_URL=postgresql://rivendell:rivendell@postgres:5432/rivendell
       # JWT signing key. Docker administration stays disabled until this is changed.
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
-      - ARAGORN_URL=http://aragorn:5690
+      - ANDURIL_URL=http://anduril:5690
     volumes:
       - ./src/web/backend:/app
       - ./src/mordor:/opt/rivendell/src/mordor # Mordor: recorded attack telemetry (/api/mordor/telemetry)
-      - aragorn_token:/run/aragorn:ro # Written by aragorn
+      - anduril_token:/run/anduril:ro # Written by anduril
       # Platform-specific mounts - uncomment for your OS:
       # - /mnt:/mnt:ro              # Linux: Mount points (read-only)
       # - /media:/media:ro          # Linux: Ubuntu/Debian mounts (read-only)
@@ -77,7 +77,7 @@ services:
       - postgres
     networks:
       - rivendell-network
-      - rivendell-aragorn
+      - rivendell-anduril
     restart: unless-stopped
     command: uvicorn main:app --host 0.0.0.0 --port 5688 --reload
     extra_hosts:
@@ -91,24 +91,24 @@ services:
         limits:
           memory: 256M
 
-  # Aragorn administers Rivendell's own containers and images.
+  # Anduril administers Rivendell's own containers and images.
   # Opt-in: it holds the Docker socket, which is root-equivalent on the Docker
-  # VM. Enable with `rivendell aragorn enable` (or --profile aragorn). It is only
-  # reachable from the backend over the internal rivendell-aragorn network and
+  # VM. Enable with `rivendell anduril enable` (or --profile anduril). It is only
+  # reachable from the backend over the internal rivendell-anduril network and
   # refuses anything not labelled com.docker.compose.project=rivendell.
-  aragorn:
-    profiles: [aragorn]
+  anduril:
+    profiles: [anduril]
     build:
       context: .
-      dockerfile: src/web/aragorn/Dockerfile
-    container_name: rivendell-aragorn
+      dockerfile: src/web/anduril/Dockerfile
+    container_name: rivendell-anduril
     environment:
       - RIVENDELL_COMPOSE_PROJECT=rivendell
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # Docker Desktop and OrbStack both expose this path
-      - aragorn_token:/run/aragorn
+      - anduril_token:/run/anduril
     networks:
-      - rivendell-aragorn
+      - rivendell-anduril
     restart: unless-stopped
     read_only: true
     security_opt:
@@ -448,12 +448,12 @@ volumes:
   splunk_var:
   elastic_data:
   navigator_data:
-  aragorn_token:
+  anduril_token:
 
 networks:
   rivendell-network:
     driver: bridge
-  # Backend <-> aragorn only; no route out and nothing published.
-  rivendell-aragorn:
+  # Backend <-> anduril only; no route out and nothing published.
+  rivendell-anduril:
     driver: bridge
     internal: true

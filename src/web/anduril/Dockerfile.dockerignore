@@ -1,0 +1,5 @@
+# Anduril only needs its package and server; keep the 12 GB+ repo context out.
+*
+!src/common/anduril/
+!src/web/anduril/server.py
+**/__pycache__

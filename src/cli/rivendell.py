@@ -7,7 +7,7 @@ Usage:
     rivendell acquire [options]   - Acquire forensic artifacts (Gandalf)
     rivendell analyze [options]   - Analyze forensic artifacts (Elrond)
     rivendell web [options]        - Start web interface
-    rivendell aragorn [command]    - Administer Rivendell's Docker containers (Aragorn)
+    rivendell anduril [command]    - Administer Rivendell's Docker containers (Anduril)
     rivendell --version            - Show version
     rivendell --help               - Show help
 """
@@ -22,7 +22,7 @@ from pathlib import Path
 # subprocesses. src/analysis is deliberately kept off sys.path: its platform/
 # package would shadow the stdlib module of the same name.
 RIVENDELL_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(Path(__file__).resolve().parent))  # aragorn_cli
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # anduril_cli
 
 VERSION = "2.0.0"
 
@@ -141,8 +141,8 @@ Examples:
   rivendell web --port 8000
 
   # Rivendell containers, and enabling Docker administration in the web UI
-  rivendell aragorn status
-  rivendell aragorn enable
+  rivendell anduril status
+  rivendell anduril enable
 
   # Use individual tools directly:
   python3 acquisition/python/gandalf.py Password Local -M
@@ -195,10 +195,10 @@ Examples:
     web_parser.add_argument('--reload', action='store_true', help='Auto-reload on changes')
     web_parser.set_defaults(func=cmd_web)
 
-    # Aragorn command (Docker administration)
-    from aragorn_cli import add_parser as add_aragorn_parser
+    # Anduril command (Docker administration; `aragorn` is an alias)
+    from anduril_cli import add_parser as add_anduril_parser
 
-    add_aragorn_parser(subparsers)
+    add_anduril_parser(subparsers)
 
     # Parse args
     args = parser.parse_args()

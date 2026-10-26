@@ -1,6 +1,6 @@
-"""Unit tests for Aragorn's scope rules (no Docker engine needed).
+"""Unit tests for Anduril's scope rules (no Docker engine needed).
 
-Run: python3 -m unittest tests/unit/test_aragorn.py
+Run: python3 -m unittest tests/unit/test_anduril.py
 """
 
 import sys
@@ -9,8 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "common"))
 
-from aragorn import BusyError, DockerAdmin, ScopeError  # noqa: E402
-from aragorn.scope import (  # noqa: E402
+from anduril import BusyError, DockerAdmin, ScopeError  # noqa: E402
+from anduril.scope import (  # noqa: E402
     check_action,
     container_in_scope,
     find_job_processes,
@@ -83,10 +83,10 @@ class ScopeTests(unittest.TestCase):
             check_action(service, "restart", jobs, force=True)
         check_action("frontend", "restart", jobs, force=False)
 
-    def test_aragorn_cannot_act_on_itself_from_the_web(self):
+    def test_anduril_cannot_act_on_itself_from_the_web(self):
         with self.assertRaises(ScopeError):
-            check_action("aragorn", "stop", [], force=True)
-        check_action("aragorn", "stop", [], force=False, allow_self=True)
+            check_action("anduril", "stop", [], force=True)
+        check_action("anduril", "stop", [], force=False, allow_self=True)
 
     def test_split_image_ref(self):
         self.assertEqual(split_image_ref("postgres:16-alpine"), ("postgres", "16-alpine"))

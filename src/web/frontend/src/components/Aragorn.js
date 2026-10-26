@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
-  getAragornStatus,
-  listAragornContainers,
-  listAragornImages,
-  getAragornLogs,
-  getAragornStats,
-  aragornContainerAction,
-  aragornPullImage,
-  aragornRemoveImage,
-  aragornPruneImages,
-  getAragornOp,
-  listAragornOps,
+  getAndurilStatus,
+  listAndurilContainers,
+  listAndurilImages,
+  getAndurilLogs,
+  getAndurilStats,
+  andurilContainerAction,
+  andurilPullImage,
+  andurilRemoveImage,
+  andurilPruneImages,
+  getAndurilOp,
+  listAndurilOps,
 } from '../api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import PageHero from './PageHero';
@@ -44,7 +44,7 @@ const isBusy = (err) => {
 
 function EnablePanel({ status, onRecheck }) {
   const [copied, setCopied] = useState(false);
-  const command = status?.enable_command || 'rivendell aragorn enable';
+  const command = status?.enable_command || 'rivendell anduril enable';
 
   const copy = async () => {
     try {
@@ -86,7 +86,7 @@ function EnablePanel({ status, onRecheck }) {
   );
 }
 
-function AragornBody() {
+function AndurilPanel() {
   const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [containers, setContainers] = useState([]);
@@ -102,7 +102,7 @@ function AragornBody() {
 
   const loadStatus = useCallback(async () => {
     try {
-      setStatus(await getAragornStatus());
+      setStatus(await getAndurilStatus());
     } catch (err) {
       setStatus({ enabled: false, reason: 'error', detail: errorText(err) });
     } finally {
@@ -112,7 +112,7 @@ function AragornBody() {
 
   const loadData = useCallback(async () => {
     try {
-      const [c, i, o] = await Promise.all([listAragornContainers(), listAragornImages(), listAragornOps()]);
+      const [c, i, o] = await Promise.all([listAndurilContainers(), listAndurilImages(), listAndurilOps()]);
       setContainers(c);
       setImages(i);
       setOps(o);
@@ -139,7 +139,7 @@ function AragornBody() {
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 1500));
       // eslint-disable-next-line no-await-in-loop
-      current = await getAragornOp(op.id);
+      current = await getAndurilOp(op.id);
       setOps((prev) => [current, ...prev.filter((p) => p.id !== current.id)]);
     }
     if (current.state === 'failed') setError(`${current.action} ${current.target}: ${current.error}`);
@@ -156,7 +156,7 @@ function AragornBody() {
     };
     if (warnings[action] && !window.confirm(warnings[action])) return;
     try {
-      await waitForOp(await aragornContainerAction(container.name, action));
+      await waitForOp(await andurilContainerAction(container.name, action));
     } catch (err) {
       if (isBusy(err)) {
         const force = window.confirm(
@@ -164,7 +164,7 @@ function AragornBody() {
         );
         if (force) {
           try {
-            await waitForOp(await aragornContainerAction(container.name, action, true));
+            await waitForOp(await andurilContainerAction(container.name, action, true));
           } catch (err2) {
             setError(errorText(err2));
           }
@@ -177,7 +177,7 @@ function AragornBody() {
 
   const showStats = async (container) => {
     try {
-      const s = await getAragornStats(container.name);
+      const s = await getAndurilStats(container.name);
       setStats((prev) => ({ ...prev, [container.name]: s }));
     } catch (err) {
       setError(errorText(err));
@@ -186,7 +186,7 @@ function AragornBody() {
 
   const showLogs = async (name, tail = 200) => {
     try {
-      const data = await getAragornLogs(name, tail);
+      const data = await getAndurilLogs(name, tail);
       setLogs({ name, tail, text: data.logs });
     } catch (err) {
       setError(errorText(err));
@@ -195,7 +195,7 @@ function AragornBody() {
 
   const pull = async (ref) => {
     try {
-      await waitForOp(await aragornPullImage(ref));
+      await waitForOp(await andurilPullImage(ref));
     } catch (err) {
       setError(errorText(err));
     }
@@ -204,7 +204,7 @@ function AragornBody() {
   const removeImage = async (image) => {
     if (!window.confirm(`Remove image ${image.tags.join(', ') || image.short_id}?`)) return;
     try {
-      await waitForOp(await aragornRemoveImage(image.id));
+      await waitForOp(await andurilRemoveImage(image.id));
     } catch (err) {
       setError(errorText(err));
     }
@@ -213,7 +213,7 @@ function AragornBody() {
   const prune = async () => {
     if (!window.confirm('Remove dangling images built for Rivendell?')) return;
     try {
-      await waitForOp(await aragornPruneImages());
+      await waitForOp(await andurilPruneImages());
     } catch (err) {
       setError(errorText(err));
     }
@@ -249,7 +249,7 @@ function AragornBody() {
         <h2>Containers and images</h2>
         <p className="aragorn-note">
           Rivendell containers and images on <code>{status.socket}</code> (compose project <code>{status.project}</code>).
-          Rebuilding Rivendell's own images runs on the host: <code>rivendell aragorn rebuild &lt;service&gt;</code>.
+          Rebuilding Rivendell's own images runs on the host: <code>rivendell anduril rebuild &lt;service&gt;</code>.
         </p>
         {error && (
           <div className="error">
@@ -414,7 +414,7 @@ function Aragorn() {
       {tab === 'deploy' && (admin ? <LabBuilder /> : adminOnly)}
       {tab === 'settings' && (
         <>
-          <AragornBody />
+          <AndurilPanel />
           {admin ? <LabManage section="settings" /> : adminOnly}
         </>
       )}

@@ -1,9 +1,9 @@
-"""Aragorn: Rivendell's Docker administration service.
+"""Anduril: Rivendell's Docker administration service.
 
 The only Rivendell container that holds the Docker socket. It serves a small
 JSON API on the internal admin network to the backend, which authenticates
 with a token this process generates at start-up and writes to a volume only
-the backend mounts. Every request goes through the ``aragorn`` package's scope rules,
+the backend mounts. Every request goes through the ``anduril`` package's scope rules,
 so the backend (and anything that compromises it) can act on Rivendell
 containers and images and nothing else.
 """
@@ -26,15 +26,15 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
 
-from aragorn import BusyError, DockerAdmin, EngineError, EngineUnavailable, ScopeError
-from aragorn.scope import check_action, container_service
+from anduril import BusyError, DockerAdmin, EngineError, EngineUnavailable, ScopeError
+from anduril.scope import check_action, container_service
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger("rivendell.aragorn")
+logger = logging.getLogger("rivendell.anduril")
 
-TOKEN_PATH = Path(os.environ.get("ARAGORN_TOKEN_PATH", "/run/aragorn/token"))
-PORT = int(os.environ.get("ARAGORN_PORT", "5690"))
-BIND = os.environ.get("ARAGORN_BIND", "0.0.0.0")
+TOKEN_PATH = Path(os.environ.get("ANDURIL_TOKEN_PATH", "/run/anduril/token"))
+PORT = int(os.environ.get("ANDURIL_PORT", "5690"))
+BIND = os.environ.get("ANDURIL_BIND", "0.0.0.0")
 MAX_BODY = 64 * 1024
 MAX_OPS = 50
 CONTAINER_ACTIONS = ("start", "stop", "restart", "update", "recreate")
@@ -130,7 +130,7 @@ def admin() -> DockerAdmin:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "rivendell-aragorn"
+    server_version = "rivendell-anduril"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         logger.info("%s %s", self.address_string(), fmt % args)
@@ -146,7 +146,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _authorised(self) -> bool:
-        supplied = self.headers.get("X-Aragorn-Token", "")
+        supplied = self.headers.get("X-Anduril-Token", "")
         return bool(TOKEN) and hmac.compare_digest(supplied.encode(), TOKEN.encode())
 
     def _body(self) -> dict:
@@ -161,7 +161,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method: str) -> None:
         if not self._authorised():
-            self._send(401, {"detail": "Invalid Aragorn token"})
+            self._send(401, {"detail": "Invalid Anduril token"})
             return
         url = urlparse(self.path)
         parts = [p for p in url.path.split("/") if p]
@@ -250,7 +250,7 @@ def main() -> None:
     except EngineUnavailable as exc:
         logger.error("%s - is /var/run/docker.sock mounted?", exc)
     server = ThreadingHTTPServer((BIND, PORT), Handler)
-    logger.info("Aragorn listening on %s:%d", BIND, PORT)
+    logger.info("Anduril listening on %s:%d", BIND, PORT)
     server.serve_forever()
 
 

@@ -1,6 +1,6 @@
 """Administration operations on Rivendell containers and images.
 
-Used by the Aragorn service (for the web UI) and by `rivendell aragorn` on the
+Used by the Anduril service (for the web UI) and by `rivendell anduril` on the
 host, so both apply the same scope rules.
 """
 
@@ -12,7 +12,7 @@ from typing import Callable, Optional
 
 from .engine import Engine, EngineError, reachable_sockets
 from .scope import (
-    ARAGORN_SERVICE,
+    ANDURIL_SERVICE,
     PROJECT,
     BusyError,
     ScopeError,
@@ -28,7 +28,7 @@ from .scope import (
     split_image_ref,
 )
 
-logger = logging.getLogger("rivendell.aragorn")
+logger = logging.getLogger("rivendell.anduril")
 
 Progress = Callable[[str], None]
 
@@ -114,7 +114,7 @@ class DockerAdmin:
                 "status": c.get("Status", ""),
                 "created": c.get("Created"),
                 "ports": sorted({f"{p['PublicPort']}->{p['PrivatePort']}" for p in c.get("Ports") or [] if p.get("PublicPort")}),
-                "protected": service == ARAGORN_SERVICE,
+                "protected": service == ANDURIL_SERVICE,
                 "job_processes": busy if service == "celery-worker" else [],
             })
         return out
@@ -210,7 +210,7 @@ class DockerAdmin:
         if ref not in self._scoped_refs():
             raise ScopeError(f"'{ref}' is not an image used by Rivendell")
         if any(ref in i["tags"] and i["built"] for i in self.list_images()):
-            raise ScopeError(f"'{ref}' is built locally; rebuild it from the host CLI (rivendell aragorn rebuild)")
+            raise ScopeError(f"'{ref}' is built locally; rebuild it from the host CLI (rivendell anduril rebuild)")
         return ref
 
     def pull(self, ref: str, progress: Optional[Progress] = None) -> str:
