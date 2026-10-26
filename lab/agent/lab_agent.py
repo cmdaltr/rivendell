@@ -33,6 +33,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import mordor_api  # the Mordor page's lab (src/mordor/lab, ported from Archer)
+
 LAB_ROOT = Path(__file__).resolve().parent.parent
 LAB_SH = LAB_ROOT / "lab.sh"
 DEFAULT_TOKEN_FILE = Path("/tmp/rivendell/.lab-agent/token")
@@ -162,6 +164,44 @@ class Runner:
         log.info("run %s: %s", run_id, run["label"])
         return run
 
+    def start_python(self, label: str, fn) -> dict:
+        """A Mordor-page job (src.mordor.lab): fn(say) in a thread, its lines in the run's log."""
+        with self.lock:
+            if self.current:
+                raise RuntimeError(f"'{self.runs[self.current[0]]['label']}' is still running")
+            run_id = uuid.uuid4().hex[:12]
+            run = {"id": run_id, "command": "mordor", "args": [], "label": label, "status": "running",
+                   "exit_code": None, "started": time.time(), "finished": None}
+            self.runs[run_id] = run
+            self.current = (run_id, None)
+            self._trim()
+        logfile = RUN_DIR / f"{run_id}.log"
+
+        def say(line: str) -> None:
+            with logfile.open("a", encoding="utf-8") as fh:
+                fh.write(f"{time.strftime('%H:%M:%S')}  {line}\n")
+
+        def work() -> None:
+            code = 0
+            try:
+                fn(say)
+                say("Done")
+            except Exception as exc:  # noqa: BLE001 — a job must never take the agent down
+                code = 1
+                say(f"Failed: {getattr(exc, 'message', None) or exc}")
+                if getattr(exc, "detail", ""):
+                    say(exc.detail[:500])
+            with self.lock:
+                run.update(exit_code=code, finished=time.time(),
+                           status="succeeded" if code == 0 else "failed")
+                self.current = None
+            log.info("run %s finished: %s", run_id, run["status"])
+
+        say(label)
+        threading.Thread(target=work, daemon=True).start()
+        log.info("run %s: %s", run_id, label)
+        return run
+
     def _wait(self, run_id: str, proc: subprocess.Popen) -> None:
         code = proc.wait()
         with self.lock:
@@ -178,6 +218,8 @@ class Runner:
             if not self.current or self.current[0] != run_id:
                 raise KeyError(run_id)
             proc = self.current[1]
+            if proc is None:
+                raise KeyError(run_id)  # a Mordor-page job runs in-process; it can't be cancelled
             self.runs[run_id]["status"] = "cancelled"
         # The whole group: lab.sh, docker, vagrant, ssh relays.
         try:
@@ -237,6 +279,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    @staticmethod
+    def _lab_config() -> dict:
+        code, out = run_lab(["state"])
+        return {k: v for k, v in parse_state(out).items() if k.isupper()} if code == 0 else {}
+
     def _authorised(self) -> bool:
         given = self.headers.get("X-Lab-Token", "")
         if given and hmac.compare_digest(given, self.token):
@@ -280,6 +327,9 @@ class Handler(BaseHTTPRequestHandler):
             })
         if parts == ["runs"]:
             return self._send(200, self.runner.list())
+        if parts and parts[0] == "mordor":
+            mordor_api.configure(self._lab_config)
+            return self._send(*mordor_api.handle_get(parts[1:], parse_qs(url.query), self.runner.busy()))
         if len(parts) == 2 and parts[0] == "runs":
             try:
                 offset = int(parse_qs(url.query).get("offset", ["0"])[0])
@@ -328,6 +378,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(202, self.runner.start(command, args))
             except RuntimeError as exc:
                 return self._send(409, {"error": str(exc)})
+
+        if parts and parts[0] == "mordor":
+            mordor_api.configure(self._lab_config)
+            return self._send(*mordor_api.handle_post(parts[1:], body, self.runner))
 
         if len(parts) == 3 and parts[0] == "runs" and parts[2] == "cancel":
             try:

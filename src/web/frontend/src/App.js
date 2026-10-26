@@ -5,6 +5,7 @@ import Home from './components/Home';
 import GandalfLanding from './components/GandalfLanding';
 import ElrondLanding from './components/ElrondLanding';
 import MordorLanding from './components/MordorLanding';
+import MordorTelemetry from './components/MordorTelemetry';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
@@ -87,6 +88,7 @@ function AppContent() {
             <Route path="/gandalf" element={<GandalfLanding />} />
             <Route path="/elrond" element={<ElrondLanding />} />
             <Route path="/mordor" element={<MordorLanding />} />
+            <Route path="/mordor/telemetry" element={<MordorTelemetry />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />

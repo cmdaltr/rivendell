@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MordorCatalog from './MordorCatalog';
+import { MordorTabs } from './MordorTelemetry';
 import { getLocalMordorDatasets, refreshMordorCatalog, getMordorCatalog, downloadMordorDataset } from '../api';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
@@ -137,6 +138,7 @@ const MordorLanding = () => {
           project for threat research, detection development, and testing.
         </p>
       </header>
+      <MordorTabs active="datasets" />
 
 {/* Info Section */}
       <div className="card" style={{ marginTop: '1.5rem' }}>

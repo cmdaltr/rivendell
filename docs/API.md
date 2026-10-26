@@ -1036,15 +1036,16 @@ Aragorn won't stop, restart or recreate its own container from the API. Use `riv
 
 ## Mordor: Recorded Attack Telemetry
 
-**Authentication:** none (read-only)
+**Authentication:** none to read; `ADMIN` for Update and the lab
 
-Which logs record each ATT&CK technique, from attacks emulated in labs, and whether a detection's indicators appear in the recorded events. The engine is `src/mordor/telemetry`, ported from Archer. It ships with 1,632 recordings covering 354 techniques: OTRF Security-Datasets (Mordor), Splunk attack_data and EVTX-to-MITRE-Attack. Your own recordings from `./lab.sh mordor-record` show up as the source `lab`. Nothing here touches the network; rebuilds run from the CLI (`python -m src.mordor.telemetry --build`) and the API picks up the new files on the next request.
+Which logs record each ATT&CK technique, from attacks emulated in labs, and whether a detection's indicators appear in the recorded events. The engine is `src/mordor/telemetry`, ported from Archer. It ships with 1,632 recordings covering 354 techniques: OTRF Security-Datasets (Mordor), Splunk attack_data and EVTX-to-MITRE-Attack. Your own recordings from `./lab.sh mordor-record` or the Mordor page show up as the source `lab`, and Microsoft GUIDE adds Defender XDR's alerting per technique. Reading touches no network. A rebuild from the CLI (`python -m src.mordor.telemetry --build`) or the lab is picked up on the next request.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/mordor/telemetry/status` | Sources built, recording and technique counts, whether field values are present |
+| `GET` | `/api/mordor/telemetry/status` | Sources built, recordings per source, technique count, whether field values are present, the lab's runs, Microsoft GUIDE's summary, and the state and log of an Update |
+| `POST` | `/api/mordor/telemetry/build` | Update (admin): fetch what Splunk attack_data and OTRF changed and rebuild, in the background (`409` while one runs). EVTX-to-MITRE-Attack is included only when the backend has the `evtx` package, since without it a rebuild would drop those recordings |
 | `GET` | `/api/mordor/telemetry/techniques` | Every recorded technique, one row each |
-| `GET` | `/api/mordor/telemetry/technique/{technique_id}` | A technique's recordings (exact, else its sub-techniques or parent), their event types, and the Defender XDR tables and Chronicle UDM types they need |
+| `GET` | `/api/mordor/telemetry/technique/{technique_id}` | A technique's recordings (exact, else its sub-techniques or parent), their event types, the Defender XDR tables and Chronicle UDM types they need, and `defender`: GUIDE's alert count, organisations and true-positive rate, or `null` |
 | `GET` | `/api/mordor/telemetry/data-sources` | For each Defender table and UDM event type, the techniques it records |
 | `GET` | `/api/mordor/telemetry/search?q=` | `{technique: [logs]}` whose events hold a field value containing `q` (3–200 characters; `…` matches a variable span, as in `C:\Users\…\AppData`) |
 | `POST` | `/api/mordor/telemetry/check` | One detection's indicators against its technique's recordings and everyone else's: seen, not seen or noisy per indicator |
@@ -1063,6 +1064,27 @@ A detection for `/check`:
 ```
 
 Indicator kinds are `cmd`, `file`, `sw`, `path`, `reg`, `network`, `domain`, `ip`, `port`, `service`, `acct`, `evt`, `api` and `op`/`operation`.
+
+### Mordor Lab
+
+**Role Required:** `ADMIN`
+
+The machines recordings run on (`src/mordor/lab`, ported from Archer). Docker, Tart and UTM are on the host, so these proxy to the lab agent (`./lab.sh agent start`) and return `503` without it. Machine and snapshot names are 1–64 letters, digits, `.`, `-` or `_`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/mordor/lab/overview` | The host and its engines, the templates it can create, every machine (`lab` for the lab's own, `deletable` only for ones created here), the names already taken, and any running job |
+| `GET` | `/api/mordor/lab/logs?engine=&name=` | A container's log, or a VM's address |
+| `GET` | `/api/mordor/lab/provision-steps?os=` | The set-up steps for `windows`, `linux` or `macos` |
+| `POST` | `/api/mordor/lab/create` | `{"template": "ubuntu-container", "name": "..."}`. Starts a job |
+| `POST` | `/api/mordor/lab/action` | `{"engine", "name", "action"}`: `start`, `stop`, `snapshot`, `revert` (a job) or `delete`, with `snapshot` for the last three. Delete is refused for the lab's machines and anything not created here |
+| `POST` | `/api/mordor/lab/adopt` | Set a UTM VM's OS: `{"engine": "utm", "name", "os"}` |
+| `POST` | `/api/mordor/lab/clone` | `{"engine": "utm", "name", "new_name"}`. Starts a job |
+| `POST` | `/api/mordor/lab/verify-iso` | `{"path"}`: whether the file is a Windows ARM64 installer (reads the ISO9660 directory only) |
+| `POST` | `/api/mordor/lab/provision` | `{"engine", "name", "os", "step"}`. On the lab's Windows VM it runs `mordor-sensor`. Starts a job |
+| `POST` | `/api/mordor/lab/record` | `{"engine", "name", "os", "techniques", "revert_to", "execute"}`. With `execute: false` it returns the plan and warnings and runs nothing; with `true` it runs Atomic Red Team in the machine and imports the recording. Starts a job |
+
+A job returns `202` with a lab run (`id`, `label`, `status`); poll `/api/lab/runs/{id}?offset=` for its output. One job runs at a time across the whole lab (`409` otherwise).
 
 ---
 

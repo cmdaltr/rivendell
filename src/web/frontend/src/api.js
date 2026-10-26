@@ -301,3 +301,18 @@ export const listLabRuns = async () => (await api.get('/api/lab/runs')).data;
 export const getLabRun = async (runId, offset = 0) =>
   (await api.get(`/api/lab/runs/${runId}`, { params: { offset } })).data;
 export const cancelLabRun = async (runId) => (await api.post(`/api/lab/runs/${runId}/cancel`)).data;
+
+// Mordor: recorded attack telemetry (src/mordor/telemetry) and the lab that records it
+// (src/mordor/lab, through the host's lab agent; admin-only)
+export const getTelemetryStatus = async () => (await api.get('/api/mordor/telemetry/status')).data;
+export const getTelemetryTechniques = async (params = {}) =>
+  (await api.get('/api/mordor/telemetry/techniques', { params })).data;
+export const getTelemetryTechnique = async (tid, params = {}) =>
+  (await api.get(`/api/mordor/telemetry/technique/${encodeURIComponent(tid)}`, { params })).data;
+export const searchTelemetry = async (q) => (await api.get('/api/mordor/telemetry/search', { params: { q } })).data;
+export const updateTelemetry = async () => (await api.post('/api/mordor/telemetry/build')).data;
+export const getMordorLab = async () => (await api.get('/api/mordor/lab/overview')).data;
+export const getMordorLabLogs = async (engine, name) =>
+  (await api.get('/api/mordor/lab/logs', { params: { engine, name } })).data;
+export const getMordorLabSteps = async (os) => (await api.get('/api/mordor/lab/provision-steps', { params: { os } })).data;
+export const postMordorLab = async (verb, body) => (await api.post(`/api/mordor/lab/${verb}`, body)).data;

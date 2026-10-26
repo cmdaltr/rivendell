@@ -130,13 +130,25 @@ Each capture runs the Atomic tests, exports the Sysmon, Security and PowerShell 
 
 It copies `Invoke-MordorRecord.ps1` into the VM and runs each test of each technique: prerequisites, then the test, then a 20-second settle (`MORDOR_SETTLE`), then cleanup. Each test's Windows event logs (Security, System, PowerShell, Sysmon, Task Scheduler, WMI, Defender, BITS) are saved as `events.xml`. The run is copied to `src/mordor/data/telemetry/lab/lab-win11-<preset>-<time>/` and the `lab` source is rebuilt. The recordings hold the VM's host name, so they're gitignored and never written to the shipped files. `RIVENDELL_TELEMETRY_LAB` puts them somewhere else.
 
-The shipped data already covers 1,632 recordings across 354 techniques (OTRF Security-Datasets, Splunk attack_data, EVTX-to-MITRE-Attack). The API is under `/api/mordor/telemetry` (see [docs/API.md](../docs/API.md#mordor-recorded-attack-telemetry)). From the repository root:
+The shipped data covers 1,632 recordings across 354 techniques (OTRF Security-Datasets, Splunk attack_data, EVTX-to-MITRE-Attack), plus Microsoft GUIDE's Defender XDR alerting for 441 techniques. The API is under `/api/mordor/telemetry` (see [docs/API.md](../docs/API.md#mordor-recorded-attack-telemetry)). From the repository root:
 
 ```bash
 python3 -m src.mordor.telemetry                          # sources and technique count
 python3 -m src.mordor.telemetry --build --source lab     # re-read your recordings
-python3 -m src.mordor.telemetry --build                  # re-fetch the public sources (~1.2 GB first time; needs requests and PyYAML)
+python3 -m src.mordor.telemetry --build                  # re-fetch what the public sources changed (needs PyYAML; evtx needs the evtx package)
+python3 -m src.mordor.telemetry --guide <Kaggle zip>     # re-summarise Microsoft GUIDE
 ```
+
+### The Mordor Page
+
+**Mordor → Recorded telemetry & lab** in the web UI (`/mordor/telemetry`) is Archer's Emulate page, ported. It shows where the telemetry comes from (the pipeline diagram and a card per public dataset, with **Update** for admins), the lab that records your own, and every recorded technique with the logs its recordings hold, searchable by a value in the recorded events.
+
+**Your lab** needs the lab agent and an admin login. It shows this host and the engines it can drive (Docker, Tart, UTM), what you can create on it, and every machine:
+
+- **Create a machine**: an Ubuntu container (Docker), an Ubuntu or macOS VM (Tart, Apple silicon). Windows comes from UTM: **Clone existing** copies a built VM; **From ISO** checks a Windows 11 ARM64 ISO and can run `./lab.sh windows-vm create` to build the lab's VM unattended.
+- **Your machines**: Start/Stop, Snapshot, Revert, Clone (UTM), Set OS (a UTM VM the lab didn't build), Set up (audit logging, PowerShell, Atomic Red Team), Record (Atomic Red Team, with a preview and a snapshot confirmation), Logs, and Delete.
+
+The lab's own machines (the `lab-*` Gandalf containers, `rivendell-lab-macos`, `rivendell-lab-win11`) are listed and can be driven, but only `./lab.sh` deletes them. Delete appears only on machines this page created. Other VMs in UTM (Archer's `archer-win11`, say) can be started, snapshotted and recorded on, never deleted. **Set up** and **Record** on the lab's Windows VM run `mordor-sensor` and `mordor-record` over SSH; on any other machine they run inside it through `docker exec`, `tart exec` or `utmctl exec`, which on a UTM VM needs the UTM guest tools. Machines go to the Docker engine Rivendell runs on and to `LAB_TART_HOME`. What the page knows about them (template, OS, set-up steps) is in `~/.config/rivendell-lab/mordor-machines.json`. Slow actions run one at a time with the other lab commands and show their log on the page.
 
 ## Running Rivendell's Tests Against the Lab
 

@@ -1,9 +1,10 @@
 """python -m src.mordor.telemetry                 # what's built
    python -m src.mordor.telemetry --build         # fetch what the sources changed
    python -m src.mordor.telemetry --build --source otrf   # one source (splunk|otrf|evtx|macos|lab)
+   python -m src.mordor.telemetry --guide <GUIDE zip, folder or CSV>   # Microsoft GUIDE (Defender XDR alerting)
 
-Ported from Archer. "lab" reads your own recordings (./lab.sh mordor-record). The Microsoft
-GUIDE and Defender-export sources were left out (they depend on Archer's Graph setup).
+Ported from Archer. "lab" reads your own recordings (./lab.sh mordor-record). The Defender
+export (mde.py) was left out: it depends on Archer's Microsoft Graph setup.
 """
 
 import argparse
@@ -72,8 +73,13 @@ def main(argv=None):
     p = argparse.ArgumentParser(description="Recorded attack telemetry (Splunk attack_data, Security-Datasets, EVTX-to-MITRE-Attack, macOS-ATTACK-DATASET, your lab)")
     p.add_argument("--build", action="store_true", help="download what changed and rebuild")
     p.add_argument("--source", choices=SOURCES, action="append", help="only this source (repeatable)")
+    p.add_argument("--guide", metavar="PATH", help="summarise Microsoft's GUIDE dataset (the Kaggle zip, a folder or a CSV)")
     args = p.parse_args(argv)
-    if args.build:
+    if args.guide:
+        from . import guide
+
+        guide.build(args.guide)
+    elif args.build:
         build(tuple(args.source or SOURCES))
     else:
         s = ds.load()

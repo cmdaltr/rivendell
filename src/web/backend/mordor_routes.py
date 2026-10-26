@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import yaml
@@ -10,10 +11,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from pydantic import BaseModel, Field
 
+try:
+    from .lab_routes import _agent as _lab_agent, require_lab_admin
+except ImportError:
+    from lab_routes import _agent as _lab_agent, require_lab_admin
+
 router = APIRouter(prefix="/api/mordor", tags=["mordor"])
+logger = logging.getLogger(__name__)
 
 # Configuration
 GITHUB_API = "https://api.github.com/repos/OTRF/Security-Datasets"
@@ -714,14 +721,15 @@ async def verify_dataset_endpoint(dataset_id: str):
 # ============================================
 # Which logs record each ATT&CK technique, from OTRF Security-Datasets, Splunk
 # attack_data, EVTX-to-MITRE-Attack and the lab's own recordings
-# (./lab.sh mordor-record). Read-only: rebuilds run from the CLI,
-# python -m src.mordor.telemetry --build.
+# (./lab.sh mordor-record), plus Microsoft GUIDE's Defender XDR alerting.
+# Reading is open; Update (a rebuild from the sources) is admin-only.
 
 TELEMETRY_ROOT = os.environ.get("RIVENDELL_SRC_ROOT", "/opt/rivendell")
 
 
 def _telemetry():
-    """(check, datasets), reloading the data if a build has rewritten it since."""
+    """(check, datasets), reloading the data if a build has rewritten it since. A build in this
+    process clears the caches itself; this catches the CLI's and the lab agent's."""
     import sys
 
     if TELEMETRY_ROOT not in sys.path:
@@ -730,6 +738,8 @@ def _telemetry():
         from src.mordor.telemetry import check, datasets as ds
     except ImportError as e:
         raise HTTPException(status_code=503, detail=f"Telemetry package not mounted at {TELEMETRY_ROOT}: {e}")
+    if _build_job["state"] == "running":
+        return check, ds  # a build rewrites the files as it goes; keep the loaded data till it's done
     stamp = tuple(os.path.getmtime(p) if os.path.exists(p) else 0
                   for p in (ds.SUMMARY_PATH, ds.VALUES_PATH, ds.LOCAL_SUMMARY_PATH, ds.LOCAL_VALUES_PATH))
     if ds._cache.get("stamp") != stamp:
@@ -756,13 +766,77 @@ class TelemetryNoisyRequest(BaseModel):
     technique_id: Optional[str] = None
 
 
+def _guide():
+    from src.mordor.telemetry import guide
+
+    return guide
+
+
 @router.get("/telemetry/status")
 async def telemetry_status():
-    """The sources built, how many recordings and techniques, and whether field values are here."""
+    """The sources built, how many recordings and techniques, whether field values are here,
+    Microsoft GUIDE's summary, and the state of an Update."""
     _, ds = _telemetry()
     summary = ds.load()
+    g = _guide().load()
+    lab_runs = sorted({d["id"].split(":", 1)[1].split("/", 1)[0] for d in summary["datasets"] if d["source"] == "lab"})
     return {"sources": summary.get("sources", {}), "datasets": len(summary["datasets"]),
-            "techniques": len(ds.covered()), "values": ds.values() is not None}
+            "techniques": len(ds.covered()), "values": ds.values() is not None,
+            "per_source": {k: sum(1 for d in summary["datasets"] if d["source"] == k) for k in summary.get("sources", {})},
+            "lab_runs": lab_runs,
+            "guide": {**g["source"], "techniques": len(g["techniques"])} if g else None,
+            "build": {**_build_job, "log": list(_build_log)[-40:]}}
+
+
+# Update: one rebuild at a time, in a thread, its log polled through /telemetry/status
+import threading  # noqa: E402
+from collections import deque  # noqa: E402
+
+_build_job: Dict[str, Any] = {"state": "idle", "started": None, "finished": None, "error": None, "sources": []}
+_build_log: deque = deque(maxlen=400)
+_build_lock = threading.Lock()
+
+
+def _buildable_sources() -> List[str]:
+    """The public sources this backend can rebuild. EVTX-to-MITRE-Attack's files are binary .evtx,
+    which need the evtx package; without it a rebuild would drop those recordings, so it's left out.
+    macOS-ATTACK-DATASET is GPL-3.0 and local-only; it's rebuilt from the CLI if wanted."""
+    try:
+        import evtx  # noqa: F401
+        return ["splunk", "otrf", "evtx"]
+    except ImportError:
+        return ["splunk", "otrf"]
+
+
+@router.post("/telemetry/build")
+async def telemetry_build(user: dict = Depends(require_lab_admin)):
+    """Fetch what the public sources changed since the last build and rebuild (admin)."""
+    check, ds = _telemetry()
+    sources = _buildable_sources()
+    with _build_lock:
+        if _build_job["state"] == "running":
+            raise HTTPException(status_code=409, detail="An update is already running")
+        _build_job.update(state="running", started=datetime.utcnow().isoformat() + "Z", finished=None,
+                          error=None, sources=sources)
+        _build_log.clear()
+
+    def say(line: str):
+        _build_log.append(f"{datetime.now().strftime('%H:%M:%S')}  {line}")
+
+    def work():
+        from src.mordor.telemetry.__main__ import build
+
+        try:
+            say(f"Updating {', '.join(sources)} (only what changed is fetched)")
+            build(tuple(sources), log=say)
+            check._haystack.clear()
+            _build_job.update(state="done", finished=datetime.utcnow().isoformat() + "Z")
+        except Exception as e:  # noqa: BLE001 — a failed fetch must not take the API down
+            _build_job.update(state="error", finished=datetime.utcnow().isoformat() + "Z", error=str(e))
+            say(f"Failed: {e}")
+
+    threading.Thread(target=work, daemon=True).start()
+    return {"started": True, "sources": sources, "by": user.get("username")}
 
 
 @router.get("/telemetry/techniques")
@@ -777,7 +851,9 @@ async def telemetry_techniques(collections: str = Query(""), platforms: str = Qu
 async def telemetry_technique(technique_id: str, collections: str = Query(""), platforms: str = Query("")):
     """A technique's recordings, the event types they hold and the Defender/UDM sources they need."""
     check, ds = _telemetry()
-    return check.technique(technique_id[:20], *_telemetry_filters(ds, collections, platforms))
+    tid = technique_id[:20]
+    return {**check.technique(tid, *_telemetry_filters(ds, collections, platforms)),
+            "defender": _guide().for_technique(tid)}
 
 
 @router.get("/telemetry/data-sources")
@@ -809,3 +885,54 @@ async def telemetry_noisy(req: TelemetryNoisyRequest):
     """Which indicators also turn up while many unrelated techniques ran."""
     check, _ = _telemetry()
     return check.noisy(indicators=req.indicators or None, technique_id=req.technique_id or "")
+
+
+# ============================================
+# Mordor lab: the machines recordings run on (src/mordor/lab, ported from Archer)
+# ============================================
+# Docker, Tart and UTM are on the host, so these proxy to the lab agent (lab/agent/mordor_api.py),
+# admin-only like the rest of the lab. Slow actions start an agent run; poll /api/lab/runs/{id}.
+
+
+class MordorLabRequest(BaseModel):
+    engine: str = ""
+    name: str = ""
+    action: str = ""
+    snapshot: str = ""
+    template: str = ""
+    new_name: str = ""
+    os: str = ""
+    step: str = ""
+    path: str = ""
+    techniques: str = ""
+    run_name: str = ""
+    revert_to: str = ""
+    settle: int = 20
+    timeout: int = 120
+    execute: bool = False
+
+
+@router.get("/lab/overview")
+async def mordor_lab_overview(_: dict = Depends(require_lab_admin)):
+    """This host, the machines it can create, the machines there are, and any running job."""
+    return await _lab_agent("GET", "/mordor/overview")
+
+
+@router.get("/lab/logs")
+async def mordor_lab_logs(engine: str, name: str, _: dict = Depends(require_lab_admin)):
+    return await _lab_agent("GET", "/mordor/logs", params={"engine": engine, "name": name})
+
+
+@router.get("/lab/provision-steps")
+async def mordor_lab_provision_steps(os: str, _: dict = Depends(require_lab_admin)):
+    return await _lab_agent("GET", "/mordor/provision-steps", params={"os": os})
+
+
+@router.post("/lab/{verb}")
+async def mordor_lab_post(verb: str, req: MordorLabRequest, user: dict = Depends(require_lab_admin)):
+    """create, action, adopt, clone, verify-iso, provision, record."""
+    if verb not in ("create", "action", "adopt", "clone", "verify-iso", "provision", "record"):
+        raise HTTPException(status_code=404, detail="Unknown lab action")
+    if verb != "verify-iso" and not (verb == "record" and not req.execute):
+        logger.info(f"Mordor lab {verb} by {user.get('username')}: {req.engine} {req.name} {req.action}".strip())
+    return await _lab_agent("POST", f"/mordor/{verb}", json=req.model_dump())
