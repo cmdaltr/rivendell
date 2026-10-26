@@ -260,6 +260,7 @@ function LabBuilder() {
       <div className="card lb-builder">
         {tool === 'gandalf' && (
           <>
+            <div className="lb-pair">
             <Step n="1" title="Collector">
               <div className="lb-row">
                 <Choice active={collector === 'bash'} onClick={() => setCollector('bash')}>Bash · gandalf.sh</Choice>
@@ -281,6 +282,7 @@ function LabBuilder() {
                 </div>
               )}
             </Step>
+            </div>
             <Step n="3" title="Acquire to">
               <p className="lab-note"><code>{acqRoot}/{collector}_collection/acquisitions/&lt;host&gt;/</code>, each target with its <code>expected.json</code> (the lab's seeded attacks).</p>
               <label className="lb-check"><input type="checkbox" checked={thenElrond} onChange={(e) => setThenElrond(e.target.checked)} /> Then analyse it with Elrond</label>
