@@ -805,12 +805,29 @@ def mount_vmdk_image(
     return partitions
 
 
+# The raw device ewfmount exposes for each EWF image, so carving reads the media,
+# not the compressed container (E8)
+EWF_RAW = {}
+
+
 def mount_ewf(path, intermediate_mount):
     subprocess.Popen(
         ["ewfmount", path, intermediate_mount],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     ).communicate()[1],
+    EWF_RAW[os.path.realpath(path)] = os.path.join(intermediate_mount, "ewf1")
+
+
+def ewf_raw(path):
+    """The mounted raw media of an EWF image, or None when it isn't mounted. Matched
+    by name when the path differs (carving names images from the source root, but
+    they may sit in a subdirectory of it)."""
+    raw = EWF_RAW.get(os.path.realpath(path))
+    if raw is None:
+        named = [r for src, r in EWF_RAW.items() if os.path.basename(src) == os.path.basename(path)]
+        raw = named[0] if len(named) == 1 else None
+    return raw if raw and os.path.exists(raw) else None
 
 
 def mount_images(

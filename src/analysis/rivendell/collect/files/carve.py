@@ -1,10 +1,23 @@
 #!/usr/bin/env python3 -tt
 import os
+import re
 import subprocess
 import time
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.mount import ewf_raw
+
+EWF_IMAGE = re.compile(r"\.(?:e|ex|l|lx|s)01$", re.I)
+
+
+def carve_source(image_path):
+    """What foremost reads: the image itself, or for an EWF image the raw media
+    ewfmount exposes (carving the E01 container finds compressed chunks, E8).
+    None when an EWF image's raw media isn't mounted."""
+    if EWF_IMAGE.search(image_path):
+        return ewf_raw(image_path)
+    return image_path
 
 
 def carve_files(output_directory, verbosity, d, artefact_directory, img, vssimage):
@@ -13,10 +26,20 @@ def carve_files(output_directory, verbosity, d, artefact_directory, img, vssimag
             vssimage
         )
     )
+    source = carve_source(d + img.split("::")[0])
+    if source is None:
+        print("       Warning: '{}' isn't mounted as raw media; skipped carving it".format(img.split("::")[0]))
+        entry, prnt = "{},{},{},skipped (EWF media not mounted)\n".format(
+            datetime.now().isoformat(), vssimage.replace("'", ""), "carving"
+        ), " -> {} -> skipped carving {}: EWF media not mounted".format(
+            datetime.now().isoformat().replace("T", " "), vssimage
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        return
     subprocess.Popen(
         [
             "foremost",
-            d + img.split("::")[0],
+            source,
             "-o",
             artefact_directory + "/carved",
         ],
