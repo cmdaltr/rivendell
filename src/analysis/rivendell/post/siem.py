@@ -1,23 +1,44 @@
 #!/usr/bin/env python3 -tt
 """Pre-flight reachability checks for remote SIEM export targets."""
+import logging
 import os
 import socket
+import time
+
+logger = logging.getLogger(__name__)
 
 
 class SIEMUnavailableError(Exception):
     """Raised when SIEM export is requested but the remote SIEM cannot be reached."""
 
 
-def _check_reachable(name: str, host: str, port: str, timeout: float) -> None:
-    try:
-        with socket.create_connection((host, int(port)), timeout=timeout):
-            pass
-    except (OSError, ValueError) as e:
-        raise SIEMUnavailableError(
-            f"{name} export requested but {host}:{port} is unreachable ({e}). "
-            "If running under Docker Compose, start the SIEM stack with "
-            "`docker compose --profile siem up -d`."
-        ) from e
+# Splunk takes a minute or two to accept connections after its container starts, so
+# a refused or timed-out connection is retried; a name that doesn't resolve isn't.
+RETRY_DELAYS = (2, 4, 8, 16, 30, 60)
+
+
+def _check_reachable(name: str, host: str, port: str, timeout: float, delays=RETRY_DELAYS) -> None:
+    for attempt, delay in enumerate((*delays, None), 1):
+        try:
+            with socket.create_connection((host, int(port)), timeout=timeout):
+                return
+        except socket.gaierror as e:
+            raise SIEMUnavailableError(
+                f"{name} export requested but {host} doesn't resolve ({e}): its container isn't "
+                "running or isn't on this network. Under Docker Compose, start the SIEM stack with "
+                "`docker compose --profile siem up -d`."
+            ) from e
+        except (OSError, ValueError) as e:
+            if isinstance(e, ValueError) or delay is None:
+                raise SIEMUnavailableError(
+                    f"{name} export requested but {host}:{port} is unreachable after "
+                    f"{attempt} attempt{'s' if attempt != 1 else ''} ({e}). If it's still starting, "
+                    "re-run once it accepts connections; under Docker Compose, start the SIEM stack "
+                    "with `docker compose --profile siem up -d`."
+                ) from e
+            logger.warning("%s at %s:%s not accepting connections yet (%s); retrying in %ds",
+                           name, host, port, e, delay)
+            time.sleep(delay)
 
 
 def ensure_remote_siem_reachable(splunk: bool, elastic: bool, timeout: float = 5.0) -> None:
