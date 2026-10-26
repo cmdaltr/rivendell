@@ -252,10 +252,10 @@ function LabManage({ section = 'lab', children = null }) {
   const img = (f, alt) => (f.includes('.')
     ? <img className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
     : <span className="lab-logo-text">{f}</span>);
-  // Buttons line up in shared columns: up and down do start and stop's job on the containers; buttons
+  // Buttons line up in shared columns: up, down and reset take start, stop and delete's columns on the containers; buttons
   // only some rows have go on the left, the ones every row has on the right, status last.
-  const slotOf = (a) => ({ up: 'start', down: 'stop' }[a] || a);
-  const SLOT_ORDER = ['adopt', 'provision', 'reset', 'create', 'delete', 'start', 'stop', 'status'];
+  const slotOf = (a) => ({ up: 'start', down: 'stop', reset: 'delete' }[a] || a);
+  const SLOT_ORDER = ['adopt', 'provision', 'create', 'delete', 'start', 'stop', 'status'];
   const slotsFor = (defs) => {
     const count = {};
     defs.forEach(([, , items, fixed]) => {
