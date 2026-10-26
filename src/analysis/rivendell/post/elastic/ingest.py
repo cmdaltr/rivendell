@@ -16,6 +16,7 @@ from datetime import datetime
 from io import StringIO
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.post.siem import memory_outputs, siem_hosts
 
 
 def normalize_timestamp(record):
@@ -564,10 +565,7 @@ def ingest_elastic_data_remote(
     # Large file threshold (50MB) - files larger than this use streaming
     LARGE_FILE_THRESHOLD = 50 * 1024 * 1024
 
-    imgs_to_ingest = []
-    for _, img in allimgs.items():
-        if img not in str(imgs_to_ingest):
-            imgs_to_ingest.append(img)
+    imgs_to_ingest = siem_hosts(allimgs)
 
     # Create index in Elasticsearch
     print("     Creating Elasticsearch index '{}'...".format(case.lower()))
@@ -641,10 +639,9 @@ def ingest_elastic_data_remote(
         print("     Warning: Could not create index pattern: {}".format(e))
 
     # Ingest data for each image
-    for img in imgs_to_ingest:
-        # Handle image name format: "imagename::mountpoint" or just "imagename"
+    for img_name, img in imgs_to_ingest:
+        # img is "<name>::<platform>[_vssN]"; img_name is the host's output folder
         img_parts = img.split("::")
-        img_name = img_parts[0]
         img_mount = img_parts[1] if len(img_parts) > 1 else ""
 
         if "vss" in img_mount:
@@ -662,12 +659,13 @@ def ingest_elastic_data_remote(
         # Find all JSON and CSV files in cooked directory
         cooked_path = os.path.join(output_directory, img_name, "artefacts", "cooked")
 
-        if not os.path.exists(cooked_path):
+        memory_files = memory_outputs(os.path.join(output_directory, img_name))
+        if not os.path.exists(cooked_path) and not memory_files:
             print("     No cooked artefacts found for {}".format(vssimage))
             continue
 
-        # Collect all files to ingest
-        files_to_ingest = []
+        # Collect all files to ingest: cooked artefacts, and Volatility's output beside them
+        files_to_ingest = list(memory_files)
         files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "*.json")))
         files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "*.csv")))
         files_to_ingest.extend(glob.glob(os.path.join(cooked_path, "**", "*.json"), recursive=True))

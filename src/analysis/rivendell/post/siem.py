@@ -1,5 +1,6 @@
 #!/usr/bin/env python3 -tt
 """Pre-flight reachability checks for remote SIEM export targets."""
+import glob
 import logging
 import os
 import socket
@@ -62,3 +63,21 @@ def ensure_remote_siem_reachable(splunk: bool, elastic: bool, timeout: float = 5
             os.environ.get("ELASTICSEARCH_PORT", "9200"),
             timeout,
         )
+
+
+def siem_hosts(allimgs) -> list:
+    """[(host folder, '<name>::<platform>')] for each allimgs entry, once each. Memory
+    images carry their name in the key and a directory as the value, so reading the
+    value alone sent their output nowhere."""
+    from rivendell.post.clean import output_folder_name
+    hosts = []
+    for key, value in allimgs.items():
+        label = value if "::" in str(value) else key
+        if all(label != seen for _, seen in hosts):
+            hosts.append((output_folder_name(key, value), label))
+    return hosts
+
+
+def memory_outputs(host_dir: str) -> list:
+    """Volatility's JSON for a host: <host>/memory_<plugin>.json, beside artefacts/."""
+    return sorted(glob.glob(os.path.join(host_dir, "memory_*.json")))

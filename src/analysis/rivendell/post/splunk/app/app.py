@@ -391,10 +391,10 @@ label.control-label {
                     '[browser_name]\ndefinition = rex field=source "/browsers/(?P<browser>[^/]+)/"\niseval = 0\n\n'
                 )
                 macrosconf.write(
-                    '[browser_domain_domain]\ndefinition = search url=* | rex field=Domain "(?:https?://)?(?:www\\.)?(?P<domain_domain>[^/:]+\.[^/:]+)(?:/|:)"\niseval = 0\n\n'
+                    '[browser_domain_domain]\ndefinition = search url=* | rex field=Domain "(?:https?://)?(?:www\\.)?(?P<domain_domain>[^/:]+\\.[^/:]+)(?:/|:)"\niseval = 0\n\n'
                 )
                 macrosconf.write(
-                    '[browser_domain_url]\ndefinition = search url=* | rex field=url "(?:https?://)?(?:www\\.)?(?P<domain_url>[^/:]+\.[^/:]+)(?:/|:)"\niseval = 0\n\n'
+                    '[browser_domain_url]\ndefinition = search url=* | rex field=url "(?:https?://)?(?:www\\.)?(?P<domain_url>[^/:]+\\.[^/:]+)(?:/|:)"\niseval = 0\n\n'
                 )
                 macrosconf.write(
                     "[browser_domain]\ndefinition = `browser_domain_domain` | `browser_domain_url` | eval domain = mvdedup(mvappend(domain_domain, domain_url)) | fields - domain_domain domain_url\niseval = 0\n\n"

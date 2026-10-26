@@ -53,3 +53,18 @@ def test_gives_up_after_the_last_delay(monkeypatch):
     monkeypatch.setattr(siem.time, "sleep", lambda _: None)
     with pytest.raises(siem.SIEMUnavailableError, match="after 3 attempts"):
         siem._check_reachable("Splunk", "splunk", "8089", 1, delays=(1, 1))
+
+
+def test_memory_hosts_are_named_from_their_key(tmp_path):
+    allimgs = {"/mnt/elrond_mount00": "WIN.E01::Windows",
+               "/mnt/elrond_mount01": "WIN.E01::Windows_vss1",
+               "mem.raw::Win10x64_19041": "/evidence/case1"}
+    assert siem.siem_hosts(allimgs) == [("WIN.E01", "WIN.E01::Windows"),
+                                        ("WIN.E01", "WIN.E01::Windows_vss1"),
+                                        ("mem.raw", "mem.raw::Win10x64_19041")]
+
+
+def test_memory_outputs_are_found_beside_artefacts(tmp_path):
+    (tmp_path / "memory_pslist.json").write_text("[]")
+    (tmp_path / "artefacts").mkdir()
+    assert [Path(p).name for p in siem.memory_outputs(str(tmp_path))] == ["memory_pslist.json"]

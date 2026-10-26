@@ -745,7 +745,7 @@ def create_transforms(
         "Message_|_timer": "T1053.006 - Systemd Timers",  # unix-logs, timeline
         "Message_|_trap": "T1546.005 - Trap",  # unix-logs, timeline
         "Message_|_tscon": "T1563.002 - RDP Hijacking",  # unix-logs, timeline
-        "Message_|_u\+?202e": "T1036.002 - Right-to-Left Override",  # unix-logs, timeline
+        "Message_|_u\\+?202e": "T1036.002 - Right-to-Left Override",  # unix-logs, timeline
         "Message_|_uielement": "T1564.003 - Hidden Window",  # unix-logs, timeline
         "Message_|_vboxmanage|virtualbox|vmplayer|vmprocess|vmware|hyper-v|qemu": "T1564.006 - Run Virtual Instance",  # unix-logs, timeline
         "Message_|_vbscript|wscript": "T1059.005 - Visual Basic|T1059.007 - JavaScript",  # unix-logs, timeline

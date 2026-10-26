@@ -12,6 +12,7 @@ from rivendell.audit import write_audit_log_entry
 from rivendell.utils import safe_input
 from rivendell.post.splunk.app.app import build_app_elrond
 from rivendell.post.splunk.ingest import ingest_splunk_data
+from rivendell.post.siem import memory_outputs, siem_hosts
 
 # Try to import Splunk apps - they may not be installed
 try:
@@ -398,8 +399,7 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
             # output where the worker does, so it monitors the worker's own path (E10:
             # it was always /tmp/elrond/output/<case>/, so custom destinations indexed 0)
             inputs_entries = []
-            for _, img in allimgs.items():
-                img_name = img.split("::")[0]
+            for img_name, img in siem_hosts(allimgs):
                 base_path = os.path.join(os.path.normpath(output_directory), img_name)
                 cooked_path = "{}/artefacts/cooked".format(base_path)
                 if not splunk_can_see(base_path):
@@ -536,6 +536,23 @@ def configure_splunk_stack(verbosity, output_directory, case, stage, allimgs):
                     "host = {}\n"
                     "sourcetype = json\n"
                     "index = {}\n\n".format(cooked_path, img_name, case)
+                )
+
+                # Volatility's output sits beside artefacts/, not in cooked/
+                for memory_file in memory_outputs(base_path):
+                    entry, prnt = "{},{},indexing '{}' for '{}'\n".format(
+                        datetime.now().isoformat(), "splunk", os.path.basename(memory_file), img_name
+                    ), " -> {} -> indexing '{}' for '{}'".format(
+                        datetime.now().isoformat().replace("T", " "), os.path.basename(memory_file), img_name
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+                inputs_entries.append(
+                    "[monitor://{}/memory_*.json]\n"
+                    "disabled = false\n"
+                    "crcSalt = <SOURCE>\n"
+                    "host = {}\n"
+                    "sourcetype = json\n"
+                    "index = {}\n\n".format(base_path, img_name, case)
                 )
 
                 # Add audit log file
