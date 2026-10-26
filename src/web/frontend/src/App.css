@@ -2991,9 +2991,9 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lb-choice { display: inline-flex; align-items: center; padding: 0.4rem 0.9rem; background: transparent; border: 1px solid #3a3a6a; border-radius: 999px; color: #ccc; font-size: 0.85rem; cursor: pointer; }
 .lb-choice:hover:not(:disabled) { border-color: #66d9ef; color: #66d9ef; }
 .lb-choice.is-active { border-color: #8abf4d; color: #c3e88d; background: rgba(138, 191, 77, 0.1); }
-.lb-input { padding: 0.45rem 0.75rem; background: #12121f; border: 1px solid #3a3a6a; border-radius: 4px; color: #eee; font-size: 0.85rem; min-width: 16rem; }
+.lb-input { width: 18rem; padding: 0.45rem 0.75rem; background: #12121f; border: 1px solid #3a3a6a; border-radius: 4px; color: #eee; font-size: 0.85rem; min-width: 16rem; }
 .lb-input.lb-wide { width: 100%; }
-.lb-select { width: auto; min-width: 16rem; }
+select.large-select.lb-select { width: auto; min-width: 16rem; padding: 0.45rem 0.75rem; font-size: 0.85rem; font-family: inherit; letter-spacing: 0; }
 .lb-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #ccc; }
 .lb-warn { color: #d57a54; }
 .lb-plan { border-top: 1px solid #2a2a5a; padding-top: 1rem; }
