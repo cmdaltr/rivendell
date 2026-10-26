@@ -21,8 +21,8 @@ const SETTINGS = [
   ['LAB_DATA_DIR', 'Lab data directory', 'Collected acquisitions and Mordor datasets go here.'],
   ['TEST_IMAGES_PATH', 'Test images root', "Rivendell's test root; the lab writes gandalf/ and mordor/ under it when set."],
   ['LAB_VM_DIR', 'VM directory', 'Vagrant boxes, VirtualBox and Tart VMs.'],
-  ['WINDOWS_VM_MEMORY_MB', 'Windows VM memory (MB)', ''],
   ['WINDOWS_VM_CPUS', 'Windows VM CPUs', ''],
+  ['WINDOWS_VM_MEMORY_MB', 'Windows VM memory (MB)', ''],
   ['LINUX_VM_MEMORY_MB', 'Linux VM memory (MB)', ''],
 ];
 
