@@ -1,7 +1,9 @@
 #!/usr/bin/env python3 -tt
+import json
 import os
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.memory.memory import process_memory
@@ -10,6 +12,7 @@ from rivendell.process.extractions.registry.profile import extract_registry_prof
 from rivendell.process.extractions.registry.system import extract_registry_system
 from rivendell.process.extractions.usb import extract_usb
 from rivendell.process.extractions import artemis
+from rivendell.process.wmi_repository import wmi_subscriptions
 
 # Track which prefetch directories have been processed to avoid duplicates
 _processed_prefetch_dirs = set()
@@ -487,7 +490,49 @@ def process_wbem(
         wmi_dir=wbem_dir,
     )
     print(f"    [DEBUG-WBEM] artemis.extract_wmipersist returned: {result}", flush=True)
+    carve_wmi_subscriptions(verbosity, vssimage, output_directory, img, vss_path_insert, stage, wbem_dir)
     print(f"    [DEBUG-WBEM] About to return from process_wbem", flush=True)
+
+
+def carve_wmi_subscriptions(verbosity, vssimage, output_directory, img, vss_path_insert, stage, wbem_dir):
+    """Carve event subscriptions from OBJECTS.DATA when Artemis found none
+    (it can't parse Windows 11 repositories, E35)."""
+    wbem_json = output_directory + img.split("::")[0] + "/artefacts/cooked" + vss_path_insert + "wbem.json"
+    try:
+        with open(wbem_json) as f:
+            if json.load(f):
+                return
+    except (OSError, ValueError):
+        pass
+    objects_data = os.path.join(wbem_dir, "OBJECTS.DATA")
+    if not os.path.isfile(objects_data):
+        return
+    try:
+        subscriptions = wmi_subscriptions(Path(objects_data))
+    except OSError as e:
+        print(" -> {} -> WARNING: could not carve WMI subscriptions: {}".format(
+            datetime.now().isoformat().replace("T", " "), e
+        ))
+        return
+    if not subscriptions:
+        return
+    os.makedirs(os.path.dirname(wbem_json), exist_ok=True)
+    with open(wbem_json, "w") as f:
+        json.dump(subscriptions, f, indent=1)
+    for record in subscriptions:
+        if "note" in record:
+            continue
+        entry, prnt = "{},{},{},WMI event subscription '{}' -> '{}' ({})\n".format(
+            datetime.now().isoformat(), vssimage.replace("'", ""), stage,
+            record["filter_name"], record["consumer_name"], record["consumer_class"],
+        ), " -> {} -> WMI event subscription '{}' -> {} '{}' for {}".format(
+            datetime.now().isoformat().replace("T", " "), record["filter_name"],
+            record["consumer_class"], record["consumer_name"], vssimage,
+        )
+        write_audit_log_entry(verbosity, output_directory, entry, prnt)
+    # Only a subscription Windows doesn't create itself is evidence of T1546.003
+    if any("note" not in record for record in subscriptions):
+        artemis.enrich_with_mitre(wbem_json, "wmipersist")
 
 
 def process_sru(
