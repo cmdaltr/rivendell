@@ -36,7 +36,14 @@ class IocExtractionTest(unittest.TestCase):
 
     def test_internal_suffixes_and_mail(self) -> None:
         self.assertEqual(extract_line_iocs("dc01.contoso.local"), [("dc01.contoso.local", "domain")])
-        self.assertEqual(extract_line_iocs("to: ops@corp.example.co.uk"), [("corp.example.co.uk", "domain")])
+        self.assertEqual(extract_line_iocs("to: ops@mail.evil-corp.co.uk"), [("mail.evil-corp.co.uk", "domain")])
+
+    def test_vendor_subdomains_versions_and_paths_are_noise(self) -> None:
+        self.assertEqual(extract_line_iocs('<assembly manifestVersion="1.0.0.0" version="6.2.3.0">'), [])
+        self.assertEqual(extract_line_iocs("http://schemas.microsoft.com/win/2004 swcdn.apple.com"), [])
+        self.assertEqual(extract_line_iocs("prnms003.cat"), [])
+        path = "https://cdn.example.org/" + "/".join(["content", "downloads", "61", "45", "072-44426-A_16242I3TPF"] * 4)
+        self.assertEqual([kind for _, kind in extract_line_iocs(path) if "base64" in kind], [])
 
 
 def _event(channel: str, event_id: int, **data) -> dict:
