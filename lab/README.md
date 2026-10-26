@@ -55,7 +55,7 @@ cd lab
 
 Then sign in to Rivendell as an admin and open **Aragorn**. It has three tabs:
 
-- **Lab** (`/aragorn#lab`; `/lab` goes there too) is the lab itself: the `lab.sh` target commands, the lab machines (see [The Mordor Page](#the-mordor-page)), maintenance (Rivendell test settings, teardown) and recent runs.
+- **Lab** (`/aragorn#lab`; `/lab` goes there too) is the lab itself: the `lab.sh` target commands with maintenance (Rivendell test settings, teardown), the lab machines (see [The Mordor Page](#the-mordor-page)) and recent runs.
 - **Deploy** (`/aragorn#deploy`) builds a run and deploys it. Pick **Gandalf**, **Elrond** or **Mordor**, then work through its steps: for Gandalf, the collector, the targets to deploy it to, where the acquisition lands, and optionally an Elrond analysis of it under a case ID; for Elrond, which acquisitions to analyse, the case ID and how deep; for Mordor, record Atomic Red Team on a lab machine (which machine, set it up first or not, the techniques, the snapshot to revert to), capture a dataset in the Windows VM, or download OTRF datasets. The plan underneath lists what **Deploy** will do, and Deploy runs those steps in order, stopping at the first failure, with the output streaming below. An Elrond step starts a job and links to it.
 - **Settings** (`/aragorn#settings`) has Rivendell's own containers and images (Anduril, the Docker manager) and the lab's host profile, settings and password.
 
