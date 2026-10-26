@@ -26,6 +26,7 @@ const SETTINGS = [
   ['LINUX_VM_MEMORY_MB', 'Linux VM memory (MB)', ''],
 ];
 
+const DIR_KEYS = ['LAB_DATA_DIR', 'TEST_IMAGES_PATH', 'LAB_VM_DIR'];
 const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
 const STATUS_ICON = { succeeded: '✅', failed: '❌', cancelled: '⏹️', running: '⏳' };
 const formatTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '—');
@@ -251,6 +252,13 @@ function LabManage({ section = 'lab', children = null }) {
   const img = (f, alt) => (f.includes('.')
     ? <img className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
     : <span className="lab-logo-text">{f}</span>);
+  const field = ([key, label, help]) => (
+    <label key={key} className={`lab-field${DIR_KEYS.includes(key) ? '' : ' lab-field-narrow'}`} title={help}>
+      <span>{label}</span>
+      <input type="text" value={settings[key] ?? ''} placeholder={help}
+             onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} />
+    </label>
+  );
   // Buttons line up in shared columns: up, down and reset take start, stop and delete's columns on the containers; buttons
   // only some rows have go on the left, the ones every row has on the right, status last.
   const slotOf = (a) => ({ up: 'start', down: 'stop', reset: 'delete' }[a] || a);
@@ -349,27 +357,22 @@ function LabManage({ section = 'lab', children = null }) {
             <button className="secondary" disabled={busy} onClick={() => start('status')}>Status</button>
             <button className="secondary" onClick={refresh}>Refresh</button>
           </div>
-          <div className="lab-fields">
-            {SETTINGS.map(([key, label, help]) => (
-              <label key={key} className="lab-field" title={help}>
-                <span>{label}</span>
-                <input type="text" value={settings[key] ?? ''} placeholder={help}
-                       onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} />
-              </label>
-            ))}
+          <div className="lab-fields lab-fields-dirs">
+            {SETTINGS.filter(([key]) => DIR_KEYS.includes(key)).map(field)}
           </div>
-          <div className="lab-actions">
-            <button onClick={saveSettings}>Save settings</button>
-          </div>
-          <div className="lab-fields">
-            <label className="lab-field lab-field-wide" title="No quotes, backslashes or spaces. Targets created before a change keep their old password until they're re-created.">
-              <span>Lab password, for the <code>gandalf</code> user on every target (a custom one goes in the host keyring)</span>
-              <div className="lab-actions">
+          <div className="lab-fields-row">
+            {SETTINGS.filter(([key]) => !DIR_KEYS.includes(key)).map(field)}
+            <label className="lab-field lab-field-password" title="For the gandalf user on every target; a custom one goes in the host keyring. No quotes, backslashes or spaces. Targets created before a change keep their old password until they're re-created.">
+              <span>Lab password</span>
+              <div className="lab-inline">
                 <input type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
                 <button onClick={() => savePassword(password)} disabled={!password}>Set custom password</button>
                 {!state.password_default && <button className="secondary" onClick={() => savePassword('')}>Use the default</button>}
               </div>
             </label>
+          </div>
+          <div className="lab-actions">
+            <button onClick={saveSettings}>Save settings</button>
           </div>
         </div>
       )}

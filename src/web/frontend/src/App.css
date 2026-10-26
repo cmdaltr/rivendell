@@ -2925,8 +2925,14 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lab-field > span { color: #f0dba5; }
 .lab-field input { width: 100%; box-sizing: border-box; padding: 0.4rem 0.6rem; font-size: 0.85rem; }
 .lab-field input::placeholder { color: #666; font-size: 0.78rem; }
-.lab-field-wide { grid-column: 1 / -1; }
-.lab-field-wide .lab-actions input { width: 18rem; }
+.lab-fields-dirs { grid-template-columns: repeat(3, 1fr); }
+.lab-fields-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 1rem; margin-bottom: 0.75rem; }
+.lab-field-narrow { width: 10.5rem; }
+.lab-field-password { flex: 1; min-width: 22rem; }
+.lab-inline { display: flex; gap: 0.5rem; align-items: center; }
+.lab-inline input { flex: 1; min-width: 10rem; }
+.lab-inline button { white-space: nowrap; padding: 0.4rem 0.8rem; font-size: 0.82rem; }
+@media (max-width: 900px) { .lab-fields-dirs { grid-template-columns: 1fr; } }
 
 /* Aragorn → Lab: Targets and Recent runs side by side, maintenance underneath */
 .lab-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: stretch; margin-bottom: 1.5rem; }
