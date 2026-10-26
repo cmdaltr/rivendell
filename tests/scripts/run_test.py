@@ -1052,8 +1052,8 @@ LINUX_TESTS = [
     # ),
     TestCase(
         name="linux_memory",
-        description="Linux disk image with Memory Collection",
-        images=[LINUX_DISK_IMAGE],
+        description="Linux disk + memory image with Memory Collection",
+        images=[LINUX_DISK_IMAGE, LINUX_MEMORY_IMAGE],
         options={
             "memory": True,
         },
@@ -1063,8 +1063,8 @@ LINUX_TESTS = [
     ),
     TestCase(
         name="linux_memory_timeline",
-        description="Linux disk image with Memory Collection & memory timeline",
-        images=[LINUX_DISK_IMAGE],
+        description="Linux disk + memory image with Memory Collection & memory timeline",
+        images=[LINUX_DISK_IMAGE, LINUX_MEMORY_IMAGE],
         options={
             "memory": True,
             "memory_timeline": True,

@@ -159,6 +159,10 @@ services:
       - /tmp/rivendell:/tmp/elrond/output # Output directory (accessible at /tmp/rivendell on host)
       - /tmp/rivendell:/tmp/rivendell # Mount for test images in /tmp/rivendell
       - ./fixtures:/tmp/rivendell/fixtures:ro # Keywords, YARA rules, IOC watchlists for analysis
+      # Volatility 3 symbol tables (ISF) for Linux and macOS memory, which it can't fetch
+      # itself as it does Windows PDBs (E14); kept here so worker rebuilds don't lose them
+      - ./symbols/linux:/usr/local/lib/python3.10/dist-packages/volatility3/symbols/linux:ro
+      - ./symbols/mac:/usr/local/lib/python3.10/dist-packages/volatility3/symbols/mac:ro
       - rivendell_uploads:/tmp/elrond/uploads # For uploaded forensic images
       - splunk_etc:/opt/splunk/etc
       - splunk_var:/opt/splunk/var
