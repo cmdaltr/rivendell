@@ -15,7 +15,10 @@
 param(
     [string]$GandalfSource = "C:\lab\gandalf-src",
     [string]$AcquisitionsRoot = "C:\lab\acquisitions",
-    [switch]$Memory
+    [switch]$Memory,
+    # Seeded files outside Gandalf's artefact set (expected.json's IOCs live in them),
+    # collected with -CollectFiles; an empty list skips file collection
+    [string[]]$Files = @("sync.ps1", "notes.txt")
 )
 $ErrorActionPreference = "Stop"
 
@@ -44,6 +47,8 @@ $work = "C:\TEMP\gandalf\gandalf"
 Remove-Item -Recurse -Force "C:\TEMP\gandalf" -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path (Split-Path $work) | Out-Null
 Copy-Item -Recurse $GandalfSource $work
+# The copy's files.list, not the repo's: Get-Files reads it from the install path
+if ($Files) { Set-Content -Path (Join-Path $work "lists\files.list") -Value $Files }
 $entry = Join-Path $work "windows\Invoke-Gandalf.ps1"
 $started = Get-Date
 
@@ -51,6 +56,7 @@ Push-Location (Join-Path $work "windows")
 try {
     $gandalfArgs = @{ EncryptionObject = "None"; Acquisition = "Local"; OutputDirectory = "acquisitions" }
     if ($Memory) { $gandalfArgs.Memory = $true }
+    if ($Files) { $gandalfArgs.CollectFiles = $true }
     # Newer Invoke-Gandalf declares -NoPrompt; the Read-Host shim covers older copies.
     if ((Get-Command $entry).Parameters.ContainsKey("NoPrompt")) { $gandalfArgs.NoPrompt = $true }
     # Gandalf expects PowerShell's default "Continue": under "Stop" one artefact's
