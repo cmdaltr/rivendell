@@ -628,19 +628,20 @@ function TelemetryViews({ refreshKey }) {
   return (
     <>
       <div className="mt-filters">
-        <input type="search" value={q} maxLength={200} onChange={(e) => setQ(e.target.value)}
-               placeholder="Search indicators: a value in the recorded events (comsvcs, lsass.dmp, vssadmin…)" />
-        <select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+        <input type="text" value={q} maxLength={200} onChange={(e) => setQ(e.target.value)}
+               placeholder="Search recorded events (comsvcs, lsass.dmp, vssadmin…)" />
+        <select className="large-select" value={platform} onChange={(e) => setPlatform(e.target.value)}>
           <option value="">All platforms</option>
           {Object.entries(meta.platforms).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <select value={collection} onChange={(e) => setCollection(e.target.value)}>
+        <select className="large-select" value={collection} onChange={(e) => setCollection(e.target.value)}>
           <option value="">All logging</option>
           {Object.entries(meta.collections).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <span className="mt-dim">{shown.length} techniques</span>
       </div>
-      <table className="lab-table mt-techniques">
+      <p className="mt-dim mt-count">Showing {shown.length} of {rows.length} techniques</p>
+      <table className="mt-techniques">
+        <colgroup><col style={{ width: '13%' }} /><col style={{ width: '17%' }} /><col style={{ width: '36%' }} /><col style={{ width: '20%' }} /><col style={{ width: '14%' }} /></colgroup>
         <thead><tr><th>Technique</th><th>Recordings</th><th>Logs most recordings hold</th><th>Defender XDR</th><th>Platforms</th></tr></thead>
         <tbody>
           {pageRows.map((r) => (
@@ -648,7 +649,7 @@ function TelemetryViews({ refreshKey }) {
               <tr className="mt-click" onClick={() => setOpen(open === r.technique ? null : r.technique)}>
                 <td><a href={`https://attack.mitre.org/techniques/${r.technique.replace('.', '/')}/`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>{r.technique}</a></td>
                 <td>{Object.entries(r.sources).map(([k, n]) => `${n} ${k}`).join(', ')}</td>
-                <td>{found && found[r.technique] ? <span className="mt-seen">seen in {found[r.technique].join(', ')}</span> : r.logs.slice(0, 3).join(', ')}</td>
+                <td>{found && found[r.technique] ? <span className="mt-seen">seen in {found[r.technique].slice(0, 3).join(', ')}</span> : r.logs.slice(0, 3).join(', ')}</td>
                 <td>{r.mde.join(', ')}</td>
                 <td>{r.platforms.join(', ')}</td>
               </tr>
