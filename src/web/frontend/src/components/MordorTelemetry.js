@@ -114,7 +114,7 @@ function Sources({ status, isAdmin, onUpdate }) {
           <div>
             <div className="mt-source-top"><strong>Your lab</strong><span className="mt-badge">{runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'}` : 'No runs yet'}</span></div>
             <div className="mt-source-meta">{count.lab || 0} recordings · yours, never committed</div>
-            <div className="mt-source-note">Atomic Red Team on the lab's own machines, each test's logs kept apart (Aragorn → Lab)</div>
+            <div className="mt-source-note">Atomic Red Team on the lab's own machines, each test's logs kept apart (Aragorn → Deploy)</div>
           </div>
         </li>
         {SOURCES.filter(s => info[s.key]).map(s => (
@@ -345,7 +345,7 @@ function MordorTelemetry() {
         <Pipeline />
         <p className="lab-note">
           Recordings are real attacks run in a lab with logging on: the public datasets that ship with Rivendell, plus any you
-          record yourself in the lab (Aragorn → Lab). Each is mapped to ATT&amp;CK, then Rivendell checks whether the
+          record yourself in the lab (Aragorn → Deploy). Each is mapped to ATT&amp;CK, then Rivendell checks whether the
           indicators a detection matches actually appear in the recorded events. The result is the <strong>Recorded telemetry</strong>
           {' '}view below. No AI is involved.
         </p>
@@ -357,7 +357,7 @@ function MordorTelemetry() {
           each test's logs back here as <strong>Your lab</strong>. The machines are managed in Aragorn, with the rest of what
           Rivendell runs on this host.
         </p>
-        <a className="mt-pill-link" href="/aragorn#lab">Record in the lab →</a>
+        <a className="mt-pill-link" href="/aragorn#deploy">Record in the lab →</a>
       </div>
 
       <div className="card">

@@ -1,4 +1,4 @@
-// Aragorn → Lab: build a lab run step by step (Gandalf, Elrond or Mordor), review the plan, then
+// Aragorn → Deploy: build a lab run step by step (Gandalf, Elrond or Mordor), review the plan, then
 // Deploy. Each step is a lab agent run (lab.sh or src/mordor/lab) or an Elrond job; they run in
 // order, each waiting for the one before, with the current one's log underneath.
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -133,7 +133,7 @@ function LabBuilder() {
   let blocker = null;
   if (tool === 'gandalf') {
     if (collector === 'powershell') {
-      if (!windowsVm) blocker = "The lab's Windows VM doesn't exist yet (Manage → Lab machines, or From ISO).";
+      if (!windowsVm) blocker = "The lab's Windows VM doesn't exist yet (Lab → Lab machines, or From ISO).";
       plan.push({ label: `Run Invoke-Gandalf in ${lab.lab_windows_vm} and copy the archive out`, kind: 'lab', command: 'gandalf-collect', args: ['powershell'] });
     } else {
       if (!targets.length) blocker = 'Pick at least one target.';
@@ -148,7 +148,7 @@ function LabBuilder() {
     if (!elrondPath) blocker = 'Give the acquisitions folder.';
     plan.push({ label: `Elrond: ${ELROND_PROFILES[profile].label.toLowerCase()} on ${elrondPath || '…'} as ${caseId || '…'}`, kind: 'elrond', path: elrondPath });
   } else if (mode === 'record') {
-    if (!picked) blocker = 'No machine with a known OS yet (Manage → Lab machines).';
+    if (!picked) blocker = 'No machine with a known OS yet (Lab → Lab machines).';
     else {
       if (!techniques || !/^T\d{4}(\.\d{3})?(,T\d{4}(\.\d{3})?)*$/i.test(techniques)) blocker = 'Techniques look like T1059.001,T1053.005.';
       if (!snapped) blocker = blocker || "Confirm the machine is snapshotted and disposable.";

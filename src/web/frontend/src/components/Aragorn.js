@@ -58,16 +58,16 @@ function EnablePanel({ status, onRecheck }) {
 
   return (
     <div className="card aragorn-enable">
-      <h2>Aragorn is not enabled</h2>
+      <h2>Anduril is not enabled</h2>
       {status?.reason === 'secret_key' ? (
         <p>
           The backend is still signing logins with the default JWT secret, so anyone could forge an admin
-          token. Aragorn stays off until <code>SECRET_KEY</code> is set for the backend (in your shell or a
+          token. Anduril stays off until <code>SECRET_KEY</code> is set for the backend (in your shell or a
           <code> .env</code> file next to <code>docker-compose.yml</code>). Then run the command below on the host.
         </p>
       ) : (
         <p>
-          Aragorn needs access to the Docker socket to manage Rivendell's containers and images. Only the host
+          Anduril, Rivendell's Docker manager, needs access to the Docker socket to manage Rivendell's containers and images. Only the host
           can grant that, so run this on the machine running Docker Desktop or OrbStack. It explains what it
           grants and asks before changing anything.
         </p>
@@ -77,7 +77,7 @@ function EnablePanel({ status, onRecheck }) {
         <button className="secondary" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
       </div>
       <p className="aragorn-note">
-        Aragorn only sees containers labelled with the <code>rivendell</code> compose project and named
+        Anduril only sees containers labelled with the <code>rivendell</code> compose project and named
         <code> rivendell-*</code>. Other containers and images on the same engine are never listed or touched.
       </p>
       {status?.detail && <p className="aragorn-note">Last error: {status.detail}</p>}
@@ -219,7 +219,7 @@ function AragornBody() {
     }
   };
 
-  if (loading) return <div className="loading">Checking Aragorn...</div>;
+  if (loading) return <div className="loading">Checking Anduril…</div>;
 
   if (!isAdmin) {
     return (
@@ -371,23 +371,23 @@ function AragornBody() {
   );
 }
 
-// Aragorn: everything Rivendell runs on this host. Lab builds and deploys a lab run (Gandalf, Elrond
-// or Mordor); Manage is Rivendell's own containers and images (the aragorn service) and the lab's
-// host, settings, targets and machines (the lab agent).
-const TABS = [['lab', 'Lab'], ['manage', 'Manage']];
+// Aragorn: everything Rivendell runs on this host. Lab is the lab's targets and machines (the lab
+// agent); Deploy builds and runs a Gandalf, Elrond or Mordor run; Settings is Rivendell's containers
+// and images (Anduril, the aragorn service) and the lab's host, settings and password.
+const TABS = [['lab', 'Lab'], ['deploy', 'Deploy'], ['settings', 'Settings']];
 
 function Aragorn() {
   const { user } = useAuth();
   const { hash } = useLocation();
   const navigate = useNavigate();
-  const tab = hash === '#manage' ? 'manage' : 'lab';
+  const tab = TABS.some(([k]) => `#${k}` === hash) ? hash.slice(1) : 'lab';
   const admin = user?.role === 'admin';
   const adminOnly = <div className="card"><p>The lab is limited to Rivendell administrators. Sign in with an admin account.</p></div>;
   return (
     <div className="journey-detail">
       <PageHero title="Aragorn">
-        Everything Rivendell runs on this machine: build a lab run with Gandalf, Elrond or Mordor and deploy it, or
-        manage Rivendell's containers and the lab's machines.
+        Everything Rivendell runs on this machine: the lab's targets and machines, runs that deploy Gandalf, Elrond
+        or Mordor against them, and Rivendell's own containers and settings.
       </PageHero>
       <div className="aragorn-tabs" role="tablist">
         {TABS.map(([key, label]) => (
@@ -398,24 +398,24 @@ function Aragorn() {
           </button>
         ))}
       </div>
-      {tab === 'lab' && (admin ? <LabBuilder /> : adminOnly)}
-      {tab === 'manage' && (
+      {tab === 'lab' && (admin ? (
+        <LabManage section="lab">
+          <div className="card">
+            <h2>Lab machines</h2>
+            <p className="lab-note">
+              Create and manage the containers and VMs Gandalf collects from and Mordor records on. Rivendell drives Docker
+              and Tart for Linux and macOS, and UTM for Windows. The machines are disposable: snapshot one before you turn
+              logging on or run atomics, and revert when you're done. Recordings appear on the Mordor page as Your lab.
+            </p>
+            <LabMachines />
+          </div>
+        </LabManage>
+      ) : adminOnly)}
+      {tab === 'deploy' && (admin ? <LabBuilder /> : adminOnly)}
+      {tab === 'settings' && (
         <>
           <AragornBody />
-          {admin ? (
-            <>
-              <LabManage />
-              <div className="card">
-                <h2>Lab machines</h2>
-                <p className="lab-note">
-                  Create and manage the containers and VMs Gandalf collects from and Mordor records on. Rivendell drives Docker
-                  and Tart for Linux and macOS, and UTM for Windows. The machines are disposable: snapshot one before you turn
-                  logging on or run atomics, and revert when you're done. Recordings appear on the Mordor page as Your lab.
-                </p>
-                <LabMachines />
-              </div>
-            </>
-          ) : adminOnly}
+          {admin ? <LabManage section="settings" /> : adminOnly}
         </>
       )}
     </div>

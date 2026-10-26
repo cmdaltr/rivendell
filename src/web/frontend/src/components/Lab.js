@@ -71,7 +71,8 @@ function RunOutput({ run, onCancel, onClose }) {
   );
 }
 
-function LabManage() {
+// section: 'settings' (host, settings, password) or 'lab' (targets, maintenance, runs)
+function LabManage({ section = 'lab', children = null }) {
   const { user } = useAuth();
   const [status, setStatus] = useState(null);
   const [state, setState] = useState(null);
@@ -211,23 +212,45 @@ function LabManage() {
       {error && <div className="card lab-error">{error} <button className="secondary" onClick={() => setError(null)}>Dismiss</button></div>}
       {message && <div className="card lab-message">{message}</div>}
 
-      <div className="card">
-        <h2>Host</h2>
-        <table className="lab-table">
-          <tbody>
-            <tr><th>Profile</th><td>{host.label} <code>{host.profile}</code></td></tr>
-            <tr><th>System</th><td>{host.os_version}, {host.ram_gb} GB RAM</td></tr>
-            <tr><th>Docker</th><td>{host.docker === 'yes' ? 'running' : 'not running: start Docker Desktop or OrbStack'}</td></tr>
-            <tr><th>VMs</th><td>{host.vm_tool === 'none' ? 'not installed: run ./lab.sh install in a terminal' : host.vm_tool}</td></tr>
-            <tr><th>Lab password</th><td>{state.password_default ? <>default: <code>{state.default_password}</code></> : 'custom, stored in the host keyring'}</td></tr>
-          </tbody>
-        </table>
-        <div className="lab-actions">
-          <button className="secondary" disabled={busy} onClick={() => start('check')}>Check prerequisites</button>
-          <button className="secondary" disabled={busy} onClick={() => start('status')}>Status</button>
-          <button className="secondary" onClick={refresh}>Refresh</button>
+      {section === 'settings' && (
+        <div className="card">
+          <h2>Lab host and settings</h2>
+          <div className="lab-facts">
+            <span><em>Profile</em>{host.label} <code>{host.profile}</code></span>
+            <span><em>System</em>{host.os_version}, {host.ram_gb} GB RAM</span>
+            <span><em>Docker</em>{host.docker === 'yes' ? 'running' : 'not running'}</span>
+            <span><em>VMs</em>{host.vm_tool === 'none' ? 'not installed (./lab.sh install)' : host.vm_tool}</span>
+            <span><em>Password</em>{state.password_default ? <>default <code>{state.default_password}</code></> : 'custom, in the keyring'}</span>
+          </div>
+          <div className="lab-actions">
+            <button className="secondary" disabled={busy} onClick={() => start('check')}>Check prerequisites</button>
+            <button className="secondary" disabled={busy} onClick={() => start('status')}>Status</button>
+            <button className="secondary" onClick={refresh}>Refresh</button>
+          </div>
+          <div className="lab-fields">
+            {SETTINGS.map(([key, label, help]) => (
+              <label key={key} className="lab-field" title={help}>
+                <span>{label}</span>
+                <input type="text" value={settings[key] ?? ''} placeholder={help}
+                       onChange={(e) => setSettings({ ...settings, [key]: e.target.value })} />
+              </label>
+            ))}
+          </div>
+          <div className="lab-actions">
+            <button onClick={saveSettings}>Save settings</button>
+          </div>
+          <div className="lab-fields">
+            <label className="lab-field lab-field-wide" title="No quotes, backslashes or spaces. Targets created before a change keep their old password until they're re-created.">
+              <span>Lab password, for the <code>gandalf</code> user on every target (a custom one goes in the host keyring)</span>
+              <div className="lab-actions">
+                <input type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+                <button onClick={() => savePassword(password)} disabled={!password}>Set custom password</button>
+                {!state.password_default && <button className="secondary" onClick={() => savePassword('')}>Use the default</button>}
+              </div>
+            </label>
+          </div>
         </div>
-      </div>
+      )}
 
       <RunOutput
         run={run}
@@ -235,38 +258,8 @@ function LabManage() {
         onClose={() => setRun(null)}
       />
 
-      <div className="card">
-        <h2>Settings</h2>
-        <table className="lab-table">
-          <tbody>
-            {SETTINGS.map(([key, label, help]) => (
-              <tr key={key}>
-                <th>{label}</th>
-                <td>
-                  <input
-                    type="text"
-                    value={settings[key] ?? ''}
-                    onChange={(e) => setSettings({ ...settings, [key]: e.target.value })}
-                  />
-                  {help && <div className="lab-note">{help}</div>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button onClick={saveSettings}>Save settings</button>
-        <h3>Lab password</h3>
-        <p className="lab-note">
-          For the <code>gandalf</code> user on every lab target. The default is <code>{state.default_password}</code>;
-          a custom one goes in the host keyring. No quotes, backslashes or spaces. Targets created before a change keep their old password until they're re-created.
-        </p>
-        <div className="lab-actions">
-          <input type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
-          <button onClick={() => savePassword(password)} disabled={!password}>Set custom password</button>
-          {!state.password_default && <button className="secondary" onClick={() => savePassword('')}>Use the default</button>}
-        </div>
-      </div>
-
+      {section === 'lab' && (
+      <>
       <div className="card">
         <h2>Targets</h2>
         <table className="lab-table">
@@ -295,6 +288,8 @@ function LabManage() {
         )}
         {noPassword && <p className="lab-note">Set the lab password before creating targets.</p>}
       </div>
+
+      {children}
 
       <div className="card">
         <h2>Maintenance</h2>
@@ -326,9 +321,11 @@ function LabManage() {
           </table>
         </div>
       )}
+      </>
+      )}
     </div>
   );
 }
 
-// Aragorn → Manage: the lab's host, settings, password, targets, maintenance and runs
+// Aragorn → Settings (host, settings, password) and Aragorn → Lab (targets, maintenance, runs)
 export default LabManage;

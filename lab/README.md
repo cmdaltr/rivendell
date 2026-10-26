@@ -27,7 +27,7 @@ cd lab
 ./lab.sh
 ```
 
-Choose **1) Quickstart**. It checks the host, offers to install what's missing, asks where to keep data and VMs, and and sets up the lab password: the `gandalf` user on every target gets it. The default is `mellon`, which is fine because every target listens only on loopback or a host-only network. If you set your own (`./lab.sh configure`, or **Aragorn → Manage** in the web UI), it's stored in your Keychain (or the Secret Service keyring on Linux), never on disk; an empty entry goes back to the default. Targets keep the password they were created with, so re-create them after a change. Then it builds and starts the Linux containers, collects from them with both the Bash and Python collectors, downloads APT29 days 1–2 from OTRF, and writes the settings Rivendell's test runner needs.
+Choose **1) Quickstart**. It checks the host, offers to install what's missing, asks where to keep data and VMs, and and sets up the lab password: the `gandalf` user on every target gets it. The default is `mellon`, which is fine because every target listens only on loopback or a host-only network. If you set your own (`./lab.sh configure`, or **Aragorn → Settings** in the web UI), it's stored in your Keychain (or the Secret Service keyring on Linux), never on disk; an empty entry goes back to the default. Targets keep the password they were created with, so re-create them after a change. Then it builds and starts the Linux containers, collects from them with both the Bash and Python collectors, downloads APT29 days 1–2 from OTRF, and writes the settings Rivendell's test runner needs.
 
 The same steps exist as single commands:
 
@@ -53,10 +53,11 @@ cd lab
 ./lab.sh agent start
 ```
 
-Then sign in to Rivendell as an admin and open **Aragorn**. It has two tabs:
+Then sign in to Rivendell as an admin and open **Aragorn**. It has three tabs:
 
-- **Lab** (`/aragorn#lab`; `/lab` goes there too) builds a run and deploys it. Pick **Gandalf**, **Elrond** or **Mordor**, then work through its steps: for Gandalf, the collector, the targets to deploy it to, where the acquisition lands, and optionally an Elrond analysis of it under a case ID; for Elrond, which acquisitions to analyse, the case ID and how deep; for Mordor, record Atomic Red Team on a lab machine (which machine, set it up first or not, the techniques, the snapshot to revert to), capture a dataset in the Windows VM, or download OTRF datasets. The plan underneath lists what **Deploy** will do, and Deploy runs those steps in order, stopping at the first failure, with the output streaming below. An Elrond step starts a job and links to it.
-- **Manage** is everything else: Rivendell's own containers and images, the lab's host profile, settings and password, the `lab.sh` target commands, maintenance (Rivendell test settings, teardown), recent runs, and the lab machines (see [The Mordor Page](#the-mordor-page)).
+- **Lab** (`/aragorn#lab`; `/lab` goes there too) is the lab itself: the `lab.sh` target commands, the lab machines (see [The Mordor Page](#the-mordor-page)), maintenance (Rivendell test settings, teardown) and recent runs.
+- **Deploy** (`/aragorn#deploy`) builds a run and deploys it. Pick **Gandalf**, **Elrond** or **Mordor**, then work through its steps: for Gandalf, the collector, the targets to deploy it to, where the acquisition lands, and optionally an Elrond analysis of it under a case ID; for Elrond, which acquisitions to analyse, the case ID and how deep; for Mordor, record Atomic Red Team on a lab machine (which machine, set it up first or not, the techniques, the snapshot to revert to), capture a dataset in the Windows VM, or download OTRF datasets. The plan underneath lists what **Deploy** will do, and Deploy runs those steps in order, stopping at the first failure, with the output streaming below. An Elrond step starts a job and links to it.
+- **Settings** (`/aragorn#settings`) has Rivendell's own containers and images (Anduril, the Docker manager) and the lab's host profile, settings and password.
 
 Every lab step except `install`, which needs your password at a terminal, is on one tab or the other.
 
@@ -148,7 +149,7 @@ python3 -m src.mordor.telemetry --guide <Kaggle zip>     # re-summarise Microsof
 
 **Mordor** in the web UI (`/mordor`) is one page, Archer's Emulate page ported. It shows where the telemetry comes from (the pipeline diagram and a card per public dataset, with **Update** for admins), a link to the lab that records your own, and every recorded technique with the logs its recordings hold, searchable by a value in the recorded events. An OTRF recording in a technique's detail has **Download for Elrond**, which fetches its raw events for `--Mordor` analysis. Its last section, **Downloadable datasets**, is the OTRF catalogue: the datasets that span several techniques (APT29's days) and bulk download.
 
-Recording is a Mordor run on **Aragorn → Lab**; the machines themselves are on **Aragorn → Manage** (`/aragorn#manage`), with the rest of what Rivendell runs on this host. Both need the lab agent and an admin login. The **Lab machines** panel shows this host and the engines it can drive (Docker, Tart, UTM), what you can create on it, and every machine:
+Recording is a Mordor run on **Aragorn → Deploy**; the machines themselves are on **Aragorn → Lab** (`/aragorn#lab`), with the rest of what Rivendell runs on this host. Both need the lab agent and an admin login. The **Lab machines** panel shows this host and the engines it can drive (Docker, Tart, UTM), what you can create on it, and every machine:
 
 - **Create a machine**: an Ubuntu container (Docker), an Ubuntu or macOS VM (Tart, Apple silicon). Windows comes from UTM: **Clone existing** copies a built VM; **From ISO** checks a Windows 11 ARM64 ISO and can run `./lab.sh windows-vm create` to build the lab's VM unattended.
 - **Your machines**: Start/Stop, Snapshot, Revert, Clone (UTM), Set OS (a UTM VM the lab didn't build), Set up (audit logging, PowerShell, Atomic Red Team), Record (Atomic Red Team, with a preview and a snapshot confirmation), Logs, and Delete.
