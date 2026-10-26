@@ -134,8 +134,9 @@ const MordorLanding = () => {
       <header>
         <h2>Mordor Recordings</h2>
         <p>
-          Access pre-recorded security event datasets from the OTRF Security Datasets
-          project for threat research, detection development, and testing.
+          Download OTRF Security-Datasets' raw events for Elrond to analyse, including the datasets that
+          span several techniques. To find what each technique looks like in the logs across every source,
+          use Recorded telemetry &amp; lab.
         </p>
       </header>
       <MordorTabs active="datasets" />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Home from './components/Home';
 import GandalfLanding from './components/GandalfLanding';
@@ -87,8 +87,9 @@ function AppContent() {
             <Route path="/" element={<Home onScrollProgress={setScrollProgress} />} />
             <Route path="/gandalf" element={<GandalfLanding />} />
             <Route path="/elrond" element={<ElrondLanding />} />
-            <Route path="/mordor" element={<MordorLanding />} />
-            <Route path="/mordor/telemetry" element={<MordorTelemetry />} />
+            <Route path="/mordor" element={<MordorTelemetry />} />
+            <Route path="/mordor/datasets" element={<MordorLanding />} />
+            <Route path="/mordor/telemetry" element={<Navigate to="/mordor" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />

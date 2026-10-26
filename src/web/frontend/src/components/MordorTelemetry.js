@@ -18,6 +18,8 @@ import {
   getLabStatus,
   getLabRun,
   runLabCommand,
+  getLocalMordorDatasets,
+  downloadMordorDataset,
 } from '../api';
 
 const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
@@ -560,7 +562,24 @@ function LabSection({ onRecorded }) {
 
 // ---------------------------------------------------------------- recorded telemetry
 
-function TechniqueDetail({ tid }) {
+// An OTRF recording is a Security-Datasets dataset (otrf:SDWIN-… is catalogue SDWIN-…), so its raw
+// events can be downloaded for Elrond to analyse (--Mordor), as the Downloadable datasets tab does
+function DownloadButton({ id, local, onDone }) {
+  const [state, setState] = useState(local.has(id) ? 'done' : 'idle');
+  useEffect(() => { if (local.has(id)) setState('done'); }, [local, id]);
+  const go = async () => {
+    setState('busy');
+    try { await downloadMordorDataset(id); setState('done'); onDone(); } catch (err) { setState('failed'); }
+  };
+  if (state === 'done') return <span className="mt-seen"> · downloaded for Elrond</span>;
+  return (
+    <button className="mt-pill mt-inline" disabled={state === 'busy'} onClick={go} title="Download the raw events so Elrond can analyse them (--Mordor)">
+      {state === 'busy' ? 'Downloading…' : state === 'failed' ? 'Retry download' : 'Download for Elrond'}
+    </button>
+  );
+}
+
+function TechniqueDetail({ tid, local, onDownloaded }) {
   const [t, setT] = useState(null);
   useEffect(() => { getTelemetryTechnique(tid).then(setT).catch(() => setT({ error: true })); }, [tid]);
   if (!t) return <p className="lab-note">Loading…</p>;
@@ -594,6 +613,7 @@ function TechniqueDetail({ tid }) {
             <img className="mt-icon" src={`${IMG}/${(SOURCES.find((s) => s.key === d.source) || {}).img || 'tux.svg'}`} alt="" />
             {d.url ? <a href={d.url} target="_blank" rel="noopener noreferrer">{d.title}</a> : d.title}
             <span className="mt-dim"> · {d.platforms.join(', ')} · {d.events.toLocaleString()} events</span>
+            {d.source === 'otrf' && <DownloadButton id={d.id.split(':')[1]} local={local} onDone={onDownloaded} />}
           </li>
         ))}
       </ul>
@@ -603,6 +623,11 @@ function TechniqueDetail({ tid }) {
 
 function TelemetryViews({ refreshKey }) {
   const [rows, setRows] = useState([]);
+  const [local, setLocal] = useState(new Set());
+  const loadLocal = useCallback(() => {
+    getLocalMordorDatasets({ limit: 200 }).then((r) => setLocal(new Set((r.datasets || []).map((d) => d.dataset_id)))).catch(() => {});
+  }, []);
+  useEffect(() => { loadLocal(); }, [loadLocal]);
   const [platform, setPlatform] = useState('');
   const [collection, setCollection] = useState('');
   const [q, setQ] = useState('');
@@ -653,7 +678,7 @@ function TelemetryViews({ refreshKey }) {
                 <td>{r.mde.join(', ')}</td>
                 <td>{r.platforms.join(', ')}</td>
               </tr>
-              {open === r.technique && <tr><td colSpan="5"><TechniqueDetail tid={r.technique} /></td></tr>}
+              {open === r.technique && <tr><td colSpan="5"><TechniqueDetail tid={r.technique} local={local} onDownloaded={loadLocal} /></td></tr>}
             </React.Fragment>
           ))}
         </tbody>
@@ -674,8 +699,8 @@ function TelemetryViews({ refreshKey }) {
 export function MordorTabs({ active }) {
   return (
     <div className="mt-tabs">
-      <Link className={active === 'datasets' ? 'is-active' : ''} to="/mordor">Datasets</Link>
-      <Link className={active === 'telemetry' ? 'is-active' : ''} to="/mordor/telemetry">Recorded telemetry &amp; lab</Link>
+      <Link className={active === 'telemetry' ? 'is-active' : ''} to="/mordor">Recorded telemetry &amp; lab</Link>
+      <Link className={active === 'datasets' ? 'is-active' : ''} to="/mordor/datasets">Downloadable datasets</Link>
     </div>
   );
 }
@@ -712,9 +737,13 @@ function MordorTelemetry() {
 
   return (
     <div className="journey-detail mt-page">
+      <section className="hero-section">
+        <img src={`${process.env.PUBLIC_URL}/images/rivendell.png`} alt="Mordor Recordings" className="hero-image"
+             style={{ transform: 'scale(0.2)', transformOrigin: 'center top' }} />
+      </section>
       <header>
         <h2>Mordor Recordings</h2>
-        <p>Which logs record each ATT&amp;CK technique, from attacks emulated and recorded in labs, and the lab that records your own.</p>
+        <p>Which logs record each ATT&amp;CK technique, from attacks emulated and recorded in labs, the lab that records your own, and the raw events to download for Elrond.</p>
       </header>
       <MordorTabs active="telemetry" />
       {error && <div className="card lab-error">{error}</div>}
@@ -747,7 +776,7 @@ function MordorTelemetry() {
 
       <div className="card">
         <h2>Recorded telemetry</h2>
-        <p className="lab-note">Every recorded technique and the logs most of its recordings hold. Open one for its recordings, the event types they hold and Defender XDR's alerting on it. Search finds the techniques whose recorded events contain a value.</p>
+        <p className="lab-note">Every recorded technique and the logs most of its recordings hold. Open one for its recordings, the event types they hold and Defender XDR's alerting on it; an OTRF recording can be downloaded for Elrond to analyse. Search finds the techniques whose recorded events contain a value. Datasets that span several techniques (APT29's days, for example) are under <Link to="/mordor/datasets">Downloadable datasets</Link>, with bulk download.</p>
         <TelemetryViews refreshKey={refreshKey} />
       </div>
     </div>

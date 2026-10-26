@@ -1081,7 +1081,7 @@ function NewAnalysis() {
                     <div style={{ color: '#f0dba5', textAlign: 'center', padding: '1rem' }}>
                       <p>No downloaded Mordor datasets found.</p>
                       <p style={{ color: '#888', fontSize: '0.9rem', marginTop: '0.5rem' }}>
-                        Visit the <a href="/mordor" style={{ color: '#66d9ef' }}>Mordor page</a> to download datasets first.
+                        Visit the <a href="/mordor/datasets" style={{ color: '#66d9ef' }}>Mordor page</a> to download datasets first.
                       </p>
                     </div>
                   ) : (

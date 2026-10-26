@@ -2909,3 +2909,4 @@ button.mt-close:hover { background: none; box-shadow: none; color: #fff; }
 .mt-recordings { list-style: none; margin-top: 0.75rem; }
 .mt-recordings li { margin: 0.25rem 0; }
 .mt-pager { justify-content: center; }
+button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-left: 0.5rem; }
