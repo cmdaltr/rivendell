@@ -3,11 +3,14 @@
 import json
 import os
 import re
+import struct
 import time
 from datetime import datetime
+from pathlib import Path
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.analysis.iocs import compare_iocs
+from rivendell.analysis.ntfs_ads import known_stream_note, mft_alternate_data_streams
 
 
 def _analyse_artemis_mft_from_status_log(ar, f, stage, vssimage, anysd, verbosity, output_directory, analyse_mft_json_func):
@@ -220,6 +223,46 @@ def analyse_artefacts(
             print(" -> {} ->     of which {} under Users\\Default or ProgramData\\Microsoft ({})".format(now, setup_copied, SETUP_COPIED_NOTE))
         if counts["AlternateDataStream"]:
             print(" -> {} ->   Alternate Data Streams: {} files".format(now, counts["AlternateDataStream"]))
+
+    def analyse_mft_ads(stage, vssimage, filepath, anysd, verbosity, output_directory):
+        """Alternate data streams from the raw $MFT Gandalf collects (Artemis's
+        MFT JSON has no stream names)."""
+        print(" -> {} -> analysing raw $MFT for Alternate Data Streams...".format(
+            datetime.now().isoformat().replace("T", " ")
+        ))
+        total = benign = 0
+        try:
+            streams = list(mft_alternate_data_streams(Path(filepath)))
+        except (OSError, ValueError, struct.error) as e:
+            print(" -> {} -> warning: could not parse raw $MFT: {}".format(
+                datetime.now().isoformat().replace("T", " "), str(e)[:100]
+            ))
+            return
+        if streams and not os.path.exists(anysd + "/analysis.csv"):
+            with open(anysd + "/analysis.csv", "a") as analysisfile:
+                analysisfile.write("LastWriteTime,elrond_host,Filename,AnalysisType,AnalysisValue\n")
+        with open(anysd + "/analysis.csv", "a") as analysisfile:
+            for path, stream, size in streams:
+                total += 1
+                note = known_stream_note(stream)
+                value = "{} ({} bytes)".format(stream, size)
+                if note:
+                    benign += 1
+                    value += "|" + note
+                analysisfile.write("{},{},{},AlternateDataStream,{}\n".format(
+                    datetime.now().isoformat(), vssimage.replace("'", ""),
+                    path.replace(",", "%2C"), value.replace(",", "%2C"),
+                ))
+                if not note:
+                    short = path.split("\\")[-1]
+                    entry, prnt = "{},{},{},alternate data stream '{}' found in '{}'\n".format(
+                        datetime.now().isoformat(), vssimage, stage, stream, short
+                    ), " -> {} -> alternate data stream '{}' found in '{}' for {}".format(
+                        datetime.now().isoformat().replace("T", " "), stream, short, vssimage
+                    )
+                    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        now = datetime.now().isoformat().replace("T", " ")
+        print(" -> {} ->   Alternate Data Streams: {} files ({} likely benign: Mark of the Web, compression and similar)".format(now, total, benign))
 
     def analyse_disk_images(stage, vssimage, ar, f, anysd):
         print()
@@ -644,6 +687,13 @@ def analyse_artefacts(
             datetime.now().isoformat().replace("T", " "), img_name
         ))
         mft_files_found = False
+        # ADS come from the raw $MFT (raw/ or raw/vssN/), which the cooked walk below doesn't see
+        img_mount = img.split("::")[1] if "::" in img else ""
+        vss_part = img_mount.split("_")[1] if "vss" in img_mount.lower() and "_" in img_mount else ""
+        raw_mft = os.path.join(output_directory + img_name, "artefacts", "raw", vss_part, "$MFT")
+        if os.path.isfile(raw_mft):
+            mft_files_found = True
+            analyse_mft_ads(stage, vssimage, raw_mft, anysd, verbosity, output_directory)
         for ar, _, af in os.walk(atftd):
             for f in af:
                 # Handle both legacy CSV format and new Artemis JSON format
