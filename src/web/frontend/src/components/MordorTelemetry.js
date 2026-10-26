@@ -739,9 +739,9 @@ function MordorTelemetry() {
       {error && <div className="card lab-error">{error}</div>}
 
       <div className="mt-tiles">
-        <div className="mt-tile"><div className="mt-num">{status ? status.datasets.toLocaleString() : '–'}</div><div>Recordings</div></div>
-        <div className="mt-tile"><div className="mt-num">{status ? status.techniques : '–'}</div><div>Techniques</div></div>
-        <div className="mt-tile"><div className="mt-num">{status ? (status.values ? 'Ready' : 'No values') : '–'}</div><div>Indicator check</div></div>
+        <div className="mt-tile is-recordings"><div className="mt-num">{status ? status.datasets.toLocaleString() : '–'}</div><div>Recordings</div></div>
+        <div className="mt-tile is-techniques"><div className="mt-num">{status ? status.techniques : '–'}</div><div>Techniques</div></div>
+        <div className="mt-tile is-check"><div className="mt-num">{status ? (status.values ? 'Ready' : 'No values') : '–'}</div><div>Indicator check</div></div>
       </div>
 
       <div className="card">

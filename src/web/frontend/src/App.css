@@ -2799,9 +2799,12 @@ select.large-select:disabled {
 .mt-good { color: #8cc152; }
 .mt-icon { width: 18px; height: 18px; vertical-align: -3px; margin-right: 0.35rem; object-fit: contain; }
 
-.mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
-.mt-tile { background: #1a1a2e; border: 1px solid #2a2a5a; border-radius: 8px; padding: 1rem; text-align: center; color: #888; }
-.mt-num { font-size: 1.8rem; color: #c3e88d; font-family: 'Cinzel', 'Times New Roman', serif; }
+.mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 0.75rem; }
+.mt-tile { --tile: #66d9ef; background: #1a1a2e; border: 1px solid #2a2a5a; border-top: 3px solid var(--tile); border-radius: 8px; padding: 1rem; text-align: center; color: #888; }
+.mt-tile.is-recordings { --tile: #66d9ef; }
+.mt-tile.is-techniques { --tile: #f0dba5; }
+.mt-tile.is-check { --tile: #d57a54; }
+.mt-num { font-size: 1.8rem; color: var(--tile); font-family: 'Cinzel', 'Times New Roman', serif; }
 
 .mt-dg svg { width: 100%; height: auto; margin: 0.5rem 0 1rem; }
 .mt-dg rect { stroke-width: 1.5; }
