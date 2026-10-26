@@ -2998,6 +2998,7 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lb input.lb-input, .lb select.large-select.lb-select { height: 2.4rem; box-sizing: border-box; }
 .lb-thirds { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; align-items: center; }
 .lb-thirds input.lb-input, .lb-thirds select.large-select.lb-select { width: 100%; min-width: 0; }
+.lb-thirds .lb-check { position: relative; top: 3px; }
 .lb input.lb-input:disabled, .lb select.lb-select:disabled { opacity: 0.45; }
 @media (max-width: 900px) { .lb-thirds { grid-template-columns: 1fr; } }
 .lb-pair { display: grid; grid-template-columns: auto 1fr; gap: 1.1rem 2.5rem; align-items: start; }
