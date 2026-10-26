@@ -137,6 +137,8 @@ function LabManage({ section = 'lab', children = null }) {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
   const offsetRef = useRef(0);
+  const queueRef = useRef([]);      // further lab.sh commands to run once the current one succeeds
+  const [unpicked, setUnpicked] = useState({});  // VMs deselected on a shared engine row
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -170,6 +172,9 @@ function LabManage({ section = 'lab', children = null }) {
         if (r.status !== 'running') {
           setRuns(await listLabRuns());
           getLabState().then(setState).catch(() => {});
+          const next = r.status === 'succeeded' ? queueRef.current.shift() : null;
+          if (!next) queueRef.current = [];
+          else start(next.command, next.args); // eslint-disable-line no-use-before-define
         }
       } catch (err) {
         setError(errorText(err));
@@ -242,31 +247,60 @@ function LabManage({ section = 'lab', children = null }) {
   const tart = host.profile === 'macos-arm64';
   const noPassword = !state.password_set;
 
-  // A target as logos: what it runs, then what runs it; the full description is the tooltip
-  const logos = (icons, tip) => (
-    <td className="lab-target" title={tip}>
-      {icons.map(([f, alt]) => (f.includes('.')
-        ? <img key={f} className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
-        : <span key={f} className="lab-logo-text">{f}</span>))}
-    </td>
-  );
-  const vmRow = (command, title, actions, icons) => (
-    <tr key={command}>
-      {logos(icons, title)}
-      <td><div className="lab-actions">
-        {actions.map((a) => (
-          <button
-            key={a}
-            className="secondary"
-            disabled={busy || (noPassword && (a === 'create' || a === 'adopt'))}
-            onClick={() => start(command, [a], a === 'delete' ? `Destroy the ${title}? Its disk is deleted.` : null)}
-          >
-            {a}
-          </button>
-        ))}
-      </div></td>
-    </tr>
-  );
+  // A row per engine: its logo, then the machines on it. Where an engine runs more than one VM, each
+  // OS logo toggles whether the row's buttons act on it; with several picked they run one after another.
+  const img = (f, alt) => (f.includes('.')
+    ? <img className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
+    : <span className="lab-logo-text">{f}</span>);
+  const engineRow = (key, engine, items, fixedActions = null) => {
+    const picked = items.filter((it) => !unpicked[it.id]);
+    const actions = fixedActions || [...new Set(items.flatMap((it) => it.actions))];
+    const run = (a) => {
+      if (fixedActions) { start(items[0].command, [a], items[0].confirm?.[a]); return; }
+      const todo = picked.filter((it) => it.actions.includes(a));
+      if (a === 'delete' && !window.confirm(`Destroy ${todo.map((it) => it.name).join(' and ')}? The disk is deleted.`)) return;
+      queueRef.current = todo.slice(1).map((it) => ({ command: it.command, args: [a] }));
+      start(todo[0].command, [a]);
+    };
+    return (
+      <tr key={key}>
+        <td className="lab-target">
+          <span title={engine[2]}>{img(engine[0], engine[1])}</span>
+          <span className="lab-logo-sep" />
+          {items.map((it) => (fixedActions || items.length === 1 ? (
+            <span key={it.id} title={it.tip}>{img(it.logo, it.name)}</span>
+          ) : (
+            <button key={it.id} type="button" title={`${it.tip}${unpicked[it.id] ? ' (not selected)' : ''}`}
+                    className={`lab-logo-toggle${unpicked[it.id] ? ' is-off' : ''}`}
+                    onClick={() => setUnpicked({ ...unpicked, [it.id]: !unpicked[it.id] })}>
+              {img(it.logo, it.name)}
+            </button>
+          )))}
+        </td>
+        <td><div className="lab-actions">
+          {actions.map((a) => {
+            const able = fixedActions || picked.some((it) => it.actions.includes(a));
+            return (
+              <button key={a} className="secondary" onClick={() => run(a)}
+                      disabled={busy || !able || (noPassword && ['create', 'adopt', 'up', 'reset'].includes(a))}>
+                {a}
+              </button>
+            );
+          })}
+        </div></td>
+      </tr>
+    );
+  };
+  const vmActions = ['create', 'start', 'stop', 'delete', 'status'];
+  const ubuntuVm = { id: 'linux-vm', command: 'linux-vm', logo: 'ubuntu.png', name: 'the Linux VM', actions: vmActions,
+    tip: `Linux VM: Ubuntu with a real kernel (${tart ? 'Tart' : 'Vagrant'}), SSH on 127.0.0.1:2230. For memory acquisition and Mordor recording.` };
+  const macosVm = { id: 'macos-vm', command: 'macos-vm', logo: 'macos.png', name: 'the macOS VM', actions: vmActions,
+    tip: 'macOS VM: Sequoia (Tart), SSH on 127.0.0.1:2231' };
+  const windowsVm = tart
+    ? { id: 'windows-vm', command: 'windows-vm', logo: 'windows.svg', name: 'the Windows VM', actions: ['create', 'adopt', 'start', 'stop', 'delete', 'status'],
+      tip: "Windows 11 ARM VM (UTM), SSH on 127.0.0.1:2232. create installs it unattended from the ARM64 ISO in the lab's isos/ folder (Microsoft's download is manual); adopt takes an installed VM from utm/ that has OpenSSH and provisions it." }
+    : { id: 'windows-vm', command: 'windows-vm', logo: 'windows.svg', name: 'the Windows VM', actions: ['create', 'start', 'stop', 'provision', 'delete', 'status'],
+      tip: 'Windows 11 VM (Vagrant)' };
 
   return (
     <div className="lab">
@@ -316,7 +350,7 @@ function LabManage({ section = 'lab', children = null }) {
 
       <RunOutput
         run={run}
-        onCancel={async () => { try { setRun(await cancelLabRun(run.id).then((r) => ({ ...run, ...r }))); } catch (err) { setError(errorText(err)); } }}
+        onCancel={async () => { queueRef.current = []; try { setRun(await cancelLabRun(run.id).then((r) => ({ ...run, ...r }))); } catch (err) { setError(errorText(err)); } }}
         onClose={() => setRun(null)}
       />
 
@@ -328,27 +362,18 @@ function LabManage({ section = 'lab', children = null }) {
         <h2>Targets</h2>
         <table className="lab-table lab-targets">
           <tbody>
-            <tr>
-              {logos([['ubuntu.png', 'Ubuntu'], ['rocky.svg', 'Rocky'], ['docker.png', 'Docker']],
-                `Linux containers: ${(state.linux_containers || []).join(', ')} (Ubuntu 24.04, Rocky 9), SSH on 127.0.0.1:2221-2222`)}
-              <td><div className="lab-actions">
-                <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['up'])}>up</button>
-                <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['down'])}>down</button>
-                <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['reset'], 'Rebuild and re-seed all Linux containers?')}>reset</button>
-                <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['status'])}>status</button>
-              </div></td>
-            </tr>
-            {(vagrant || tart) && vmRow('linux-vm', `Linux VM: Ubuntu with a real kernel (${tart ? 'Tart' : 'Vagrant'}), SSH on 127.0.0.1:2230`,
-              ['create', 'start', 'stop', 'delete', 'status'], [['ubuntu.png', 'Ubuntu'], tart ? ['tart.png', 'Tart'] : ['Vagrant', 'Vagrant']])}
-            {tart && vmRow('macos-vm', 'macOS VM: Sequoia (Tart), SSH on 127.0.0.1:2231',
-              ['create', 'start', 'stop', 'delete', 'status'], [['macos.png', 'macOS'], ['tart.png', 'Tart']])}
-            {vagrant && vmRow('windows-vm', 'Windows 11 VM (Vagrant)',
-              ['create', 'start', 'stop', 'provision', 'delete', 'status'], [['windows.svg', 'Windows'], ['Vagrant', 'Vagrant']])}
-            {tart && vmRow('windows-vm', "Windows 11 ARM VM (UTM), SSH on 127.0.0.1:2232. create installs it unattended from the ARM64 ISO in the lab's isos/ folder (Microsoft's download is manual); adopt takes an installed VM from utm/ that has OpenSSH and provisions it.",
-              ['create', 'adopt', 'start', 'stop', 'delete', 'status'], [['windows.svg', 'Windows'], ['utm.svg', 'UTM']])}
+            {engineRow('docker', ['docker.png', 'Docker', 'Docker containers: quick to rebuild, no real kernel'], [
+              { id: 'lab-ubuntu', logo: 'ubuntu.png', name: 'Ubuntu', command: 'linux-targets',
+                tip: 'lab-ubuntu: Ubuntu 24.04 (Debian family, apt), SSH on 127.0.0.1:2221',
+                confirm: { reset: 'Rebuild and re-seed all Linux containers?' } },
+              { id: 'lab-rocky', logo: 'rocky.svg', name: 'Rocky', tip: 'lab-rocky: Rocky 9 (RHEL family, dnf), SSH on 127.0.0.1:2222' },
+            ], ['up', 'down', 'reset', 'status'])}
+            {tart && engineRow('tart', ['tart.png', 'Tart', 'Tart VMs (Apple silicon)'], [ubuntuVm, macosVm])}
+            {tart && engineRow('utm', ['utm.svg', 'UTM', 'UTM (Windows on Apple silicon)'], [windowsVm])}
+            {vagrant && engineRow('vagrant', ['Vagrant', 'Vagrant', 'Vagrant VMs'], [ubuntuVm, windowsVm])}
           </tbody>
         </table>
-        <p className="lab-note">Hover over a target for what it is and its SSH port.{noPassword && ' Set the lab password before creating targets.'}</p>
+        <p className="lab-note">Hover over a logo for what it is and its SSH port. Click a VM's logo to leave it out of that row's commands.{noPassword && ' Set the lab password before creating targets.'}</p>
       </div>
 
             <div className="card">
