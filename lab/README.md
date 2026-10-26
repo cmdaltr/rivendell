@@ -141,7 +141,7 @@ python3 -m src.mordor.telemetry --guide <Kaggle zip>     # re-summarise Microsof
 
 ### The Mordor Page
 
-**Mordor** in the web UI (`/mordor`) opens on **Recorded telemetry & lab**, Archer's Emulate page ported. It shows where the telemetry comes from (the pipeline diagram and a card per public dataset, with **Update** for admins), the lab that records your own, and every recorded technique with the logs its recordings hold, searchable by a value in the recorded events. An OTRF recording in a technique's detail has **Download for Elrond**, which fetches its raw events for `--Mordor` analysis. **Downloadable datasets** (`/mordor/datasets`) is the OTRF catalogue: the datasets that span several techniques (APT29's days) and bulk download.
+**Mordor** in the web UI (`/mordor`) is one page, Archer's Emulate page ported. It shows where the telemetry comes from (the pipeline diagram and a card per public dataset, with **Update** for admins), the lab that records your own, and every recorded technique with the logs its recordings hold, searchable by a value in the recorded events. An OTRF recording in a technique's detail has **Download for Elrond**, which fetches its raw events for `--Mordor` analysis. Its last section, **Downloadable datasets**, is the OTRF catalogue: the datasets that span several techniques (APT29's days) and bulk download.
 
 **Your lab** needs the lab agent and an admin login. It shows this host and the engines it can drive (Docker, Tart, UTM), what you can create on it, and every machine:
 

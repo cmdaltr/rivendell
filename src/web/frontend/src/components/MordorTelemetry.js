@@ -3,8 +3,8 @@
 // Archer's Emulate page (templates/emulate.html, static/js/lab.js, emulate.js); the engine is
 // src/mordor/telemetry and the lab src/mordor/lab, driven on the host by the lab agent.
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import MordorDatasets from './MordorLanding';
 import {
   getTelemetryStatus,
   getTelemetryTechniques,
@@ -696,15 +696,6 @@ function TelemetryViews({ refreshKey }) {
 
 // ---------------------------------------------------------------- page
 
-export function MordorTabs({ active }) {
-  return (
-    <div className="mt-tabs">
-      <Link className={active === 'telemetry' ? 'is-active' : ''} to="/mordor">Recorded telemetry &amp; lab</Link>
-      <Link className={active === 'datasets' ? 'is-active' : ''} to="/mordor/datasets">Downloadable datasets</Link>
-    </div>
-  );
-}
-
 function MordorTelemetry() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -745,7 +736,6 @@ function MordorTelemetry() {
         <h2>Mordor Recordings</h2>
         <p>Which logs record each ATT&amp;CK technique, from attacks emulated and recorded in labs, the lab that records your own, and the raw events to download for Elrond.</p>
       </header>
-      <MordorTabs active="telemetry" />
       {error && <div className="card lab-error">{error}</div>}
 
       <div className="mt-tiles">
@@ -776,9 +766,11 @@ function MordorTelemetry() {
 
       <div className="card">
         <h2>Recorded telemetry</h2>
-        <p className="lab-note">Every recorded technique and the logs most of its recordings hold. Open one for its recordings, the event types they hold and Defender XDR's alerting on it; an OTRF recording can be downloaded for Elrond to analyse. Search finds the techniques whose recorded events contain a value. Datasets that span several techniques (APT29's days, for example) are under <Link to="/mordor/datasets">Downloadable datasets</Link>, with bulk download.</p>
+        <p className="lab-note">Every recorded technique and the logs most of its recordings hold. Open one for its recordings, the event types they hold and Defender XDR's alerting on it; an OTRF recording can be downloaded for Elrond to analyse. Search finds the techniques whose recorded events contain a value. Datasets that span several techniques (APT29's days, for example) are in <a href="#datasets">Downloadable datasets</a> below, with bulk download.</p>
         <TelemetryViews refreshKey={refreshKey} />
       </div>
+
+      <MordorDatasets />
     </div>
   );
 }

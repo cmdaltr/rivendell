@@ -4,7 +4,6 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Home from './components/Home';
 import GandalfLanding from './components/GandalfLanding';
 import ElrondLanding from './components/ElrondLanding';
-import MordorLanding from './components/MordorLanding';
 import MordorTelemetry from './components/MordorTelemetry';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
@@ -88,7 +87,7 @@ function AppContent() {
             <Route path="/gandalf" element={<GandalfLanding />} />
             <Route path="/elrond" element={<ElrondLanding />} />
             <Route path="/mordor" element={<MordorTelemetry />} />
-            <Route path="/mordor/datasets" element={<MordorLanding />} />
+            <Route path="/mordor/datasets" element={<Navigate to="/mordor" replace />} />
             <Route path="/mordor/telemetry" element={<Navigate to="/mordor" replace />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />

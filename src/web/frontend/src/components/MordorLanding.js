@@ -1,9 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MordorCatalog from './MordorCatalog';
-import { MordorTabs } from './MordorTelemetry';
 import { getLocalMordorDatasets, refreshMordorCatalog, getMordorCatalog, downloadMordorDataset } from '../api';
-
-const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 
 // MITRE ATT&CK Tactic ID to Name mapping
 const TACTIC_NAMES = {
@@ -23,6 +20,7 @@ const TACTIC_NAMES = {
   'TA0043': 'Reconnaissance',
 };
 
+// The Mordor page's last section (components/MordorTelemetry.js): the OTRF catalogue to download from
 const MordorLanding = () => {
   const [localCount, setLocalCount] = useState(0);
   const [search, setSearch] = useState('');
@@ -118,73 +116,14 @@ const MordorLanding = () => {
   });
 
   return (
-    <div className="journey-detail">
-      <section className="hero-section">
-        <img
-          src={heroImage}
-          alt="Mordor Recordings"
-          className="hero-image"
-          style={{
-            transform: 'scale(0.2)',
-            transformOrigin: 'center top'
-          }}
-        />
-      </section>
-
-      <header>
-        <h2>Mordor Recordings</h2>
-        <p>
-          Download OTRF Security-Datasets' raw events for Elrond to analyse, including the datasets that
-          span several techniques. To find what each technique looks like in the logs across every source,
-          use Recorded telemetry &amp; lab.
-        </p>
-      </header>
-      <MordorTabs active="datasets" />
-
-{/* Info Section */}
-      <div className="card" style={{ marginTop: '1.5rem' }}>
-        <h3>About Mordor</h3>
-        <p style={{ color: '#888', marginBottom: '1rem' }}>
-          Developed by the Open Threat Research Forge (OTRF), the <a href="https://github.com/OTRF/Security-Datasets"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: '#a7db6c' }}
-          >Mordor project</a> provides pre-recorded security events from simulated adversarial techniques.<br />
-          These datasets are organized by MITRE ATT&CK tactics and can be used for:
-        </p>
-        <ul style={{ color: '#888', marginLeft: '1.5rem', columns: 3, columnGap: '2rem' }}>
-          <li>Detection rule development and testing</li>
-          <li>Threat hunting hypothesis validation</li>
-          <li>MITRE ATT&CK mapping validation</li>
-          <li>Incident response playbook testing</li>
-          <li>Security analyst training</li>
-          <li>SIEM integration testing</li>
-        </ul>
-
-        <p style={{ color: '#888', marginBottom: '0.5rem' }}>
-          <br />After downloading a dataset, you can process it with the Elrond analysis engine through the <a href="http://localhost:5687/elrond"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: '#a7db6c' }}
-          >Web UI</a> or the command line:
-        </p>
-        <pre style={{
-          background: 'rgba(0, 0, 0, 0.3)',
-          padding: '1rem',
-          borderRadius: '4px',
-          fontFamily: 'monospace',
-          fontSize: '0.9rem',
-          overflow: 'auto'
-        }}>
-{`# Process a Mordor dataset
-python elrond.py CASE001 /tmp/elrond/output/mordor/SDWIN-xxx --Mordor
-
-# Or with full threat hunting analysis
-python elrond.py CASE001 /tmp/elrond/output/mordor/SDWIN-xxx --Mordor --ThreatHunt`}
-        </pre>
-      </div>
-
-      <div className="card">
+    <div className="card" id="datasets">
+      <h2>Downloadable datasets</h2>
+      <p className="lab-note">
+        The OTRF Security-Datasets catalogue, for the raw events: download a dataset and Elrond analyses it
+        (<code>python elrond.py CASE001 /tmp/elrond/output/mordor/SDWIN-xxx --Mordor</code>, or from the Elrond page).
+        It includes the datasets that span several techniques (APT29's days), and bulk download.
+      </p>
+      <div>
         {/* Row 1: Buttons and Search */}
         <div style={{
           display: 'flex',

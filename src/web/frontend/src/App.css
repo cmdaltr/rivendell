@@ -2793,12 +2793,6 @@ select.large-select:disabled {
 .lab-message { border-color: #8cc152; }
 
 /* ---- Mordor: recorded telemetry and its lab (components/MordorTelemetry.js, from Archer's Emulate page) */
-.mt-tabs { display: flex; gap: 0.5rem; margin: 1rem 0 1.5rem; }
-.mt-tabs a {
-  padding: 0.5rem 1rem; border: 1px solid rgba(240, 219, 165, 0.2); border-radius: 4px;
-  color: #f0dba5; text-decoration: none; font-family: 'Cinzel', 'Times New Roman', serif;
-}
-.mt-tabs a.is-active { border-color: #66d9ef; color: #66d9ef; background: rgba(102, 217, 239, 0.08); }
 .mt-page .lab-note { color: #999; margin: 0.5rem 0 1rem; line-height: 1.5; }
 .mt-dim { color: #888; font-size: 0.9rem; }
 .mt-bad { color: #ed5565; }
