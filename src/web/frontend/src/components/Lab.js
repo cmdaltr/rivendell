@@ -370,9 +370,7 @@ function LabManage({ section = 'lab', children = null }) {
                 {!state.password_default && <button className="secondary" onClick={() => savePassword('')}>Use the default</button>}
               </div>
             </label>
-          </div>
-          <div className="lab-actions">
-            <button onClick={saveSettings}>Save settings</button>
+            <button className="lab-save" onClick={saveSettings}>Save settings</button>
           </div>
         </div>
       )}

@@ -2928,9 +2928,10 @@ button.mt-pill.mt-inline { padding: 0.1rem 0.6rem; font-size: 0.75rem; margin-le
 .lab-fields-dirs { grid-template-columns: repeat(3, 1fr); }
 .lab-fields-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 1rem; margin-bottom: 0.75rem; }
 .lab-field-narrow { width: 10.5rem; }
-.lab-field-password { flex: 1; min-width: 22rem; }
+.lab-field-password { flex: none; }
 .lab-inline { display: flex; gap: 0.5rem; align-items: center; }
-.lab-inline input { flex: 1; min-width: 10rem; }
+.lab-inline input { width: 12rem; }
+.lab-save { margin-left: auto; white-space: nowrap; }
 .lab-inline button { white-space: nowrap; padding: 0.4rem 0.8rem; font-size: 0.82rem; }
 @media (max-width: 900px) { .lab-fields-dirs { grid-template-columns: 1fr; } }
 
