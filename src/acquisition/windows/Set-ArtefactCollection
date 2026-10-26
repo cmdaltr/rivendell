@@ -220,6 +220,33 @@ function Get-Artefacts {
         Get-Network $ShowProgress $OutputDirectory $Hostnames
         Get-Tasks $ShowProgress $OutputDirectory $Hostnames
     }
+    function Copy-FromShadow {
+        Param ($RelativePaths, $Destination)
+        # Without RawCopy, locked files (Amcache.hve, SRUDB.dat) are copied from a
+        # temporary shadow copy of C:, which is deleted straight afterwards.
+        $Copied = @()
+        $Shadow = $null
+        # .NET resolves relative paths against its own working directory, not
+        # PowerShell's location
+        $Destination = (Resolve-Path -LiteralPath $Destination).ProviderPath
+        try {
+            $Created = (Get-WmiObject -List Win32_ShadowCopy).Create("C:\", "ClientAccessible")
+            if ($Created.ReturnValue -ne 0) { return $Copied }
+            $Shadow = Get-WmiObject Win32_ShadowCopy | Where-Object { $_.ID -eq $Created.ShadowID }
+            ForEach ($RelativePath in $RelativePaths) {
+                try {
+                    [System.IO.File]::Copy("$($Shadow.DeviceObject)\$RelativePath", (Join-Path $Destination $RelativePath.Split("\\")[-1]), $true)
+                    $Copied += $RelativePath
+                }
+                catch { }
+            }
+        }
+        catch { }
+        finally {
+            if ($Shadow) { $Shadow.Delete() }
+        }
+        return ,$Copied
+    }
     function Get-Core { 
         Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
         
@@ -283,9 +310,27 @@ function Get-Artefacts {
 
         $global:ProgressPreference = "Continue"
         $Artefacts = @("hiberfil.sys", "pagefile.sys", "Windows\AppCompat\Programs\Amcache.hve", "Windows\INF\setupapi.dev.log", "Windows\System32\sru\SRUDB.dat")
+        $RawOutput = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw"
+        $FromShadow = @()
+        $HaveRawCopy = Test-Path -LiteralPath "C:\TEMP\gandalf\gandalf\tools\RawCopy64.exe"
         ForEach ($Artefact in $Artefacts) { 
             $ArtefactFile = $Artefact.Split("\\")[-1]
-            if (Test-Path -LiteralPath C:\$Artefact) {
+            if (-Not $HaveRawCopy -and (Test-Path -LiteralPath C:\$Artefact)) {
+                if ($ArtefactFile -eq "setupapi.dev.log") {
+                    Copy-Item -LiteralPath C:\$Artefact -Destination $RawOutput -Force -ErrorAction SilentlyContinue
+                    if (Test-Path -LiteralPath $RawOutput\$ArtefactFile) {
+                        Write-Host "       Acquired $ArtefactFile from '$Hostnames'" -ForegroundColor Green
+                        Add-LogEntry $ShowProgress $OutputDirectory $Hostnames $ArtefactFile "acquired '$ArtefactFile' from '$Hostnames'"
+                    }
+                }
+                elseif ($ArtefactFile -in @("Amcache.hve", "SRUDB.dat")) {
+                    $FromShadow += $Artefact
+                }
+                else {
+                    Write-Host "      SKIPPED: '$ArtefactFile' needs RawCopy (tools\disk_tools.zip)." -ForegroundColor Yellow
+                }
+            }
+            elseif (Test-Path -LiteralPath C:\$Artefact) {
                 try { 
                     Write-Progress "Acquiring '$ArtefactFile' from '$Hostnames'..."
                     if ($Architecture -eq "64") { 
@@ -307,6 +352,19 @@ function Get-Artefacts {
                     Write-Host "      FAILURE: '$ArtefactFile' could not be collected." -ForegroundColor Red
                 }
                 Write-Progress -Activity "_" -Completed
+            }
+        }
+        if ($FromShadow.Count -gt 0) {
+            $Copied = Copy-FromShadow $FromShadow $RawOutput
+            ForEach ($Artefact in $FromShadow) {
+                $ArtefactFile = $Artefact.Split("\\")[-1]
+                if ($Copied -contains $Artefact) {
+                    Write-Host "       Acquired $ArtefactFile from '$Hostnames' (shadow copy)" -ForegroundColor Green
+                    Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "$ArtefactFile (temporary shadow copy)" "acquired '$ArtefactFile' from a temporary shadow copy on '$Hostnames'"
+                }
+                else {
+                    Write-Host "      FAILURE: '$ArtefactFile' could not be collected." -ForegroundColor Red
+                }
             }
         }
     }

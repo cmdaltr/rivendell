@@ -289,7 +289,7 @@ adopt_vm() {
   LAB_SSH_PASSWORD="$pass" expect "$SSH" ssh "$user" 127.0.0.1 "$PORT" \
     "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location C:/Windows/Temp; tar -xf labcfg.tar; & C:/Windows/Temp/labcfg/firstlogon.ps1 -Source C:/Windows/Temp/labcfg; Remove-Item -Recurse -Force C:/Windows/Temp/labcfg, C:/Windows/Temp/labcfg.tar\"" \
     | grep -v -i password || true
-  wait_ready 5
+  wait_ready 5 "finish provisioning"
 }
 
 start_vm() {
@@ -312,14 +312,14 @@ press_to_boot() {
 ssh_vm() { LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" ssh gandalf 127.0.0.1 "$PORT" "$1"; }
 
 wait_ready() {
-  local limit="${1:-90}" i
-  info "Waiting for Windows to install and provision itself (up to $limit minutes)"
+  local limit="${1:-90}" what="${2:-install and provision itself}" i
+  info "Waiting for Windows to $what (up to $limit minutes)"
   for i in $(seq 1 $((limit * 2))); do
     if nc -z 127.0.0.1 "$PORT" 2>/dev/null && LAB_SSH_TIMEOUT=30 ssh_vm "if (Test-Path C:\\lab\\ready.txt) { 'READY' }" 2>/dev/null | grep -q READY; then
       ok "$VM is ready: ssh -p $PORT gandalf@127.0.0.1 (lab password)"
       return 0
     fi
-    [ $((i % 10)) -eq 0 ] && info "  still installing ($((i / 2)) min, $(vm_status))"
+    [ $((i % 10)) -eq 0 ] && info "  still waiting ($((i / 2)) min, $(vm_status))"
     sleep 30
   done
   die "$VM wasn't ready after $limit minutes. Open UTM to see where it stopped; on a slow disk, run create again (it resumes waiting) with WINDOWS_INSTALL_WAIT=240."
@@ -384,12 +384,12 @@ case "$action" in
       rm -f "$CFG_ISO"
       utm "reload configuration (virtual machine named \"$VM\")" >/dev/null
       start_vm
-      wait_ready 15
+      wait_ready "${WINDOWS_BOOT_WAIT:-30}" "boot"
     fi
     WINDOWS_UTM_VM="$VM"; save_config >/dev/null
     ;;
   adopt) require_password; mkdir -p "$UTM_DIR"; adopt_vm "${2:-}" ;;
-  start) start_vm; wait_ready 15 ;;
+  start) start_vm; wait_ready "${WINDOWS_BOOT_WAIT:-30}" "boot" ;;
   stop) vm_registered && utmctl stop "$VM" || true; ok "$VM stopped" ;;
   delete)
     # Only ever delete a VM the lab built. An adopted VM is the user's own:

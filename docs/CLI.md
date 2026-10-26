@@ -114,6 +114,24 @@ sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 
 `-EncryptionObject` takes `Key`, `Password` or `None`; `-Acquisition` takes `Local` or `Remote`. With no arguments it runs `-EncryptionObject None -Acquisition Local -OutputDirectory C:\TEMP\gandalf\gandalf`.
 
+#### Locked files and `disk_tools.zip`
+
+Some artefacts are held open by Windows and need raw access. Gandalf looks for `tools\disk_tools.zip`, which isn't shipped with Rivendell because it contains third-party binaries. Build it yourself from the upstream releases:
+
+| File in the zip | Source |
+|---|---|
+| `sleuthkit-4.12.1-win32\` (the extracted folder; Gandalf renames it `tsk`) | [The Sleuth Kit releases](https://github.com/sleuthkit/sleuthkit/releases), `sleuthkit-4.12.1-win32.zip` |
+| `RawCopy.exe`, `RawCopy64.exe` | [jschicht/RawCopy](https://github.com/jschicht/RawCopy) |
+
+| Artefact | With `disk_tools.zip` | Without it |
+|---|---|---|
+| `$MFT` | `icat` (Sleuth Kit) | not collected |
+| `Amcache.hve`, `SRUDB.dat` | RawCopy | copied from a temporary shadow copy of C:, which is deleted afterwards and logged in `log.audit` |
+| `setupapi.dev.log` | RawCopy | copied directly (it isn't locked) |
+| `hiberfil.sys`, `pagefile.sys` | RawCopy | not collected |
+
+Creating the shadow copy writes to the target's System Volume Information and adds VSS events to its logs; weigh that against getting Amcache and SRUM before using the fallback on a sensitive system.
+
 ---
 
 ### Output Structure

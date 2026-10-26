@@ -26,6 +26,25 @@ ACQUIRE_SCRIPT = os.path.join(TOOLS_DIR, "acquire_artefacts.py")
 MEMORY_TOOLS = [os.path.join(TOOLS_DIR, "memory", "avml-main.zip"), os.path.join(TOOLS_DIR, "memory", "osxpmem.app.zip")]
 
 
+def remote_can_sudo(ssh, password):
+    """True when the SSH account can sudo with its password."""
+    stdin, stdout, _ = ssh.exec_command("sudo -S -p '' -v")
+    stdin.write(password + "\n")
+    stdin.flush()
+    return stdout.channel.recv_exit_status() == 0
+
+
+def run_remote(ssh, command, password, as_root):
+    """Run command over SSH, through sudo -S when as_root; returns its stdout."""
+    if not as_root:
+        _, stdout, _ = ssh.exec_command(command)
+        return stdout.read().decode(errors="replace")
+    stdin, stdout, _ = ssh.exec_command("sudo -S -p '' " + command)
+    stdin.write(password + "\n")
+    stdin.flush()
+    return stdout.read().decode(errors="replace")
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "EncryptionMethod",
@@ -498,10 +517,12 @@ def main():
                     ACQUIRE_SCRIPT,
                     "/tmp/gandalf/acquire_artefacts.py",
                 )  # sending gandalf acquisition script
-                acquire_in, acquire_out, acquire_err = ssh.exec_command(
-                    "python3 /tmp/gandalf/acquire_artefacts.py"
+                # As root where the account can sudo, as Local mode does: otherwise
+                # root-only artefacts (TCC, KnowledgeC, /var/at) are skipped
+                as_root = remote_can_sudo(ssh, ssh_pswd)
+                exec_script = run_remote(
+                    ssh, "python3 /tmp/gandalf/acquire_artefacts.py", ssh_pswd, as_root
                 )  # executing gandalf acquisition script
-                exec_script = acquire_out.read().decode()
                 print(exec_script)
                 _, list_out, list_err = ssh.exec_command(
                     "ls /tmp/gandalf/gandalf/acquisitions/"
@@ -541,9 +562,7 @@ def main():
                             gandalf_host.split("/")[-1]
                         )
                     )
-                _, rm_out, rm_err = ssh.exec_command(
-                    "rm -rf /tmp/gandalf/"
-                )  # deleting gandalf
+                run_remote(ssh, "rm -rf /tmp/gandalf/", ssh_pswd, as_root)  # deleting gandalf
                 ssh.close()
             except paramiko.ssh_exception.NoValidConnectionsError:
                 print(
