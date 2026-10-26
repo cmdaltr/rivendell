@@ -27,6 +27,7 @@ const SETTINGS = [
   ['ELASTIC_URL', 'Elasticsearch URL', 'Used by the Mordor sensor helpers.'],
 ];
 
+const IMG = `${process.env.PUBLIC_URL}/images/mordor`;
 const formatTime = (t) => (t ? new Date(t * 1000).toLocaleString() : '—');
 
 function AgentPanel({ status, onRecheck }) {
@@ -188,9 +189,17 @@ function LabManage({ section = 'lab', children = null }) {
   const tart = host.profile === 'macos-arm64';
   const noPassword = !state.password_set;
 
-  const vmRow = (command, title, actions) => (
+  // A target as logos: what it runs, then what runs it; the full description is the tooltip
+  const logos = (icons, tip) => (
+    <td className="lab-target" title={tip}>
+      {icons.map(([f, alt]) => (f.includes('.')
+        ? <img key={f} className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
+        : <span key={f} className="lab-logo-text">{f}</span>))}
+    </td>
+  );
+  const vmRow = (command, title, actions, icons) => (
     <tr key={command}>
-      <td>{title}</td>
+      {logos(icons, title)}
       <td className="lab-actions">
         {actions.map((a) => (
           <button
@@ -266,7 +275,8 @@ function LabManage({ section = 'lab', children = null }) {
         <table className="lab-table">
           <tbody>
             <tr>
-              <td>Linux containers ({(state.linux_containers || []).join(', ')}; SSH on 127.0.0.1:2221-2222)</td>
+              {logos([['ubuntu.png', 'Ubuntu'], ['tux.svg', 'Rocky'], ['docker.png', 'Docker']],
+                `Linux containers: ${(state.linux_containers || []).join(', ')} (Ubuntu 24.04, Rocky 9), SSH on 127.0.0.1:2221-2222`)}
               <td className="lab-actions">
                 <button className="secondary" disabled={busy || noPassword} onClick={() => start('linux-targets', ['up'])}>up</button>
                 <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['down'])}>down</button>
@@ -274,20 +284,17 @@ function LabManage({ section = 'lab', children = null }) {
                 <button className="secondary" disabled={busy} onClick={() => start('linux-targets', ['status'])}>status</button>
               </td>
             </tr>
-            {(vagrant || tart) && vmRow('linux-vm', 'Linux VM', ['create', 'start', 'stop', 'delete', 'status'])}
-            {tart && vmRow('macos-vm', 'macOS VM', ['create', 'start', 'stop', 'delete', 'status'])}
-            {vagrant && vmRow('windows-vm', 'Windows 11 VM', ['create', 'start', 'stop', 'provision', 'delete', 'status'])}
-            {tart && vmRow('windows-vm', 'Windows 11 ARM VM (UTM; SSH on 127.0.0.1:2232)', ['create', 'adopt', 'start', 'stop', 'delete', 'status'])}
+            {(vagrant || tart) && vmRow('linux-vm', `Linux VM: Ubuntu with a real kernel (${tart ? 'Tart' : 'Vagrant'}), SSH on 127.0.0.1:2230`,
+              ['create', 'start', 'stop', 'delete', 'status'], [['ubuntu.png', 'Ubuntu'], tart ? ['tart.png', 'Tart'] : ['Vagrant', 'Vagrant']])}
+            {tart && vmRow('macos-vm', 'macOS VM: Sequoia (Tart), SSH on 127.0.0.1:2231',
+              ['create', 'start', 'stop', 'delete', 'status'], [['macos.png', 'macOS'], ['tart.png', 'Tart']])}
+            {vagrant && vmRow('windows-vm', 'Windows 11 VM (Vagrant)',
+              ['create', 'start', 'stop', 'provision', 'delete', 'status'], [['windows.svg', 'Windows'], ['Vagrant', 'Vagrant']])}
+            {tart && vmRow('windows-vm', "Windows 11 ARM VM (UTM), SSH on 127.0.0.1:2232. create installs it unattended from the ARM64 ISO in the lab's isos/ folder (Microsoft's download is manual); adopt takes an installed VM from utm/ that has OpenSSH and provisions it.",
+              ['create', 'adopt', 'start', 'stop', 'delete', 'status'], [['windows.svg', 'Windows'], ['utm.svg', 'UTM']])}
           </tbody>
         </table>
-        {tart && (
-          <p className="lab-note">
-            Windows 11 ARM runs in UTM. <strong>create</strong> installs it unattended from the ARM64 ISO in the lab's
-            <code>isos/</code> folder (Microsoft's download is manual); <strong>adopt</strong> takes an installed VM
-            from <code>utm/</code> that has OpenSSH (Vagrant login by default) and provisions it.
-          </p>
-        )}
-        {noPassword && <p className="lab-note">Set the lab password before creating targets.</p>}
+        <p className="lab-note">Hover over a target for what it is and its SSH port.{noPassword && ' Set the lab password before creating targets.'}</p>
       </div>
 
       <div className="card">
