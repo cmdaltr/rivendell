@@ -252,7 +252,19 @@ function LabManage({ section = 'lab', children = null }) {
   const img = (f, alt) => (f.includes('.')
     ? <img className="lab-logo" src={`${IMG}/${f}`} alt={alt} />
     : <span className="lab-logo-text">{f}</span>);
-  const engineRow = (key, engine, items, fixedActions = null) => {
+  // Buttons line up in shared columns: up and down do start and stop's job on the containers; buttons
+  // only some rows have go on the left, the ones every row has on the right, status last.
+  const slotOf = (a) => ({ up: 'start', down: 'stop' }[a] || a);
+  const SLOT_ORDER = ['adopt', 'provision', 'reset', 'create', 'delete', 'start', 'stop', 'status'];
+  const slotsFor = (defs) => {
+    const count = {};
+    defs.forEach(([, , items, fixed]) => {
+      new Set((fixed || items.flatMap((it) => it.actions)).map(slotOf)).forEach((sl) => { count[sl] = (count[sl] || 0) + 1; });
+    });
+    const rank = (sl) => (sl === 'status' ? Infinity : count[sl] * 100 + SLOT_ORDER.indexOf(sl));
+    return Object.keys(count).sort((x, y) => rank(x) - rank(y));
+  };
+  const engineRow = ([key, engine, items, fixedActions = null], slots) => {
     const picked = items.filter((it) => !unpicked[it.id]);
     const actions = fixedActions || [...new Set(items.flatMap((it) => it.actions))];
     const run = (a) => {
@@ -277,17 +289,19 @@ function LabManage({ section = 'lab', children = null }) {
             </button>
           )))}
         </td>
-        <td><div className="lab-actions">
-          {actions.map((a) => {
-            const able = fixedActions || picked.some((it) => it.actions.includes(a));
-            return (
-              <button key={a} className="secondary" onClick={() => run(a)}
+        {slots.map((slot) => {
+          const a = actions.find((x) => slotOf(x) === slot);
+          if (!a) return <td key={slot} className="lab-slot" />;
+          const able = fixedActions || picked.some((it) => it.actions.includes(a));
+          return (
+            <td key={slot} className="lab-slot">
+              <button className="secondary" onClick={() => run(a)}
                       disabled={busy || !able || (noPassword && ['create', 'adopt', 'up', 'reset'].includes(a))}>
                 {a}
               </button>
-            );
-          })}
-        </div></td>
+            </td>
+          );
+        })}
       </tr>
     );
   };
@@ -301,6 +315,19 @@ function LabManage({ section = 'lab', children = null }) {
       tip: "Windows 11 ARM VM (UTM), SSH on 127.0.0.1:2232. create installs it unattended from the ARM64 ISO in the lab's isos/ folder (Microsoft's download is manual); adopt takes an installed VM from utm/ that has OpenSSH and provisions it." }
     : { id: 'windows-vm', command: 'windows-vm', logo: 'windows.svg', name: 'the Windows VM', actions: ['create', 'start', 'stop', 'provision', 'delete', 'status'],
       tip: 'Windows 11 VM (Vagrant)' };
+
+  const targetRows = [
+    ['docker', ['docker.png', 'Docker', 'Docker containers: quick to rebuild, no real kernel'], [
+      { id: 'lab-ubuntu', logo: 'ubuntu.png', name: 'Ubuntu', command: 'linux-targets',
+        tip: 'lab-ubuntu: Ubuntu 24.04 (Debian family, apt), SSH on 127.0.0.1:2221',
+        confirm: { reset: 'Rebuild and re-seed all Linux containers?' } },
+      { id: 'lab-rocky', logo: 'rocky.svg', name: 'Rocky', tip: 'lab-rocky: Rocky 9 (RHEL family, dnf), SSH on 127.0.0.1:2222' },
+    ], ['up', 'down', 'reset', 'status']],
+    ...(tart ? [['tart', ['tart.png', 'Tart', 'Tart VMs (Apple silicon)'], [ubuntuVm, macosVm]],
+      ['utm', ['utm.svg', 'UTM', 'UTM (Windows on Apple silicon)'], [windowsVm]]] : []),
+    ...(vagrant ? [['vagrant', ['Vagrant', 'Vagrant', 'Vagrant VMs'], [ubuntuVm, windowsVm]]] : []),
+  ];
+  const targetSlots = slotsFor(targetRows);
 
   return (
     <div className="lab">
@@ -362,15 +389,7 @@ function LabManage({ section = 'lab', children = null }) {
         <h2>Targets</h2>
         <table className="lab-table lab-targets">
           <tbody>
-            {engineRow('docker', ['docker.png', 'Docker', 'Docker containers: quick to rebuild, no real kernel'], [
-              { id: 'lab-ubuntu', logo: 'ubuntu.png', name: 'Ubuntu', command: 'linux-targets',
-                tip: 'lab-ubuntu: Ubuntu 24.04 (Debian family, apt), SSH on 127.0.0.1:2221',
-                confirm: { reset: 'Rebuild and re-seed all Linux containers?' } },
-              { id: 'lab-rocky', logo: 'rocky.svg', name: 'Rocky', tip: 'lab-rocky: Rocky 9 (RHEL family, dnf), SSH on 127.0.0.1:2222' },
-            ], ['up', 'down', 'reset', 'status'])}
-            {tart && engineRow('tart', ['tart.png', 'Tart', 'Tart VMs (Apple silicon)'], [ubuntuVm, macosVm])}
-            {tart && engineRow('utm', ['utm.svg', 'UTM', 'UTM (Windows on Apple silicon)'], [windowsVm])}
-            {vagrant && engineRow('vagrant', ['Vagrant', 'Vagrant', 'Vagrant VMs'], [ubuntuVm, windowsVm])}
+            {targetRows.map((d) => engineRow(d, targetSlots))}
           </tbody>
         </table>
         <p className="lab-note">Hover over a logo for what it is and its SSH port. Click a VM's logo to leave it out of that row's commands.{noPassword && ' Set the lab password before creating targets.'}</p>
