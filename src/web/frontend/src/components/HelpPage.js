@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
+const architectureMap = `${process.env.PUBLIC_URL}/architecture/rivendell-architecture.html`;
+const architecturePages = [
+  { anchor: 'realm', title: 'The realm: Gandalf to Elrond to Eru' },
+  { anchor: 'elrond', title: "Elrond's roads: branching by evidence and OS" },
+];
 
 const HelpPage = () => {
   const [activeSection, setActiveSection] = useState('overview');
@@ -17,22 +22,28 @@ const HelpPage = () => {
           </p><br />
 
           <h4>Architecture</h4>
-          <pre className="code-block">
-{`        ┌──────────────────────────────────────────────────────────────┐
-        │                       Rivendell Suite                        │
-        ├──────────────────────────────────────────────────────────────┤
-        │                                                              │
-        │    ┌──────────────┐   ┌──────────────┐   ┌──────────────┐    │
-        │    │   Gandalf    │   │    Elrond    │   │     Eru      │    │
-        │    │ Acquisition  │ → │   Analysis   │ → │   AI Agent   |    │
-        │    └──────────────┘   └──────────────┘   └──────────────┘    │
-        │           ↓                  ↓                  ↓            │
-        │     ┌─────────────────────────────────────────────────┐      │
-        │     │      MITRE ATT&CK • Cloud • SIEM • Reports      │      │
-        │     └─────────────────────────────────────────────────┘      │
-        │                                                              │
-        └──────────────────────────────────────────────────────────────┘`}
-          </pre>
+          <p>
+            The whole platform drawn as a map of Middle-earth, and Elrond's directed graph as it branches by
+            evidence type and operating system. Open either for the full-size map.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', margin: '1rem 0' }}>
+            {architecturePages.map((page) => (
+              <a
+                key={page.anchor}
+                href={`${architectureMap}#${page.anchor}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ flex: '1 1 320px', color: '#a7db6c', textDecoration: 'none' }}
+              >
+                <img
+                  src={`${process.env.PUBLIC_URL}/architecture/${page.anchor}.jpg`}
+                  alt={page.title}
+                  style={{ width: '100%', borderRadius: '6px', border: '1px solid #3f4b2a' }}
+                />
+                <div style={{ fontFamily: 'Cinzel, Times New Roman, serif', marginTop: '0.4rem' }}>{page.title}</div>
+              </a>
+            ))}
+          </div>
           <br />
           <h4>Key Capabilities</h4>
           <ul>
@@ -115,6 +126,43 @@ cd rivendell
         </>
       )
     },
+    cli: {
+      title: 'Command Line',
+      content: (
+        <>
+          <h3>The rivendell Command</h3>
+          <p>
+            One command runs everything: the Docker stack, Gandalf, Elrond, Mordor, Anduril, the lab and every
+            script under <code>scripts/</code>. Link it into a directory on your PATH once and it runs from anywhere.
+          </p>
+          <pre className="code-block">
+{`cd rivendell
+./rivendell install        # links ~/.local/bin/rivendell (or: ./rivendell install /usr/local/bin)
+rivendell help`}
+          </pre>
+
+          <br />
+          <h4>Commands</h4>
+          <pre className="code-block">
+{`rivendell start | stop | restart | status [--testing] [--logs]
+rivendell gandalf [bash|python] <args>     # collect from a Linux or macOS host
+rivendell acquire <args>                   # Gandalf through the Python CLI
+rivendell analyse <args>                   # Elrond
+rivendell mordor <command>                 # list, download, info, local, verify, ...
+rivendell anduril <command>                # container administration
+rivendell lab <command>                    # the test lab
+rivendell scripts                          # every script under scripts/
+rivendell jobs status                      # or any <group> <name>: siem splunk-restart, docker clean, ...
+rivendell map                              # open the architecture map`}
+          </pre>
+          <p>
+            Forensic commands keep the directory you run them from, so relative evidence and output paths work as
+            typed; scripts and the stack run from the repository root. Set <code>RIVENDELL_PYTHON</code> to use a
+            virtualenv. On Windows, run <code>Invoke-Gandalf.ps1</code> from <code>src/acquisition/windows</code>.
+          </p>
+        </>
+      )
+    },
     gandalf: {
       title: 'Gandalf',
       content: (
@@ -182,6 +230,16 @@ sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence`}
             <li><strong>Key:</strong> Pre-shared key encryption</li>
             <li><strong>None:</strong> No encryption (not recommended)</li>
           </ul>
+
+          <h4>Collection Order and Integrity</h4>
+          <p>
+            Every collector copies to its local working directory first, in order of volatility: network
+            connections and processes, then memory, then the files that change fastest (<code>$LogFile</code>, the USN
+            journal, page and swap files, <code>$MFT</code>; temp directories on Linux and macOS), then logs that roll
+            over, then everything else. Only when everything is copied is each file SHA-256 hashed into
+            <code> log.meta</code>, which travels in the archive with <code>log.audit</code>. Elrond hashes every file
+            again on arrival and writes <code>gandalf_integrity.csv</code>: verified, MISMATCH, missing or unhashed.
+          </p>
         </>
       )
     },
