@@ -379,7 +379,8 @@ raw_check() {
   nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
   refresh_gandalf
   push_script Test-RawReader.ps1
-  ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Test-RawReader.ps1"
+  # Copying $MFT twice (reader, then RawCopy) takes over 10 minutes on the lab VM
+  LAB_SSH_TIMEOUT="${LAB_SSH_TIMEOUT:-7200}" ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Test-RawReader.ps1"
 }
 
 sensor() {

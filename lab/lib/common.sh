@@ -196,10 +196,12 @@ EOF
 # macOS Keychain, or the Secret Service (secret-tool) on Linux. With neither, the
 # password is asked for once per run and kept in memory only.
 lab_password() {
+  # No stored password is normal (the default is in use): the lookups' "not found"
+  # exit codes (44 from security) mustn't end a `set -e` caller
   if is_macos; then
-    security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null
+    security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true
   elif need secret-tool; then
-    secret-tool lookup service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null
+    secret-tool lookup service "$KEYCHAIN_SERVICE" account "$KEYCHAIN_ACCOUNT" 2>/dev/null || true
   fi
 }
 

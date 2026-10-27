@@ -28,6 +28,26 @@ $HaveRawCopy = Test-Path -LiteralPath $RawCopy
 Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "$Work\reader", "$Work\rawcopy" | Out-Null
 
+# Live metafiles change between two reads minutes apart, so a hash mismatch alone
+# proves nothing: count the 1 KB records (or blocks) that differ as well
+Add-Type -TypeDefinition @'
+public static class RawCheckDiff {
+    public static long Blocks(string a, string b, int size) {
+        long differ = 0;
+        using (var fa = System.IO.File.OpenRead(a)) using (var fb = System.IO.File.OpenRead(b)) {
+            var ba = new byte[size]; var bb = new byte[size];
+            while (true) {
+                int na = fa.Read(ba, 0, size), nb = fb.Read(bb, 0, size);
+                if (na == 0 && nb == 0) break;
+                if (na != nb) { differ++; continue; }
+                for (int i = 0; i < na; i++) { if (ba[i] != bb[i]) { differ++; break; } }
+            }
+        }
+        return differ;
+    }
+}
+'@
+
 $Started = Get-Date
 $Ntfs = New-Object GandalfNtfs("C:")
 Write-Output ("# reader opened C: in {0:N1}s (cluster {1}, record {2})" -f ((Get-Date) - $Started).TotalSeconds, $Ntfs.ClusterSize, $Ntfs.RecordSize)
@@ -50,11 +70,11 @@ $Checks = @(
     @{ Path = "C:\ProgramData\Microsoft\Network\Downloader\qmgr.db" }
 )
 
-Write-Output "File,ReaderBytes,RawCopyBytes,Match,ReaderSeconds,RawCopySeconds"
+Write-Output "File,ReaderBytes,RawCopyBytes,Match,DifferingBlocks,ReaderSeconds,RawCopySeconds"
 foreach ($Check in $Checks) {
     $Name = if ($Check.Name) { $Check.Name } else { Split-Path -Leaf $Check.Path }
     $ReaderOut = Join-Path "$Work\reader" $Name
-    $ReaderBytes = ""; $ReaderSeconds = ""; $RawCopyBytes = ""; $RawCopySeconds = ""; $Match = ""
+    $ReaderBytes = ""; $ReaderSeconds = ""; $RawCopyBytes = ""; $RawCopySeconds = ""; $Match = ""; $Differ = ""
     try {
         $t = Get-Date
         if ($Check.ContainsKey("Record")) { [void]$Ntfs.CopyRecord($Check.Record, "", $ReaderOut, $false) }
@@ -73,11 +93,12 @@ foreach ($Check in $Checks) {
             $RawCopyBytes = (Get-Item -LiteralPath $RawCopyOut).Length
             if (Test-Path -LiteralPath $ReaderOut) {
                 $Match = ((Get-FileHash -LiteralPath $ReaderOut).Hash -eq (Get-FileHash -LiteralPath $RawCopyOut).Hash)
+                if (-not $Match) { $Differ = "{0} of {1}" -f [RawCheckDiff]::Blocks($ReaderOut, $RawCopyOut, $Ntfs.RecordSize), [math]::Ceiling($RawCopyBytes / $Ntfs.RecordSize) }
             }
         }
         else { $RawCopyBytes = "no output" }
     }
-    Write-Output "$Name,$ReaderBytes,$RawCopyBytes,$Match,$ReaderSeconds,$RawCopySeconds"
+    Write-Output "$Name,$ReaderBytes,$RawCopyBytes,$Match,$Differ,$ReaderSeconds,$RawCopySeconds"
 }
 $Ntfs.Dispose()
 Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
