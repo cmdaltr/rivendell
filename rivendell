@@ -270,7 +270,7 @@ case "$COMMAND" in
     start|stop|restart|status) stack "$COMMAND" "$@" ;;
     install) install_link "$@" ;;
     uninstall) uninstall_link "$@" ;;
-    map) shift; open_map "$@" ;;
+    map) open_map "$@" ;;
     where) echo "$ROOT" ;;
     lab) exec "$ROOT/lab/lab.sh" "$@" ;;
     gandalf)
