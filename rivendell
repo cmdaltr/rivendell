@@ -37,7 +37,7 @@ The lab and the scripts:
 Set-up:
   install [dir]                     Link this command into dir (default ~/.local/bin) to run it from anywhere
   uninstall [dir]                   Remove that link
-  map                               Open the architecture map
+  map [realm|elrond|gandalf|machine] Open an architecture page (machine is the 3D one)
   help                              This list
 
 The Windows collector is PowerShell: run Invoke-Gandalf.ps1 from src/acquisition/windows
@@ -239,10 +239,25 @@ uninstall_link() {
 }
 
 open_map() {
-    local map="$ROOT/src/web/frontend/public/architecture/rivendell-architecture.html"
-    if command -v open &>/dev/null; then open "$map"
-    elif command -v xdg-open &>/dev/null; then xdg-open "$map"
-    else echo "$map"
+    local dir="$ROOT/src/web/frontend/public/architecture" page
+    case "${1:-realm}" in
+        realm|elrond) page="rivendell-architecture.html#${1:-realm}" ;;
+        gandalf)      page="gandalf-acquisition.html" ;;
+        machine)
+            # ES modules don't load from file://, so the 3D page is served on loopback
+            local port="${RIVENDELL_MAP_PORT:-5690}"
+            echo "The Rivendell machine: http://127.0.0.1:$port/rivendell-machine.html (Ctrl-C to stop)"
+            (sleep 1; open_url "http://127.0.0.1:$port/rivendell-machine.html") &
+            exec "${RIVENDELL_PYTHON:-python3}" -m http.server "$port" --bind 127.0.0.1 -d "$dir" ;;
+        *) echo "Unknown map '$1': realm, elrond, gandalf or machine" >&2; return 1 ;;
+    esac
+    open_url "file://$dir/$page"
+}
+
+open_url() {
+    if command -v open &>/dev/null; then open "$1"
+    elif command -v xdg-open &>/dev/null; then xdg-open "$1"
+    else echo "$1"
     fi
 }
 
@@ -255,7 +270,7 @@ case "$COMMAND" in
     start|stop|restart|status) stack "$COMMAND" "$@" ;;
     install) install_link "$@" ;;
     uninstall) uninstall_link "$@" ;;
-    map) open_map ;;
+    map) shift; open_map "$@" ;;
     where) echo "$ROOT" ;;
     lab) exec "$ROOT/lab/lab.sh" "$@" ;;
     gandalf)

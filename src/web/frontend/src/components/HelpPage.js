@@ -163,7 +163,7 @@ rivendell anduril <command>                # container administration
 rivendell lab <command>                    # the test lab
 rivendell scripts                          # every script under scripts/
 rivendell jobs status                      # or any <group> <name>: siem splunk-restart, docker clean, ...
-rivendell map                              # open the architecture map`}
+rivendell map [realm|elrond|gandalf|machine] # open an architecture page`}
           </pre>
           <p>
             Forensic commands keep the directory you run them from, so relative evidence and output paths work as

@@ -46,7 +46,7 @@ It follows its own link back to the repository, so moving the clone means runnin
 | `rivendell lab <command>` | The test lab, `lab/lab.sh` |
 | `rivendell scripts` | Lists every script under `scripts/` |
 | `rivendell <group> <name> [args]` | One of them, e.g. `rivendell jobs status`, `rivendell siem splunk-restart`, `rivendell docker clean` |
-| `rivendell map` | Opens the architecture map |
+| `rivendell map [realm\|elrond\|gandalf\|machine]` | Opens an architecture page; `machine` (3D) is served on 127.0.0.1:5690 until Ctrl-C |
 | `rivendell where` | Prints the repository path |
 
 Forensic commands keep the directory you call them from, so relative evidence and output paths work as typed. Scripts under `scripts/` and the stack commands run from the repository root. Scripts are found when they're run (`scripts/<group>/<group>-<name>.sh`, `scripts/<group>/<name>.sh` or `.py`, or `scripts/<name>.sh`), so a new script needs no wiring. Python commands use `python3`; set `RIVENDELL_PYTHON` to use a virtualenv with Rivendell's requirements installed instead. The Windows collector is PowerShell and runs on Windows: `Invoke-Gandalf.ps1` in `src/acquisition/windows`.
