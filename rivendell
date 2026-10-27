@@ -37,6 +37,7 @@ The lab and the scripts:
 Set-up:
   install [dir]                     Link this command into dir (default ~/.local/bin) to run it from anywhere
   uninstall [dir]                   Remove that link
+  app [install|uninstall] [--dock]  The desktop app: Rivendell.app (macOS) or a menu entry (Linux)
   map [realm|elrond|gandalf|journey] Open an architecture page (journey is the 3D one)
   help                              This list
 
@@ -133,11 +134,17 @@ stack() {
     if $TESTING; then
         COMPOSE_FILES="$COMPOSE_FILES -f tests/docker-compose.testing.yml"
     fi
+    # Evidence folders added in the desktop app's setup (gitignored, so a pull never touches it)
+    if [ -f "$ROOT/docker-compose.local.yml" ]; then
+        COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.local.yml"
+    fi
     ensure_docker
     case "$command" in
         start)
             echo "Starting Rivendell..."
-            compose_cmd up -d
+            prepare_app_copy
+            compose_cmd up -d $BUILD_FLAG || exit 1
+            [ -n "$BUILD_FLAG" ] && cat "$ROOT/.rivendell-version" > "$ROOT/.rivendell-built"
             print_urls
             $FOLLOW_LOGS && compose_cmd logs -f
             ;;
@@ -156,6 +163,25 @@ stack() {
             compose_cmd ps
             ;;
     esac
+}
+
+# A copy the desktop app installed (not a git clone) carries .rivendell-version. It gets
+# a .env with its own SECRET_KEY on first start, and its images are rebuilt once after
+# each update, since the worker image copies the source in at build time.
+prepare_app_copy() {
+    BUILD_FLAG=""
+    [ -f "$ROOT/.rivendell-version" ] || return 0
+    if [ ! -f "$ROOT/.env" ] && [ -f "$ROOT/.env.example" ]; then
+        local key
+        key="$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')"
+        sed "s/^SECRET_KEY=.*/SECRET_KEY=$key/" "$ROOT/.env.example" > "$ROOT/.env"
+        chmod 600 "$ROOT/.env"
+        echo "Created .env with a new SECRET_KEY."
+    fi
+    if [ "$(cat "$ROOT/.rivendell-version")" != "$(cat "$ROOT/.rivendell-built" 2>/dev/null)" ]; then
+        echo "New Rivendell version: rebuilding the images (this takes a while)..."
+        BUILD_FLAG="--build"
+    fi
 }
 
 # ── Scripts under scripts/ ────────────────────────────────────────────────────
@@ -238,6 +264,33 @@ uninstall_link() {
     fi
 }
 
+# The desktop app: app/macos builds Rivendell.app, app/linux installs a desktop entry;
+# on Windows it's app/windows/install.ps1, run from PowerShell
+desktop_app() {
+    local action="${1:-install}"
+    [ $# -gt 0 ] && shift
+    case "$action" in
+        install|uninstall) ;;
+        *) echo "Usage: rivendell app [install|uninstall] [--dock] [dir]" >&2; return 1 ;;
+    esac
+    case "$(uname -s)" in
+        Darwin)
+            if [ "$action" = uninstall ]; then
+                exec bash "$ROOT/app/macos/build.sh" --uninstall "$@"
+            fi
+            exec bash "$ROOT/app/macos/build.sh" "$@" ;;
+        Linux)
+            if [ "$action" = uninstall ]; then
+                exec bash "$ROOT/app/linux/install.sh" --uninstall
+            fi
+            exec bash "$ROOT/app/linux/install.sh" ;;
+        *)
+            echo "On Windows, from PowerShell:" >&2
+            echo "  powershell -ExecutionPolicy Bypass -File \"$ROOT/app/windows/install.ps1\"" >&2
+            return 1 ;;
+    esac
+}
+
 open_map() {
     local dir="$ROOT/src/web/frontend/public/architecture" page
     case "${1:-realm}" in
@@ -271,6 +324,7 @@ case "$COMMAND" in
     install) install_link "$@" ;;
     uninstall) uninstall_link "$@" ;;
     map) open_map "$@" ;;
+    app) desktop_app "$@" ;;
     where) echo "$ROOT" ;;
     lab) exec "$ROOT/lab/lab.sh" "$@" ;;
     gandalf)

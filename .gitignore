@@ -159,3 +159,8 @@ symbols/mac/*.json*
 
 # Third-party Windows tools (RawCopy, Sleuth Kit): only a fallback for the raw volume reader
 src/acquisition/tools/disk_tools.zip
+
+# Desktop app: evidence mounts from setup, and the version markers of an app-installed copy
+docker-compose.local.yml
+.rivendell-version
+.rivendell-built

@@ -43,6 +43,7 @@ Gandalf (acquisition) → Elrond (analysis) → Eru (AI analyst)
 | `src/web/frontend/` | React (:5687); About is `components/HelpPage.js` |
 | `src/mordor/` | Security datasets and recorded attack telemetry |
 | `src/models/` | Ollama Modelfiles for the eru-* models |
+| `app/` | Desktop app: `macos/` (Swift WebKit app + first-run setup, `build.sh`/`package.sh` → DMG), `linux/` (launcher + zenity setup, `.deb`), `windows/` (launcher, Inno Setup installer); release builds in `.github/workflows/desktop-release.yml`; `rivendell app install` for a checkout; see `app/README.md` |
 | `lab/` | Test lab: Linux targets, Tart/UTM VMs, Gandalf against seeded hosts; bugs in `tests/docs/BUGS.md` |
 | `src/analysis/web/`, `src/analysis/docker/` | Legacy standalone Elrond stack (ports 3000/8000), not used |
 
