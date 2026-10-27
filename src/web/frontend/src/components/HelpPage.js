@@ -10,6 +10,11 @@ const architecturePages = [
     preview: 'gandalf.jpg',
     title: "Gandalf's acquisition flow",
   },
+  {
+    href: `${process.env.PUBLIC_URL}/architecture/rivendell-machine.html`,
+    preview: 'machine.jpg',
+    title: 'The Rivendell machine (interactive 3D)',
+  },
 ];
 
 const HelpPage = () => {

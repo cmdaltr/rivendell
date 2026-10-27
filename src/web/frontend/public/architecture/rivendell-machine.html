@@ -1,0 +1,973 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rivendell machine</title>
+<style>
+:root {
+  --bg: #0b1622; --card: #0f1d2c; --edge: rgba(0, 212, 170, .28); --ink: #e6edf3; --soft: #8b9bab;
+  --teal: #00d4aa; --amber: #f59e0b; --red: #ef4444;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+  font-family: "JetBrains Mono", "SF Mono", Menlo, "Courier New", monospace; }
+.card { position: relative; margin: 16px auto; width: min(1600px, calc(100% - 32px)); height: min(900px, calc(100vh - 32px));
+  min-height: 520px; background: var(--card); border: 1px solid var(--edge); border-radius: 14px; overflow: hidden; }
+#stage { position: absolute; inset: 0; }
+#stage canvas { display: block; }
+.corner { position: absolute; z-index: 3; font-size: 12px; letter-spacing: .04em; pointer-events: none; }
+.tl { top: 14px; left: 18px; color: var(--soft); }
+.tr { top: 14px; right: 18px; text-align: right; }
+.tr b { font-size: 15px; color: var(--ink); font-weight: 600; }
+.bl { bottom: 14px; left: 18px; color: var(--soft); max-width: 46%; }
+.br { bottom: 14px; right: 18px; text-align: right; color: var(--teal); font-variant-numeric: tabular-nums; }
+.br .dim { color: var(--soft); }
+.controls { position: absolute; z-index: 4; top: 44px; left: 18px; display: flex; flex-wrap: wrap; gap: 6px; max-width: 70%; }
+.controls button { font: inherit; font-size: 11.5px; color: var(--ink); background: rgba(13, 27, 42, .85);
+  border: 1px solid var(--edge); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+.controls button[aria-pressed="true"] { border-color: var(--teal); color: var(--teal); }
+.controls .sep { width: 8px; }
+#panel { position: absolute; z-index: 4; right: 18px; top: 52px; width: 330px; max-height: calc(100% - 110px); overflow: auto;
+  background: rgba(13, 27, 42, .94); border: 1px solid var(--edge); border-radius: 10px; padding: 14px 16px;
+  font-size: 12.5px; line-height: 1.55; display: none; }
+#panel.open { display: block; }
+#panel .k { color: var(--amber); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+#panel h2 { margin: 4px 0 8px; font-size: 16px; }
+#panel p { margin: 0 0 8px; color: #c9d4de; }
+#panel code { color: var(--teal); }
+#panel .x { position: absolute; top: 8px; right: 10px; background: none; border: 0; color: var(--soft); font: inherit;
+  font-size: 16px; cursor: pointer; }
+.tag { font-size: 10.5px; color: #c9d4de; background: rgba(11, 22, 34, .78); border: 1px solid rgba(0, 212, 170, .22);
+  padding: 2px 6px; border-radius: 4px; white-space: nowrap; pointer-events: none; transition: opacity .3s; }
+.tag.hot { color: var(--bg); background: var(--teal); border-color: var(--teal); }
+.hide-tags .tag:not(.hot), .tag.minor:not(.hot) { opacity: 0; }
+.legend { width: min(1600px, calc(100% - 32px)); margin: 0 auto 24px; color: var(--soft); font-size: 12px; line-height: 1.6;
+  display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.fallback { padding: 40px; color: var(--soft); }
+@media (max-width: 700px) {
+  .card { height: 640px; }
+  .controls { max-width: calc(100% - 36px); }
+  #panel { left: 12px; right: 12px; width: auto; top: auto; bottom: 46px; max-height: 45%; }
+  .bl { display: none; }
+  .br { left: 18px; font-size: 11px; }
+  .tr b { font-size: 13px; }
+}
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.min.js" } }</script>
+</head>
+<body>
+<div class="card" id="card">
+  <div id="stage"></div>
+  <div class="corner tl">Fig 4 · Rivendell</div>
+  <div class="corner tr"><b>The Rivendell machine</b><br><span style="color:var(--soft)">acquire · analyse · answer</span></div>
+  <div class="controls" id="controls">
+    <button data-src="gandalf" aria-pressed="true">Gandalf archive</button>
+    <button data-src="disk">Disk image</button>
+    <button data-src="memory">Memory image</button>
+    <button data-src="mordor">Mordor dataset</button>
+    <button data-src="cloud">Cloud</button>
+    <span class="sep"></span>
+    <button id="ollama" aria-pressed="true">Ollama: on</button>
+    <button id="tags" aria-pressed="true">Labels</button>
+    <button id="tour" aria-pressed="true">Tour</button>
+  </div>
+  <aside id="panel" aria-live="polite"><button class="x" aria-label="Close">×</button><div id="panelBody"></div></aside>
+  <div class="corner bl" id="hint">Drag to orbit · scroll to zoom · click a part to read about it · pick an evidence type to change the route</div>
+  <div class="corner br" id="readout">—</div>
+</div>
+<div class="legend">
+  <span><i style="background:#3b82f6"></i>Windows</span>
+  <span><i style="background:#f59e0b"></i>Linux</span>
+  <span><i style="background:#cbd5e1"></i>macOS</span>
+  <span><i style="background:#a855f7"></i>Memory (Volatility 3)</span>
+  <span><i style="background:#ef4444"></i>Mordor attack datasets</span>
+  <span><i style="background:#00d4aa"></i>Job and case data</span>
+  <span>Each evidence type takes its own route through Elrond's directed graph: Gandalf archives join at Process, disk images are collected first, memory goes to the furnace.</span>
+</div>
+<noscript><p class="fallback">This page needs JavaScript and WebGL.</p></noscript>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "./vendor/OrbitControls.js";
+import { CSS2DRenderer, CSS2DObject } from "./vendor/CSS2DRenderer.js";
+
+const card = document.getElementById("card");
+const stage = document.getElementById("stage");
+const readout = document.getElementById("readout");
+const panel = document.getElementById("panel");
+const panelBody = document.getElementById("panelBody");
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ---------- the model: what the machine is true to ----------
+const OS = {
+  windows: { colour: 0x3b82f6, host: "LAB-WIN11", collector: "Invoke-Gandalf.ps1", files: 1201 },
+  linux:   { colour: 0xf59e0b, host: "lab-ubuntu", collector: "gandalf.sh", files: 0 },
+  macos:   { colour: 0xcbd5e1, host: "lab-macos", collector: "gandalf.py", files: 0 },
+};
+const VOLATILITY = ["Connections, processes", "Memory", "$LogFile, $J, page files, $MFT", "Temp dirs",
+  "Event logs, /var/log", "Prefetch, registry", "Users, files"];
+
+const INFO = {
+  hosts: ["The Lands of Men", "Live hosts",
+    "Windows 8.1 to 11 and Server 2012 R2+, Linux (Ubuntu, Debian, RHEL, Rocky…) and macOS from Big Sur. Gandalf runs on them live, as admin or root, locally or remotely."],
+  cloud: ["The far shores", "Cloud",
+    "AWS, Azure and GCP: instances, disk snapshots, CloudTrail and activity logs. Snapshots become disk images and take the disk-image route."],
+  images: ["Straight to Elrond", "Disk and memory images",
+    "E01, VMDK, VHD(X), raw and dd; whole disks or single volumes. Memory: raw dumps, AFF4, hiberfil.sys, pagefile.sys, MEMORY.DMP, a VM's .vmem. No Gandalf needed."],
+  gandalf: ["Sets out from the Shire", "Gandalf: acquisition",
+    "<code>gandalf.sh</code> (bash 3.2+) and <code>gandalf.py</code> for Linux and macOS, locally or over SSH; <code>Invoke-Gandalf.ps1</code> for Windows, locally or over PSRemoting. Live state first, then files in order of volatility; locked files read straight off the NTFS volume (raw reader, RawCopy, a temporary VSS snapshot, <code>reg save</code>)."],
+  rack: ["RFC 3227", "Order of volatility",
+    "Each vial fills in turn: " + VOLATILITY.map((v, i) => `${i + 1}. ${v}`).join(", ") + ". Everything is copied locally first and hashed afterwards."],
+  press: ["Sealed for the road", "Manifest and encrypted archive",
+    "Once everything is copied, every file is SHA-256 hashed into <code>log.meta</code> and the archive is encrypted: None, Password or Key. In Key mode the key travels as <code>&lt;host&gt;.shadowfax.key</code>."],
+  web: ["The Prancing Pony", "Web UI and API",
+    "React front end on :5687 and FastAPI back end on :5688: start jobs, upload or pick images, watch progress, read results, Ask Eru. Users and roles; admins also see Aragorn."],
+  redis: ["Messages at Bree", "Redis",
+    "The job queue. Each job ticket waits in a pigeonhole until the Celery worker takes it."],
+  worker: ["Delving in Moria", "Elrond worker (Celery)",
+    "Takes jobs from Redis and runs Elrond. Elrond runs every tool as a separate process (Volatility 3, Plaso, Artemis, RegRipper, YARA, The Sleuth Kit); the subprocess boundary is deliberate."],
+  gate: ["Step 01", "Identify and mount",
+    "Recognises E01, VMDK, raw and dd images, memory, Gandalf archives, Mordor datasets and cloud logs. Gandalf archives are decrypted and every file is re-hashed against <code>log.meta</code> into <code>gandalf_integrity.csv</code> (verified, MISMATCH, missing), then laid out as <code>raw/</code>."],
+  "lane-windows": ["The West-road", "Windows lane",
+    "Collect: hives with their .LOG1/.LOG2, event logs, $MFT, $UsnJrnl, $LogFile, prefetch, SRUM, Amcache, jump lists, WMI repository, tasks, browsers. Process: Artemis, registry extraction, WMI subscriptions carved from OBJECTS.DATA, UAL, ActivitiesCache, LNK, Defender logs."],
+  "lane-linux": ["The North-way", "Linux lane",
+    "Collect: /etc (passwd, shadow, sudoers, PAM, preload), /var/log and the journal, cron, systemd units and generators, utmp/wtmp/btmp, udev, web roots, histories. Process: logins and failed logins, PAM and preload flagged, kernel modules without a file, executables in /tmp and /dev/shm."],
+  "lane-macos": ["The Elven-path", "macOS lane",
+    "Collect: LaunchAgents and LaunchDaemons, BTM, unified-log export, TCC, KnowledgeC, quarantine, ExecPolicy, XProtect, Biome, Safari and Chrome, Mail. Process: plists to JSON with persistence tagged, BTM and SFL decoded, SQLite read with its WAL, .emlx mail."],
+  furnace: ["Volatility 3", "Memory furnace",
+    "Memory images and Gandalf's memory dumps (DumpIt, AVML, osxpmem) are read by profile: pslist, psscan, cmdline, netscan, malfind, svcscan and the linux.* and mac.* equivalents."],
+  analyse: ["Step 04", "Analyse",
+    "Keyword and YARA searches, IOC extraction, timestomping and alternate data streams in $MFT, masquerading and misplaced binaries, NSRL matching."],
+  attack: ["Step 05", "MITRE ATT&CK tagging",
+    "Techniques tagged from artefacts, event-log rules and Mordor datasets into <code>mitre_techniques.txt</code>, with a Navigator layer. The grid is the 14 Enterprise tactics."],
+  timeline: ["Step 06", "Timeline (Plaso)",
+    "psteal builds one super-timeline across every source of a host, also indexed into Splunk or Kibana."],
+  export: ["Step 07", "Export",
+    "<code>--Splunk</code>, <code>--Elastic</code> with Rivendell's own app and dashboards, <code>--Navigator</code>, and the case archive with its audit log."],
+  store: ["Under the Lonely Mountain", "Case store",
+    "Postgres holds users, jobs and history. Case directories on disk: <code>raw/</code> as collected, <code>cooked/</code> CSV and JSON per artefact, <code>analysis/</code>, <code>mitre_techniques.txt</code>, timelines, archives."],
+  siem: ["The palantír", "SIEM: Splunk, Elastic, Kibana",
+    "The cooked artefacts indexed with Rivendell's Splunk app and Kibana dashboards. Local containers or remote servers."],
+  navigator: ["The map of the war", "ATT&CK Navigator",
+    "A layer of every technique tagged in the case, served by the bundled Navigator."],
+  eru: ["Above the mountains", "Eru: the AI analyst",
+    "Reads the case files. With Ollama: case summaries, ATT&CK mapping, IOC pivoting and suggestions. Without Ollama, Eru says why and offers fixed questions answered exactly from the case files."],
+  aragorn: ["The King in Minas Tirith", "Aragorn: administration",
+    "Andúril manages Rivendell's own containers (status, logs, restart; it won't stop the worker mid-job). The lab: Linux targets, Tart and UTM VMs, test runs from the browser, Gandalf against seeded hosts, Mordor recordings."],
+  mordor: ["Where the shadows lie", "Mordor: attack datasets",
+    "OTRF Security-Datasets (APT29 day 1 and 2, Atomic sets) and the lab's own recordings of Atomic Red Team tests. <code>--Mordor</code> ingests them as event logs, so detections and ATT&CK tagging can be checked against known attacks."],
+};
+
+// ---------- renderer, camera ----------
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+} catch (e) {
+  stage.innerHTML = '<p class="fallback">WebGL isn\'t available in this browser. The realm map under About shows the same architecture.</p>';
+  throw e;
+}
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setClearColor(0x0f1d2c);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+const labels = new CSS2DRenderer();
+labels.domElement.style.position = "absolute";
+labels.domElement.style.inset = "0";
+labels.domElement.style.pointerEvents = "none";
+stage.appendChild(labels.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -500, 1000);
+const AZ = THREE.MathUtils.degToRad(24), EL = THREE.MathUtils.degToRad(34);
+const camDist = 300;
+camera.position.set(Math.sin(AZ) * Math.cos(EL) * camDist, Math.sin(EL) * camDist, Math.cos(AZ) * Math.cos(EL) * camDist);
+camera.zoom = 1;
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minZoom = 0.6;
+controls.maxZoom = 5;
+controls.maxPolarAngle = THREE.MathUtils.degToRad(80);
+controls.target.set(0, 5, -6);
+
+let viewW = 120;
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight, a = w / h;
+  viewW = a < 1 ? 160 : 202;
+  const vh = viewW / a;
+  Object.assign(camera, { left: -viewW / 2, right: viewW / 2, top: vh / 2, bottom: -vh / 2 });
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  labels.setSize(w, h);
+}
+new ResizeObserver(resize).observe(stage);
+resize();
+
+// ---------- light: one key from the upper left gives each box its four tones ----------
+scene.add(new THREE.HemisphereLight(0xbcd3e6, 0x0b1622, 0.9));
+const key = new THREE.DirectionalLight(0xffffff, 1.6);
+key.position.set(-60, 120, 80);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -110, right: 110, top: 90, bottom: -90, near: 1, far: 400 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x7fd6ff, 0.35);
+rim.position.set(80, 40, -90);
+scene.add(rim);
+
+// ---------- parts ----------
+const TONE = { lo: 0x1a2a3a, mid: 0x2b3f53, hi: 0x4a6278, metal: 0x6c8296, pale: 0x9fb3c6, bright: 0xd6e2ec };
+const matCache = new Map();
+function mat(colour, opts = {}) {
+  const k = colour + JSON.stringify(opts);
+  if (!matCache.has(k)) matCache.set(k, new THREE.MeshStandardMaterial({ color: colour, roughness: 0.62, metalness: 0.18, flatShading: true, ...opts }));
+  return matCache.get(k);
+}
+const edgeMat = new THREE.LineBasicMaterial({ color: 0x0a1520, transparent: true, opacity: 0.55 });
+const pickables = [];
+const groups = {};
+
+function edges(mesh, threshold = 30) {
+  const l = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, threshold), edgeMat);
+  mesh.add(l);
+  return mesh;
+}
+function place(mesh, parent, [x, y, z], id) {
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
+  if (id) { mesh.userData.id = id; pickables.push(mesh); }
+  return mesh;
+}
+// a box standing on y (its base), not centred on it
+function box(parent, w, h, d, pos, colour = TONE.mid, id, opts) {
+  const m = edges(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(colour, opts)));
+  return place(m, parent, [pos[0], pos[1] + h / 2, pos[2]], id);
+}
+function cyl(parent, r, h, pos, colour = TONE.mid, id, seg = 24, rTop = r, opts) {
+  const m = edges(new THREE.Mesh(new THREE.CylinderGeometry(rTop, r, h, seg), mat(colour, opts)), 40);
+  return place(m, parent, [pos[0], pos[1] + h / 2, pos[2]], id);
+}
+function screws(parent, w, d, y, inset = 1.2, r = 0.32) {
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const s = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.2, 10), mat(TONE.pale));
+    s.position.set(sx * (w / 2 - inset), y + 0.1, sz * (d / 2 - inset));
+    parent.add(s);
+  }
+}
+function group(id, pos = [0, 0, 0]) {
+  const g = new THREE.Group();
+  g.position.set(...pos);
+  g.userData.id = id;
+  scene.add(g);
+  groups[id] = g;
+  return g;
+}
+function tag(parent, text, pos, id, minor = false) {
+  const el = document.createElement("div");
+  el.className = minor ? "tag minor" : "tag";
+  el.textContent = text;
+  if (id) el.dataset.id = id;
+  const o = new CSS2DObject(el);
+  o.position.set(...pos);
+  parent.add(o);
+  return el;
+}
+function lamp(parent, pos, colour, r = 0.6) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), new THREE.MeshStandardMaterial({ color: colour, emissive: colour, emissiveIntensity: 0.4 }));
+  m.position.set(...pos);
+  parent.add(m);
+  return m;
+}
+// a vertical tick ruler along a bench edge
+function ruler(parent, x0, x1, z, y) {
+  box(parent, x1 - x0, 0.25, 2, [(x0 + x1) / 2, y, z], TONE.hi);
+  for (let x = x0 + 1, i = 0; x < x1; x += 2, i++) {
+    const major = i % 5 === 0;
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, major ? 1.4 : 0.7), mat(major ? TONE.bright : TONE.pale));
+    t.position.set(x, y + 0.3, z - 1 + (major ? 0.7 : 0.35));
+    parent.add(t);
+  }
+}
+
+// ---------- the bench ----------
+const bench = group("bench", [0, 0, -3]);
+const BW = 176, BD = 98, BY = -4;
+box(bench, BW + 4, 1.4, BD + 4, [0, BY - 1.4, 0], TONE.lo);
+box(bench, BW, 2.6, BD, [0, BY, 0], 0x22364a);
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) cyl(bench, 2.2, 2.4, [sx * (BW / 2 - 6), BY - 3.8, sz * (BD / 2 - 6)], TONE.lo, null, 8);
+screws(bench, BW, BD, BY + 2.6, 2.2, 0.55);
+ruler(bench, -BW / 2 + 6, BW / 2 - 6, BD / 2 - 2, BY + 2.6);
+// grooves dividing the realms
+for (const x of [-46, 30]) box(bench, 0.5, 0.08, BD - 10, [x, BY + 2.6, 0], 0x14222f);
+// label plate
+const plate = box(bench, 22, 0.4, 7, [-BW / 2 + 16, BY + 2.6, BD / 2 - 9], TONE.hi);
+for (let i = 0; i < 3; i++) box(bench, 16 - i * 4, 0.1, 0.4, [-BW / 2 + 15 - i * 2, BY + 3.0, BD / 2 - 11 + i * 2], TONE.pale);
+const Y0 = BY + 2.6;
+
+// ---------- hosts ----------
+const hosts = group("hosts", [-78, Y0, -18]);
+const hostMeshes = {};
+Object.entries(OS).forEach(([os, o], i) => {
+  const z = (i - 1) * 13;
+  const t = box(hosts, 8, 11, 9, [0, 0, z], TONE.hi, "hosts");
+  box(hosts, 8.2, 0.6, 9.2, [0, 11, z], TONE.metal, "hosts");
+  for (let v = 0; v < 4; v++) box(hosts, 0.2, 0.5, 6, [4.05, 2 + v * 1.4, z], TONE.lo);
+  box(hosts, 0.3, 2.2, 3.2, [4.1, 7.5, z], o.colour, "hosts", { emissive: o.colour, emissiveIntensity: 0.25 });
+  lamp(hosts, [4.25, 1.2, z + 3.4], 0x22c55e, 0.35);
+  hostMeshes[os] = t;
+  tag(hosts, { windows: "Windows", linux: "Linux", macos: "macOS" }[os], [0, 13.5, z], "hosts", true);
+});
+tag(hosts, "Hosts", [0, 17, 0], "hosts");
+
+// cloud: a pod on a mast
+const cloud = group("cloud", [-78, Y0, 26]);
+cyl(cloud, 0.6, 12, [0, 0, 0], TONE.metal, "cloud", 8);
+for (const [dx, dz, r] of [[0, 0, 4], [-3.5, 1, 3], [3.5, -1, 3], [0, 2.5, 2.6]]) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), mat(TONE.pale));
+  place(edges(s, 50), cloud, [dx, 15, dz], "cloud");
+}
+box(cloud, 6, 1, 6, [0, 0, 0], TONE.lo, "cloud");
+tag(cloud, "Cloud", [0, 21, 0], "cloud");
+
+// image rack: platters and a memory module
+const images = group("images", [-58, Y0, 34]);
+box(images, 12, 1, 10, [0, 0, 0], TONE.lo, "images");
+for (let i = 0; i < 4; i++) {
+  cyl(images, 3.4, 0.5, [-2.5, 1 + i * 1.4, 0], i % 2 ? TONE.pale : TONE.bright, "images", 32);
+}
+cyl(images, 0.5, 6, [-2.5, 1, 0], TONE.metal, "images", 10);
+const dimm = box(images, 1.2, 4, 8, [3.5, 1, 0], 0x3f2a66, "images");
+for (let i = 0; i < 4; i++) box(images, 1.3, 1.2, 1.4, [3.5, 2.2, -3 + i * 2], 0x1a1a24);
+tag(images, "Disk and memory images", [0, 9, 0], "images");
+
+// Mordor: a red forge at the back
+const mordor = group("mordor", [-60, Y0, -42]);
+box(mordor, 14, 3, 10, [0, 0, 0], 0x2a1416, "mordor");
+cyl(mordor, 4.5, 10, [0, 3, 0], 0x3a1a1c, "mordor", 6, 2.2);
+const mordorEye = lamp(mordor, [0, 15, 0], 0xef4444, 1.4);
+for (let i = 0; i < 3; i++) box(mordor, 2.4, 1.2, 1.6, [-4 + i * 4, 3, 5.8], 0x5b1f22, "mordor");
+tag(mordor, "Mordor", [0, 19, 0], "mordor");
+
+// ---------- Gandalf ----------
+const gandalf = group("gandalf", [-58, Y0, -12]);
+box(gandalf, 22, 1.2, 44, [0, 0, 4], TONE.lo, "gandalf");
+// three collector hoppers on a frame
+const hopperOS = ["windows", "linux", "macos"];
+const hopperTops = {};
+hopperOS.forEach((os, i) => {
+  const z = (i - 1) * 9;
+  for (const dx of [-3.2, 3.2]) box(gandalf, 0.8, 9, 0.8, [-4 + dx, 1.2, z + 3.2], TONE.metal, "gandalf");
+  const h = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 1.2, 5, 4, 1, true), mat(TONE.hi, { side: THREE.DoubleSide }));
+  h.rotation.y = Math.PI / 4;
+  place(edges(h), gandalf, [-4, 10.2 + 2.5, z], "gandalf");
+  const rimRing = new THREE.Mesh(new THREE.TorusGeometry(3.6, 0.25, 6, 4), mat(OS[os].colour, { emissive: OS[os].colour, emissiveIntensity: 0.25 }));
+  rimRing.rotation.x = Math.PI / 2;
+  rimRing.rotation.z = Math.PI / 4;
+  place(rimRing, gandalf, [-4, 15.2, z], "gandalf");
+  hopperTops[os] = new THREE.Vector3(-58 - 4, Y0 + 16, -12 + z);
+  tag(gandalf, ["Invoke-Gandalf.ps1", "gandalf.sh", "gandalf.py"][i], [-4, 18, z], "gandalf", true);
+});
+// the volatility rack: seven vials that fill in order
+const vials = [];
+box(gandalf, 4, 1, 26, [5, 1.2, 0], TONE.mid, "rack");
+for (let i = 0; i < 7; i++) {
+  const z = -10.5 + i * 3.5;
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 7, 16, 1, true),
+    new THREE.MeshStandardMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
+  place(glass, gandalf, [5, 2.2 + 3.5, z], "rack");
+  const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 1, 16), mat(0x00d4aa, { emissive: 0x00d4aa, emissiveIntensity: 0.35 }));
+  fill.position.set(5, 2.2, z);
+  fill.scale.y = 0.001;
+  gandalf.add(fill);
+  fill.userData.id = "rack";
+  pickables.push(fill);
+  const cap = cyl(gandalf, 1.25, 0.6, [5, 9.2, z], TONE.metal, "rack", 16);
+  vials.push(fill);
+}
+tag(gandalf, "Order of volatility", [5, 12, -12], "rack");
+// lock press: a ram that comes down on the archive and stamps log.meta
+box(gandalf, 7, 1, 8, [5, 1.2, 18], TONE.mid, "press");
+for (const dz of [-3, 3]) cyl(gandalf, 0.5, 12, [5, 2.2, 18 + dz], TONE.metal, "press", 10);
+box(gandalf, 7, 1.6, 8, [5, 14.2, 18], TONE.hi, "press");
+const ram = box(gandalf, 3, 2, 3, [5, 9, 18], 0xf59e0b, "press");
+const ramRod = cyl(gandalf, 0.4, 4, [5, 11, 18], TONE.pale, null, 8);
+tag(gandalf, "log.meta + lock", [5, 18, 18], "press");
+tag(gandalf, "Gandalf", [-4, 22, -9], "gandalf");
+
+// ---------- Web UI, API, Redis ----------
+const web = group("web", [-26, Y0, -36]);
+box(web, 16, 6, 9, [0, 0, 0], TONE.mid, "web");
+const screenFrame = box(web, 14, 9, 1.2, [0, 6, -3], TONE.hi, "web");
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(12, 7), new THREE.MeshBasicMaterial({ color: 0x0d3b3a }));
+screen.position.set(0, 10.5, -2.35);
+web.add(screen);
+const bars = [];
+for (let i = 0; i < 5; i++) {
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1), new THREE.MeshBasicMaterial({ color: 0x00d4aa }));
+  b.position.set(-4.2 + i * 2.1, 8.2, -2.3);
+  web.add(b);
+  bars.push(b);
+}
+for (let i = 0; i < 8; i++) box(web, 1.3, 0.4, 1.3, [-5 + (i % 4) * 2.4 + (i > 3 ? 1 : 0), 6, 1 + (i > 3 ? 2 : 0)], TONE.pale);
+tag(web, "Web UI :5687 · API :5688", [0, 17.5, -3], "web");
+
+const redis = group("redis", [-8, Y0, -36]);
+box(redis, 9, 13, 7, [0, 0, 0], 0x5a1f1f, "redis");
+const holes = [];
+for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+  const h = box(redis, 2.2, 2.8, 0.6, [-2.8 + c * 2.8, 2 + r * 3.6, 3.6], 0x1a0d0d, "redis");
+  holes.push(h);
+}
+tag(redis, "Redis", [0, 16, 0], "redis");
+
+// ---------- Elrond ----------
+const elrond = group("elrond", [0, Y0, 0]);
+// worker gantry over the whole Elrond floor
+const worker = group("worker", [0, Y0, 0]);
+for (const x of [-36, 26]) for (const z of [-22, 24]) cyl(worker, 0.6, 24, [x, 0, z], TONE.mid, "worker", 10);
+for (const z of [-22, 24]) box(worker, 64, 1, 1.2, [-5, 24, z], TONE.mid, "worker");
+const carriage = new THREE.Group();
+worker.add(carriage);
+box(carriage, 4, 2.4, 50, [0, 22.6, 1], TONE.mid, "worker");
+const head = box(carriage, 4.6, 3, 4.6, [0, 19.6, 0], 0x00b894, "worker");
+tag(worker, "Celery worker", [-36, 28, -22], "worker");
+
+// gate: identify and mount
+box(elrond, 6, 1, 40, [-30, 0, 0], TONE.lo, "gate");
+for (const dz of [-16, 16]) box(elrond, 3, 14, 3, [-30, 1, dz], TONE.hi, "gate");
+box(elrond, 4, 2.4, 36, [-30, 15, 0], TONE.hi, "gate");
+const gateLamps = [];
+for (let i = 0; i < 5; i++) gateLamps.push(lamp(elrond, [-27.9, 16.2, -12 + i * 6], 0x334155, 0.55));
+tag(elrond, "01 Identify and mount", [-30, 20, 0], "gate");
+
+// three lanes, each with Collect and Process stations
+const LANE_Z = { windows: -12, linux: 0, macos: 12 };
+const rollers = [];
+for (const [os, z] of Object.entries(LANE_Z)) {
+  const id = `lane-${os}`;
+  box(elrond, 30, 1.6, 6, [-12, 0, z], TONE.mid, id);
+  box(elrond, 30, 0.4, 0.5, [-12, 1.6, z - 3.1], OS[os].colour, id, { emissive: OS[os].colour, emissiveIntensity: 0.2 });
+  for (let i = 0; i < 12; i++) {
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 5.4, 10), mat(TONE.pale));
+    r.rotation.x = Math.PI / 2;
+    r.position.set(-26 + i * 2.5, 2.1, z);
+    elrond.add(r);
+    rollers.push(r);
+  }
+  // Collect: a hood
+  box(elrond, 6, 6, 7, [-20, 2.6, z], TONE.hi, id);
+  box(elrond, 6.2, 0.6, 7.2, [-20, 8.6, z], TONE.metal, id);
+  // Process: a taller press with vents
+  box(elrond, 7, 8, 7, [-7, 2.6, z], TONE.hi, id);
+  for (let v = 0; v < 4; v++) box(elrond, 0.15, 0.5, 5, [-3.45, 4 + v * 1.4, z], TONE.lo);
+  lamp(elrond, [-3.4, 9.8, z + 2.6], OS[os].colour, 0.45);
+  tag(elrond, { windows: "Windows", linux: "Linux", macos: "macOS" }[os], [-20, 11, z], id, true);
+}
+tag(elrond, "02 Collect", [-20, 15, -20], "lane-windows");
+tag(elrond, "03 Process", [-7, 15, -20], "lane-windows");
+
+// memory furnace
+box(elrond, 10, 1, 10, [-12, 0, 24], TONE.lo, "furnace");
+const furnace = cyl(elrond, 4.2, 9, [-12, 1, 24], 0x2e1b47, "furnace", 8, 3.4);
+cyl(elrond, 1, 7, [-12, 10, 24], TONE.metal, "furnace", 8);
+const furnaceMouth = new THREE.Mesh(new THREE.CircleGeometry(1.8, 16), new THREE.MeshBasicMaterial({ color: 0xa855f7 }));
+furnaceMouth.position.set(-12, 4.2, 28.15);
+elrond.add(furnaceMouth);
+const furnaceLight = new THREE.PointLight(0xa855f7, 0, 22);
+furnaceLight.position.set(-12, 5, 30);
+elrond.add(furnaceLight);
+tag(elrond, "Volatility 3", [-12, 19, 24], "furnace");
+
+// merge belt and shared stages
+box(elrond, 6, 1.6, 40, [2, 0, 0], TONE.mid, "analyse");
+// Analyse: a scanning arch with a moving YARA beam
+box(elrond, 8, 1, 10, [10, 0, -10], TONE.lo, "analyse");
+for (const dz of [-4, 4]) box(elrond, 1.4, 10, 1.4, [10, 1, -10 + dz], TONE.hi, "analyse");
+box(elrond, 2, 1.6, 10, [10, 11, -10], TONE.hi, "analyse");
+const beam = new THREE.Mesh(new THREE.BoxGeometry(0.3, 9.6, 7), new THREE.MeshBasicMaterial({ color: 0x00d4aa, transparent: true, opacity: 0.25 }));
+beam.position.set(10, 6, -10);
+elrond.add(beam);
+tag(elrond, "04 Analyse", [10, 15, -10], "analyse");
+// ATT&CK: 14 tactic columns
+box(elrond, 9, 1, 15, [10, 0, 6], TONE.lo, "attack");
+box(elrond, 1.2, 12, 15, [13.4, 1, 6], TONE.mid, "attack");
+const cells = [];
+for (let c = 0; c < 14; c++) for (let r = 0; r < 6; r++) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.3, 0.8), new THREE.MeshStandardMaterial({ color: 0x223447, emissive: 0x000000 }));
+  m.position.set(12.7, 2.6 + r * 1.6, -0.1 + c * 0.95);
+  m.userData.id = "attack";
+  pickables.push(m);
+  elrond.add(m);
+  cells.push(m);
+}
+tag(elrond, "05 ATT&CK", [10, 16, 6], "attack");
+// Timeline drum (Plaso)
+box(elrond, 9, 1, 9, [20, 0, -12], TONE.lo, "timeline");
+for (const dz of [-3.6, 3.6]) box(elrond, 1, 7, 1, [20, 1, -12 + dz], TONE.hi, "timeline");
+const drum = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 6.2, 24), mat(TONE.bright));
+edges(drum, 40);
+drum.rotation.x = Math.PI / 2;
+place(drum, elrond, [20, 6.4, -12], "timeline");
+const ribbon = box(elrond, 7, 0.15, 5, [24, 1, -12], 0xe8e1c8, "timeline");
+tag(elrond, "06 Timeline", [20, 13, -12], "timeline");
+// Export: a chute with three outlets
+box(elrond, 8, 6, 8, [20, 0, 10], TONE.hi, "export");
+box(elrond, 8.4, 1, 8.4, [20, 6, 10], TONE.metal, "export");
+for (let i = 0; i < 3; i++) cyl(elrond, 0.9, 3, [24.6, 1.5 + i * 1.6, 7.5 + i * 2.5], TONE.pale, "export", 10);
+tag(elrond, "07 Export", [20, 11, 10], "export");
+tag(elrond, "Elrond", [-12, 33, 0], "gate");
+
+// ---------- outputs ----------
+const store = group("store", [48, Y0, -20]);
+box(store, 18, 1, 14, [0, 0, 0], TONE.lo, "store");
+for (const dx of [-5, 0]) {
+  cyl(store, 2.6, 10, [dx, 1, -3], 0x335c81, "store", 24);
+  for (let b = 0; b < 3; b++) cyl(store, 2.75, 0.4, [dx, 2.5 + b * 3, -3], TONE.pale, null, 24);
+}
+// case directory drawers: raw, cooked, analysis
+const drawers = [];
+box(store, 7, 10, 7, [6, 1, 1], TONE.hi, "store");
+for (let i = 0; i < 3; i++) {
+  const d = box(store, 6, 2.6, 0.8, [6, 2 + i * 3, 4.8], TONE.mid, "store");
+  box(store, 2, 0.4, 0.4, [6, 3.1 + i * 3, 5.4], TONE.bright);
+  drawers.push(d);
+}
+tag(store, "Case store: Postgres + raw/ cooked/ analysis/", [0, 15, 0], "store");
+
+const siem = group("siem", [50, Y0, 6]);
+box(siem, 14, 1, 10, [0, 0, 0], TONE.lo, "siem");
+const palantir = new THREE.Mesh(new THREE.SphereGeometry(3.4, 24, 18), new THREE.MeshStandardMaterial({ color: 0x0b1622, emissive: 0xf97316, emissiveIntensity: 0.15, roughness: 0.1, metalness: 0.4 }));
+place(palantir, siem, [-2.5, 6.4, 0], "siem");
+cyl(siem, 2.6, 3, [-2.5, 1, 0], TONE.metal, "siem", 8, 1.6);
+cyl(siem, 1.8, 6, [3.5, 1, -2], 0xd9822b, "siem", 16);
+cyl(siem, 1.8, 4.5, [3.5, 1, 2.4], 0x0ea5a5, "siem", 16);
+tag(siem, "Splunk · Elastic · Kibana", [0, 13, 0], "siem");
+
+const navigator = group("navigator", [50, Y0, 24]);
+box(navigator, 12, 1, 6, [0, 0, 0], TONE.lo, "navigator");
+box(navigator, 1, 9, 12, [0, 1, 0], TONE.hi, "navigator");
+const navCells = [];
+for (let c = 0; c < 8; c++) for (let r = 0; r < 5; r++) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1.15, 1.3), new THREE.MeshBasicMaterial({ color: 0x1f3346 }));
+  m.position.set(0.52, 2.6 + r * 1.55, -5 + c * 1.4);
+  m.rotation.y = Math.PI / 2;
+  navigator.add(m);
+  navCells.push(m);
+}
+tag(navigator, "ATT&CK Navigator", [0, 13, 0], "navigator");
+
+// Eru: a tower with an orb, fed from the case store
+const eru = group("eru", [74, Y0, -34]);
+box(eru, 10, 1.2, 10, [0, 0, 0], TONE.lo, "eru");
+cyl(eru, 2.6, 22, [0, 1.2, 0], TONE.hi, "eru", 6, 1.6);
+for (let r = 0; r < 4; r++) cyl(eru, 3, 0.5, [0, 4 + r * 4.4, 0], TONE.metal, null, 6);
+const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(3.4, 2), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x8be9ff, emissiveIntensity: 1.1, roughness: 0.2 }));
+place(orb, eru, [0, 27, 0], "eru");
+const orbLight = new THREE.PointLight(0x8be9ff, 1.4, 50);
+orbLight.position.set(0, 27, 0);
+eru.add(orbLight);
+const scroll = box(eru, 4, 3.4, 0.4, [4.4, 1.2, 3], 0xe8e1c8, "eru");
+tag(eru, "Eru", [0, 33, 0], "eru");
+
+// Aragorn: a tower with Andúril
+const aragorn = group("aragorn", [74, Y0, 30]);
+box(aragorn, 10, 1.2, 10, [0, 0, 0], TONE.lo, "aragorn");
+box(aragorn, 6, 14, 6, [0, 1.2, 0], 0xb8c2d4, "aragorn");
+box(aragorn, 7, 1, 7, [0, 15.2, 0], TONE.pale, "aragorn");
+for (let i = 0; i < 4; i++) box(aragorn, 1.4, 1.4, 1.4, [-2.4 + (i % 2) * 4.8, 16.2, -2.4 + Math.floor(i / 2) * 4.8], TONE.pale, "aragorn");
+const sword = new THREE.Group();
+sword.position.set(0, 17, 0);
+aragorn.add(sword);
+box(sword, 0.5, 9, 1.1, [0, 1.6, 0], 0xe2e8f0, "aragorn", { metalness: 0.9, roughness: 0.25 });
+box(sword, 0.8, 0.6, 4, [0, 1.2, 0], 0xf59e0b, "aragorn");
+box(sword, 0.6, 1.6, 0.6, [0, -0.4, 0], 0x5b3a1f, "aragorn");
+const containers = [];
+for (let i = 0; i < 6; i++) containers.push(lamp(aragorn, [3.1, 3 + i * 1.8, -1.5 + (i % 2) * 3], 0x22c55e, 0.4));
+tag(aragorn, "Aragorn · Andúril · lab", [0, 29, 0], "aragorn");
+
+// ---------- the routes: tubes the evidence travels in ----------
+const W = (g, x, y, z) => new THREE.Vector3(g.position.x + x, g.position.y + y, g.position.z + z);
+const P = {
+  gate: W(elrond, -30, 4, 0),
+  merge: W(elrond, 2, 3.2, 0),
+  analyse: W(elrond, 10, 3, -10),
+  attack: W(elrond, 10, 3, 6),
+  timeline: W(elrond, 20, 3, -12),
+  export: W(elrond, 20, 7.5, 10),
+  furnace: W(elrond, -12, 5, 28),
+  press: W(gandalf, 5, 10, 18),
+};
+const lanePt = (os, x) => W(elrond, x, 3.2, LANE_Z[os]);
+const tubeMat = new THREE.MeshStandardMaterial({ color: 0x2f4a62, transparent: true, opacity: 0.5, roughness: 0.3 });
+function tube(points, radius = 0.5, colour) {
+  const curve = new THREE.CatmullRomCurve3(points, false, "centripetal", 0.2);
+  const m = new THREE.Mesh(new THREE.TubeGeometry(curve, Math.max(24, points.length * 16), radius, 8, false),
+    colour ? new THREE.MeshStandardMaterial({ color: colour, transparent: true, opacity: 0.35 }) : tubeMat);
+  scene.add(m);
+  return curve;
+}
+// cables that are always there: web -> redis -> worker, store -> eru, export -> outputs, aragorn -> stack
+const job = tube([W(web, 8, 3, 0), W(redis, -4.5, 3, 0)], 0.4);
+const jobToWorker = tube([W(redis, 0, 13, 0), W(redis, 0, 22, 0), W(worker, -20, 24, -22)], 0.35);
+const toEru = tube([W(store, -5, 11, -3), W(store, -5, 17, -3), W(eru, -3, 18, 0), W(eru, -2.6, 22, 0)], 0.35, 0x8be9ff);
+tube([W(elrond, 24.6, 4, 12.5), W(siem, -6, 3, 0)], 0.35);
+tube([W(elrond, 24.6, 5.6, 15), W(navigator, -1, 6, 0)], 0.35);
+tube([W(elrond, 24.6, 2.4, 10), W(store, 3, 3, 6.5), W(store, 6, 6, 5)], 0.35);
+tube([W(aragorn, -3, 6, -3), W(navigator, 6, 4, -3), W(siem, 6, 3, 4)], 0.25, 0xb8c2d4);
+
+function routeFor(src, os) {
+  const toLaneEnd = [lanePt(os, -26), lanePt(os, -20), lanePt(os, -7), lanePt(os, 0), P.merge];
+  const shared = [P.analyse, P.attack, P.timeline, P.export];
+  switch (src) {
+    case "gandalf": return {
+      steps: [
+        { p: W(hosts, 4, 6, LANE_Z[os] * 13 / 12), s: "live host" },
+        { p: hopperTops[os], s: `${OS[os].collector}: live state first` },
+        { p: W(gandalf, 5, 10, -10.5), s: "copy in order of volatility", vials: true },
+        { p: P.press, s: "hash into log.meta, encrypt", press: true },
+        { p: P.gate, s: "decrypt, re-hash: verified", gate: "ok" },
+        { p: lanePt(os, -14), s: "already collected: joins at Process" },
+        { p: lanePt(os, -7), s: `03 Process (${os})` },
+        { p: P.merge, s: "lanes merge" },
+        ...shared.map((p, i) => ({ p, s: ["04 Analyse", "05 ATT&CK", "06 Timeline", "07 Export"][i] })),
+      ] };
+    case "disk": return {
+      steps: [
+        { p: W(images, -2.5, 7, 0), s: "disk image (E01, VMDK, raw)" },
+        { p: P.gate, s: "identify, mount", gate: "mount" },
+        { p: lanePt(os, -20), s: `02 Collect (${os})` },
+        { p: lanePt(os, -7), s: `03 Process (${os})` },
+        { p: P.merge, s: "lanes merge" },
+        ...shared.map((p, i) => ({ p, s: ["04 Analyse", "05 ATT&CK", "06 Timeline", "07 Export"][i] })),
+      ] };
+    case "memory": return {
+      steps: [
+        { p: W(images, 3.5, 6, 0), s: "memory image" },
+        { p: P.gate, s: "identify: memory, by profile", gate: "mount" },
+        { p: P.furnace, s: `Volatility 3 (${os}.* plugins)`, furnace: true },
+        { p: P.merge, s: "joins the shared stages" },
+        ...shared.map((p, i) => ({ p, s: ["04 Analyse", "05 ATT&CK", "06 Timeline", "07 Export"][i] })),
+      ] };
+    case "mordor": return {
+      steps: [
+        { p: W(mordor, 0, 8, 6), s: "OTRF / Atomic dataset" },
+        { p: P.gate, s: "--Mordor: read as event logs", gate: "mount" },
+        { p: lanePt("windows", -7), s: "03 Process (event logs)" },
+        { p: P.merge, s: "lanes merge" },
+        { p: P.attack, s: "05 ATT&CK: rules checked against a known attack" },
+        { p: P.timeline, s: "06 Timeline" },
+        { p: P.export, s: "07 Export" },
+      ] };
+    case "cloud": return {
+      steps: [
+        { p: W(cloud, 0, 13, 0), s: "AWS / Azure / GCP" },
+        { p: W(images, -2.5, 8, 0), s: "snapshot becomes a disk image" },
+        { p: P.gate, s: "identify, mount", gate: "mount" },
+        { p: lanePt(os, -20), s: `02 Collect (${os})` },
+        { p: lanePt(os, -7), s: `03 Process (${os})` },
+        { p: P.merge, s: "lanes merge" },
+        ...shared.map((p, i) => ({ p, s: ["04 Analyse", "05 ATT&CK", "06 Timeline", "07 Export"][i] })),
+      ] };
+  }
+}
+
+// one crate travels each route; its colour is its OS
+const crate = new THREE.Group();
+const crateBox = box(crate, 3.4, 3.4, 3.4, [0, -1.7, 0], OS.windows.colour);
+const crateLid = box(crate, 3.7, 0.5, 3.7, [0, 1.7, 0], TONE.bright);
+const lock = box(crate, 1.4, 1.4, 0.4, [0, -0.8, 1.8], 0xf59e0b);
+const crateGlow = new THREE.PointLight(0xffffff, 3, 14);
+crate.add(crateGlow);
+lock.visible = false;
+scene.add(crate);
+let routeTube = null;
+
+// ---------- state ----------
+const state = {
+  src: "gandalf", osOrder: ["windows", "linux", "macos"], osIdx: 0, run: 0,
+  route: null, curve: null, seg: 0, t: 0, dwell: 0, lengths: [],
+  ollama: true, tour: !reduced, techniques: 0, tagged: new Set(),
+};
+const TACTIC_HITS = { windows: [2, 3, 4, 5, 6, 7, 10, 11], linux: [2, 3, 4, 5, 6, 8], macos: [3, 4, 5, 6, 7] };
+
+function startRun() {
+  const os = state.src === "mordor" ? "windows" : state.osOrder[state.osIdx % 3];
+  state.os = os;
+  const r = routeFor(state.src, os);
+  state.route = r.steps;
+  state.seg = 0;
+  state.t = 0;
+  state.dwell = 0.6;
+  const crateColour = state.src === "mordor" ? 0xef4444 : state.src === "memory" ? 0xa855f7 : OS[os].colour;
+  crateBox.material = mat(crateColour, { emissive: crateColour, emissiveIntensity: 0.45 });
+  crateGlow.color.setHex(crateColour);
+  lock.visible = false;
+  vials.forEach((v) => (v.scale.y = 0.001, v.position.y = 2.2));
+  gateLamps.forEach((l) => l.material.emissive.setHex(0x334155));
+  if (routeTube) { scene.remove(routeTube.mesh); routeTube.mesh.geometry.dispose(); }
+  const pts = state.route.map((s) => s.p);
+  const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.05);
+  const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, pts.length * 30, 0.4, 8, false),
+    new THREE.MeshStandardMaterial({ color: crateColour, transparent: true, opacity: 0.45, emissive: crateColour, emissiveIntensity: 0.5 }));
+  scene.add(mesh);
+  routeTube = { mesh, curve };
+  crate.position.copy(pts[0]);
+  state.run++;
+  // job ticket goes through Redis to the worker
+  ticket.t = 0;
+  ticket.on = state.src !== "gandalf";
+}
+const ticket = { t: 1, on: false, mesh: box(scene, 1.6, 0.4, 1.2, [0, 0, 0], 0x00d4aa) };
+
+function onArrive(step) {
+  if (step.vials) {
+    vialRun = 0;
+  }
+  if (step.press) {
+    pressRun = 0;
+  }
+  if (step.gate) gateLamps.forEach((l, i) => setTimeout(() => l.material.emissive.setHex(step.gate === "ok" ? 0x22c55e : 0x00d4aa), i * 90));
+  if (step.furnace) furnaceRun = 0;
+  if (step.s.startsWith("05")) {
+    const hits = TACTIC_HITS[state.os] || [];
+    hits.forEach((c) => state.tagged.add(`${state.os}-${c}`));
+    hits.forEach((c, i) => setTimeout(() => {
+      const row = Math.floor(Math.random() * 6);
+      const cell = cells[c * 6 + row];
+      cell.material.emissive.setHex(0xef4444);
+      cell.material.emissiveIntensity = 0.7;
+      navCells[(c * 5 + row) % navCells.length].material.color.setHex(0xef4444);
+    }, i * 120));
+  }
+  if (step.s.startsWith("07")) {
+    drawerRun = 0;
+    palantirRun = 0;
+  }
+}
+let vialRun = 9, pressRun = 9, furnaceRun = 9, drawerRun = 9, palantirRun = 9;
+
+// ---------- interaction ----------
+const ray = new THREE.Raycaster();
+const ptr = new THREE.Vector2();
+let hovered = null, selected = null, lastInteract = performance.now();
+const tagEls = [...document.querySelectorAll(".tag")];
+function setHover(id) {
+  if (id === hovered) return;
+  hovered = id;
+  tagEls.forEach((el) => el.classList.toggle("hot", !!id && el.dataset.id === id));
+  renderer.domElement.style.cursor = id ? "pointer" : "";
+}
+function pick(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ptr, camera);
+  const hit = ray.intersectObjects(pickables, false)[0];
+  return hit ? hit.object.userData.id : null;
+}
+renderer.domElement.addEventListener("pointermove", (e) => setHover(pick(e)));
+renderer.domElement.addEventListener("pointerleave", () => setHover(null));
+let downAt = null;
+renderer.domElement.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY]; lastInteract = performance.now(); });
+renderer.domElement.addEventListener("pointerup", (e) => {
+  if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  const id = pick(e);
+  if (id) open(id); else close();
+});
+function open(id) {
+  const info = INFO[id];
+  if (!info) return;
+  selected = id;
+  let extra = "";
+  if (id === "eru") extra = `<p>Now: <b>${state.ollama ? "Ollama running: model answers" : "no Ollama: fixed questions, exact answers from the case files"}</b>. Toggle it above.</p>`;
+  if (id === "attack") extra = `<p>Tactics lit this session: <b>${new Set([...state.tagged].map((t) => t.split("-")[1])).size}</b> of 14.</p>`;
+  panelBody.innerHTML = `<div class="k">${info[0]}</div><h2>${info[1]}</h2><p>${info[2]}</p>${extra}`;
+  panel.classList.add("open");
+  tagEls.forEach((el) => el.classList.toggle("hot", el.dataset.id === id));
+}
+function close() {
+  selected = null;
+  panel.classList.remove("open");
+  tagEls.forEach((el) => el.classList.remove("hot"));
+}
+panel.querySelector(".x").addEventListener("click", close);
+addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+
+document.querySelectorAll("[data-src]").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-src]").forEach((o) => o.setAttribute("aria-pressed", String(o === b)));
+  state.src = b.dataset.src;
+  startRun();
+}));
+const ollamaBtn = document.getElementById("ollama");
+ollamaBtn.addEventListener("click", () => {
+  state.ollama = !state.ollama;
+  ollamaBtn.setAttribute("aria-pressed", String(state.ollama));
+  ollamaBtn.textContent = `Ollama: ${state.ollama ? "on" : "off"}`;
+  if (selected === "eru") open("eru");
+});
+const tagsBtn = document.getElementById("tags");
+tagsBtn.addEventListener("click", () => {
+  const on = tagsBtn.getAttribute("aria-pressed") !== "true";
+  tagsBtn.setAttribute("aria-pressed", String(on));
+  card.classList.toggle("hide-tags", !on);
+});
+const tourBtn = document.getElementById("tour");
+tourBtn.setAttribute("aria-pressed", String(state.tour));
+tourBtn.addEventListener("click", () => {
+  state.tour = !state.tour;
+  tourBtn.setAttribute("aria-pressed", String(state.tour));
+});
+if (innerWidth < 700) { card.classList.add("hide-tags"); tagsBtn.setAttribute("aria-pressed", "false"); }
+
+// ---------- motion ----------
+const clock = new THREE.Clock();
+let visible = true;
+new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(card);
+const SPEED = 22; // world units a second
+const ease = (x) => x < 0.5 ? 2 * x * x : 1 - (-2 * x + 2) ** 2 / 2;
+const TOUR_SOURCES = ["gandalf", "disk", "memory", "gandalf", "mordor", "cloud"];
+let tourIdx = 0;
+
+function step(dt, now) {
+  // the crate
+  if (state.route) {
+    if (state.dwell > 0) {
+      state.dwell -= dt;
+    } else if (state.seg < state.route.length - 1) {
+      const a = state.route[state.seg].p, b = state.route[state.seg + 1].p;
+      const len = a.distanceTo(b);
+      state.t = Math.min(1, state.t + (dt * SPEED) / Math.max(len, 1));
+      const k = ease(state.t);
+      crate.position.lerpVectors(a, b, k);
+      crate.position.y += Math.sin(k * Math.PI) * Math.min(6, len * 0.15);
+      if (state.t >= 1) {
+        state.seg++;
+        state.t = 0;
+        state.dwell = 0.55;
+        onArrive(state.route[state.seg]);
+      }
+    } else if (state.dwell <= 0) {
+      // run finished: next OS, and on the tour the next evidence type
+      state.osIdx++;
+      if (state.tour && now - lastInteract > 6000) {
+        tourIdx = (tourIdx + 1) % TOUR_SOURCES.length;
+        state.src = TOUR_SOURCES[tourIdx];
+        document.querySelectorAll("[data-src]").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.src === state.src)));
+      }
+      startRun();
+    }
+    crate.rotation.y += dt * 0.6;
+  }
+  const cur = state.route ? state.route[state.seg] : null;
+
+  // volatility vials fill one after another
+  if (vialRun < 9) {
+    vialRun += dt * 2.6;
+    vials.forEach((v, i) => {
+      const f = THREE.MathUtils.clamp(vialRun - i * 0.9, 0, 1);
+      v.scale.y = Math.max(0.001, f * 6.4);
+      v.position.y = 2.2 + v.scale.y / 2;
+    });
+  }
+  // the press comes down once, then the lock goes on
+  if (pressRun < 1.6) {
+    pressRun += dt;
+    const k = Math.sin(Math.min(pressRun / 1.2, 1) * Math.PI);
+    ram.position.y = 10 - k * 6;
+    ramRod.position.y = 13 - k * 3;
+    if (pressRun > 0.6) lock.visible = true;
+  }
+  // furnace glow
+  furnaceRun += dt;
+  const glow = Math.max(0, 1 - Math.abs(furnaceRun - 0.8) / 1.2);
+  furnaceLight.intensity = 0.2 + glow * 6;
+  furnaceMouth.material.color.setHSL(0.76, 0.85, 0.35 + glow * 0.3 + Math.sin(now / 180) * 0.03);
+  // rollers turn under any crate on a lane
+  rollers.forEach((r) => (r.rotation.y += dt * 2));
+  // YARA beam sweeps
+  beam.position.z = -10 + Math.sin(now / 600) * 3;
+  beam.material.opacity = cur && cur.s.startsWith("04") ? 0.55 : 0.18;
+  // timeline drum turns, ribbon grows on export
+  drum.rotation.y += dt * (cur && cur.s.startsWith("06") ? 3 : 0.3);
+  // export: drawers slide, palantír brightens
+  if (drawerRun < 2) {
+    drawerRun += dt;
+    drawers.forEach((d, i) => (d.position.z = 4.8 + Math.sin(THREE.MathUtils.clamp((drawerRun - i * 0.2) / 1.2, 0, 1) * Math.PI) * 1.8));
+  }
+  palantirRun += dt;
+  palantir.material.emissiveIntensity = 0.15 + Math.max(0, 1 - palantirRun / 2) * 0.9;
+  // the worker's head follows the crate when it is inside Elrond
+  const hx = THREE.MathUtils.clamp(crate.position.x, -32, 24);
+  const target = crate.position.x > -36 && crate.position.x < 28 ? hx : -32;
+  carriage.position.x += (target - carriage.position.x) * Math.min(1, dt * 3);
+  const hz = THREE.MathUtils.clamp(crate.position.z, -20, 22);
+  head.position.z += (hz - head.position.z) * Math.min(1, dt * 3);
+  // job ticket: web -> redis -> worker
+  if (ticket.on && ticket.t < 1) {
+    ticket.t = Math.min(1, ticket.t + dt * 0.7);
+    const p = ticket.t < 0.4 ? job.getPoint(ticket.t / 0.4) : jobToWorker.getPoint((ticket.t - 0.4) / 0.6);
+    ticket.mesh.position.copy(p);
+    ticket.mesh.visible = true;
+  } else ticket.mesh.visible = false;
+  holes.forEach((h, i) => h.material = mat(ticket.on && ticket.t < 0.55 && i === state.run % 9 ? 0x00d4aa : 0x1a0d0d));
+  // web screen bars breathe
+  bars.forEach((b, i) => { const s = 0.6 + 0.4 * Math.abs(Math.sin(now / 900 + i)); b.scale.y = s * 2.2; b.position.y = 7.5 + s * 1.1; });
+  // Eru
+  const breathe = 0.5 + 0.5 * Math.sin(now / 700);
+  orb.material.emissive.setHex(state.ollama ? 0x8be9ff : 0x5b6b7a);
+  orb.material.emissiveIntensity = state.ollama ? 0.8 + breathe * 0.6 : 0.25;
+  orbLight.intensity = state.ollama ? 1 + breathe : 0.15;
+  orb.rotation.y += dt * (state.ollama ? 0.5 : 0.08);
+  scroll.visible = !state.ollama;
+  // Aragorn: containers blink, sword turns slowly
+  containers.forEach((c, i) => c.material.emissiveIntensity = 0.3 + 0.5 * (Math.sin(now / 400 + i * 1.7) > 0.6 ? 1 : 0));
+  sword.rotation.y += dt * 0.25;
+  mordorEye.material.emissiveIntensity = 0.6 + 0.4 * Math.sin(now / 500);
+  // ATT&CK cells cool slowly
+  cells.forEach((c) => { if (c.material.emissiveIntensity > 0.25) c.material.emissiveIntensity -= dt * 0.04; });
+
+  // readout from the same model
+  if (cur) {
+    const src = { gandalf: "Gandalf archive", disk: "disk image", memory: "memory image", mordor: "Mordor dataset", cloud: "cloud" }[state.src];
+    const host = state.src === "gandalf" ? OS[state.os].host : state.os;
+    const n = `${state.seg + 1}/${state.route.length}`;
+    let extra = "";
+    if (state.src === "gandalf" && state.seg >= 4 && state.os === "windows") extra = ` · ${OS.windows.files}/${OS.windows.files} verified`;
+    readout.innerHTML = `${cur.s}${extra}<br><span class="dim">${src} · ${host} · step ${n} · run ${state.run}</span>`;
+  }
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!visible || document.hidden) return;
+  if (!reduced) step(dt, performance.now());
+  controls.update();
+  renderer.render(scene, camera);
+  labels.render(scene, camera);
+}
+// #src=memory&t=12 opens on an evidence type and fast-forwards (also how the previews are made)
+const hash = new URLSearchParams(location.hash.slice(1));
+if (INFO && ["gandalf", "disk", "memory", "mordor", "cloud"].includes(hash.get("src"))) {
+  state.src = hash.get("src");
+  document.querySelectorAll("[data-src]").forEach((o) => o.setAttribute("aria-pressed", String(o.dataset.src === state.src)));
+}
+startRun();
+for (let i = 0, n = Math.min(+hash.get("t") || 0, 120) * 30; i < n; i++) step(1 / 30, i * 33);
+if (reduced) {
+  // one still frame: the route laid out, the crate at Export, every stage lit once
+  state.seg = state.route.length - 1;
+  crate.position.copy(state.route[state.seg].p);
+  vials.forEach((v) => { v.scale.y = 6.4; v.position.y = 5.4; });
+  lock.visible = true;
+  onArrive({ s: "05" });
+  step(0, 0);
+}
+frame();
+</script>
+</body>
+</html>
