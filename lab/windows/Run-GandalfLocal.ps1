@@ -69,6 +69,8 @@ try {
 }
 
 $dest = Join-Path $AcquisitionsRoot "powershell_collection\acquisitions\$env:COMPUTERNAME"
+# Only this run's output: an earlier run's archive left here would be copied out as new
+Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 $found = Get-ChildItem -Recurse -File -Path "C:\TEMP\gandalf" -ErrorAction SilentlyContinue |
     Where-Object { $_.LastWriteTime -ge $started -and $_.Extension -in ".zip", ".7z", ".log", ".audit" }

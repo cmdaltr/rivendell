@@ -2,6 +2,7 @@
 # Apple silicon only: an unattended Windows 11 ARM VM in UTM.
 #   utm-vm.sh create|adopt [bundle.utm]|start|stop|delete|status|collect
 #   utm-vm.sh sensor | record <T1,T2> <run> <dest-dir>   (Atomic Red Team telemetry)
+#   utm-vm.sh raw-check [dest-dir]   (reader vs RawCopy, live and off a snapshot; report per run)
 # adopt takes a Windows VM that's already installed (a .utm in $LAB_VM_DIR/utm,
 # e.g. a Vagrant/Packer build with OpenSSH): it adds the SSH port forward, logs
 # in with $ADOPT_USER/$ADOPT_PASSWORD (default vagrant/vagrant) and provisions it.
@@ -333,7 +334,9 @@ collect() {
   nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
   refresh_gandalf
   info "Running Invoke-Gandalf in $VM"
-  ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Run-GandalfLocal.ps1 -GandalfSource C:\\lab\\gandalf-src -AcquisitionsRoot C:\\lab\\acquisitions" \
+  # A full collection, file search and hashing run past ssh.exp's 15 minutes; cut off,
+  # the session ends mid-archive and nothing new comes back
+  LAB_SSH_TIMEOUT="${LAB_SSH_TIMEOUT:-7200}" ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Run-GandalfLocal.ps1 -GandalfSource C:\\lab\\gandalf-src -AcquisitionsRoot C:\\lab\\acquisitions" \
     | grep -v -i password || true
   local dest="$ACQ_ROOT/powershell_collection/acquisitions" tmp host
   host="$(ssh_vm 'Write-Output "HOST=$env:COMPUTERNAME"' | tr -d '\r' | sed -n 's/^HOST=//p' | tail -1)"
@@ -379,8 +382,21 @@ raw_check() {
   nc -z 127.0.0.1 "$PORT" 2>/dev/null || die "$VM isn't reachable on 127.0.0.1:$PORT. Start it: ./lab.sh windows-vm start"
   refresh_gandalf
   push_script Test-RawReader.ps1
-  # Copying $MFT twice (reader, then RawCopy) takes over 10 minutes on the lab VM
-  LAB_SSH_TIMEOUT="${LAB_SSH_TIMEOUT:-7200}" ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Test-RawReader.ps1"
+  local dest="${1:-$LAB_DATA_DIR/raw-check}" run tmp
+  run="$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$dest"
+  [ -e "$dest/$run" ] && die "$dest/$run already exists"
+  tmp="$(mktemp -d "${TMPDIR:-/tmp}/lab-rawcheck.XXXXXX")"
+  # $MFT is copied five times (reader, RawCopy, reader, then reader and RawCopy off a
+  # snapshot): well over the 15 minute default on the lab VM
+  LAB_SSH_TIMEOUT="${LAB_SSH_TIMEOUT:-7200}" ssh_vm "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\lab\\scripts\\Test-RawReader.ps1" \
+    | grep -v -i password | tee "$tmp/console.log"
+  LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" pull gandalf 127.0.0.1 "$PORT" "C:/lab/rawcheck-report" "$tmp/" >/dev/null \
+    || die "Couldn't copy the report out of $VM (console output in $tmp)"
+  mv "$tmp/rawcheck-report" "$dest/$run"
+  mv "$tmp/console.log" "$dest/$run/"
+  rmdir "$tmp" 2>/dev/null || true
+  ok "Report: $dest/$run (summary.csv, blocks.csv, run.json)"
 }
 
 sensor() {
@@ -473,7 +489,7 @@ case "$action" in
   status)
     if vm_registered; then echo "$VM: $(vm_status), SSH 127.0.0.1:$PORT ($BUNDLE)"; else echo "$VM: not created"; fi ;;
   collect) collect ;;
-  raw-check) raw_check ;;
+  raw-check) shift; raw_check "$@" ;;
   sensor) sensor ;;
   record) shift; record "$@" ;;
   *) die "unknown action $action" ;;
