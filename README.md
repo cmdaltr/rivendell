@@ -54,6 +54,7 @@ cd tests
 
 - **Web Interface:** http://localhost:5687
 - **Backend API:** http://localhost:5688
+- **For a team:** one Rivendell on a central server, behind HTTPS and sign-in (optionally SSO), with each job visible to its owner and whoever they share it with: `rivendell server init <hostname>`, then [docs/SERVER.md](docs/SERVER.md)
 
 ### Quick Commands
 

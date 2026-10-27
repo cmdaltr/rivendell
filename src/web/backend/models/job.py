@@ -122,6 +122,9 @@ class Job(BaseModel):
     created_at: datetime = Field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    # From the job_access table, filled in by the API (server mode)
+    owner: Optional[str] = Field(None, description="Username of the job's creator")
+    shared_with: list[str] = Field(default_factory=list, description="Usernames it's shared with")
 
     class Config:
         json_encoders = {

@@ -1,6 +1,5 @@
 import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5688';
+import { API_BASE_URL } from './apiBase';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -181,6 +180,35 @@ export const logout = async () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
   }
+};
+
+export const getAuthConfig = async () => {
+  const response = await api.get('/api/auth/config');
+  return response.data;
+};
+
+// After single sign-on the session is a cookie; trade it for the bearer token the rest
+// of the app keeps
+export const completeSsoSignIn = async () => {
+  const response = await api.post('/api/auth/session');
+  localStorage.setItem('access_token', response.data.access_token);
+  localStorage.setItem('user', JSON.stringify(response.data.user));
+  return response.data;
+};
+
+export const getJobSharing = async (jobId) => {
+  const response = await api.get(`/api/jobs/${jobId}/sharing`);
+  return response.data;
+};
+
+export const setJobSharing = async (jobId, usernames) => {
+  const response = await api.put(`/api/jobs/${jobId}/sharing`, { usernames });
+  return response.data;
+};
+
+export const getUserDirectory = async () => {
+  const response = await api.get('/api/auth/directory');
+  return response.data;
 };
 
 export const getCurrentUser = async () => {

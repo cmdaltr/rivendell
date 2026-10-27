@@ -39,7 +39,8 @@ foreach ($link in $Shortcuts.Keys) {
     $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Launcher`" $($Shortcuts[$link])".TrimEnd()
     $shortcut.WorkingDirectory = $Root
     $shortcut.IconLocation = "$Icon,0"
-    $shortcut.WindowStyle = 7  # minimised: the console is there for start-up progress, not in the way
+    # The console shows the road to Rivendell while the stack starts, then closes
+    $shortcut.WindowStyle = if ($Shortcuts[$link]) { 7 } else { 1 }
     $shortcut.Description = 'Rivendell DFIR platform'
     $shortcut.Save()
     Write-Host "Created $link"

@@ -1,13 +1,19 @@
 <#
 .SYNOPSIS
     What the Rivendell shortcut runs: start the Docker stack if the web UI isn't
-    answering, then open the UI in its own Edge (or Chrome) app window.
+    answering, then open the UI in its own Edge (or Chrome) app window. With a team
+    server (RIVENDELL_SERVER, or .rivendell-server from the installer) it just opens
+    the server: nothing runs here.
 .NOTES
     The bash launcher doesn't run on Windows, so this does what 'rivendell start'
     does there: make sure Docker Desktop is up, then 'docker compose up -d' in the repo,
     with docker-compose.local.yml (the installer's evidence folders) when it exists.
     A copy the installer put down (.rivendell-version) gets a .env with its own
     SECRET_KEY on first start and an image rebuild after each upgrade.
+
+    While the stack starts, the console shows the road to Rivendell: the phase, where
+    Gandalf has got to, and an ETA from this PC's earlier starts (the same history
+    format and estimate as src/common/startup_progress.py on macOS and Linux).
 #>
 [CmdletBinding()]
 param(
@@ -17,6 +23,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $Url = 'http://localhost:5687'
+$ServerFile = Join-Path $Root '.rivendell-server'
+$Server = if ($env:RIVENDELL_SERVER) { $env:RIVENDELL_SERVER }
+          elseif (Test-Path $ServerFile) { (Get-Content $ServerFile -Raw).Trim() }
+          else { '' }
+if ($Server) { $Url = $Server }
 $State = Join-Path $env:LOCALAPPDATA 'Rivendell'
 $BrowserProfile = Join-Path $State 'browser'
 New-Item -ItemType Directory -Force -Path $BrowserProfile | Out-Null
@@ -53,15 +64,21 @@ function Wait-Docker {
     Start-Process $desktop
     for ($i = 0; $i -lt 120; $i++) {
         Start-Sleep -Seconds 2
+        if ($script:Journey) { Show-Journey $script:Journey }
         if (Test-Docker) { Write-Host 'Docker started.'; return }
     }
     throw 'Docker did not start in time. Start it manually and retry.'
 }
 
-function Invoke-Compose {
-    param([string[]]$Arguments)
+function Get-ComposeFiles {
     $files = @('-f', 'docker-compose.yml')
     if (Test-Path (Join-Path $Root 'docker-compose.local.yml')) { $files += @('-f', 'docker-compose.local.yml') }
+    return $files
+}
+
+function Invoke-Compose {
+    param([string[]]$Arguments)
+    $files = Get-ComposeFiles
     Push-Location $Root
     try {
         docker compose @files @Arguments
@@ -91,6 +108,113 @@ function Initialize-AppCopy {
     return @('--build')
 }
 
+# ── The road to Rivendell ─────────────────────────────────────────────────────
+$Phases = @('docker', 'images', 'containers', 'ui')
+# Seconds, until this PC has history of its own
+$Defaults = @{
+    warm = @{ docker = 20; images = 4; containers = 12; ui = 45 }
+    cold = @{ docker = 20; images = 900; containers = 25; ui = 90 }
+}
+$Messages = @{ docker = 'Waking Docker'; images = 'Forging the images'; containers = 'Raising the halls'; ui = 'Opening the doors' }
+$Places = @(@(0.0, 'the Shire'), @(0.18, 'Bree'), @(0.38, 'Weathertop'), @(0.55, 'the Last Bridge'),
+            @(0.7, 'the Trollshaws'), @(0.86, 'the Ford of Bruinen'))
+$HistoryFile = Join-Path $State 'start-history.jsonl'
+$script:Journey = $null
+
+function Get-Median([double[]]$Values) {
+    $sorted = @($Values | Sort-Object)
+    $mid = [int][math]::Floor($sorted.Count / 2)
+    if ($sorted.Count % 2) { return $sorted[$mid] }
+    return ($sorted[$mid - 1] + $sorted[$mid]) / 2
+}
+
+function New-Journey([string]$Kind) {
+    $base = if ($Kind -like 'cold*') { $Defaults.cold } else { $Defaults.warm }
+    $history = @()
+    if (Test-Path $HistoryFile) {
+        $history = @(Get-Content $HistoryFile | ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } |
+                     Where-Object { $_ -and $_.kind -eq $Kind } | Select-Object -Last 20)
+    }
+    $expected = @{}
+    foreach ($phase in $Phases) {
+        $seen = @($history | ForEach-Object { $_.phases.$phase } | Where-Object { $null -ne $_ })
+        $expected[$phase] = if ($seen.Count) { Get-Median $seen } else { [double]$base[$phase] }
+    }
+    $now = Get-Date
+    return [pscustomobject]@{ Kind = $Kind; Learning = ($history.Count -eq 0); Expected = $expected
+                              Started = $now; Phase = 'docker'; PhaseStarted = $now; Done = @{} }
+}
+
+function Enter-Phase($J, [string]$Phase) {
+    $now = Get-Date
+    $J.Done[$J.Phase] = ($now - $J.PhaseStarted).TotalSeconds
+    $J.Phase = $Phase
+    $J.PhaseStarted = $now
+}
+
+function Show-Journey($J) {
+    $inPhase = ((Get-Date) - $J.PhaseStarted).TotalSeconds
+    $expected = $J.Expected[$J.Phase]
+    $current = if ($inPhase -lt $expected) { $expected - $inPhase } else { [math]::Max(3, $expected * 0.1) }
+    $index = [array]::IndexOf($Phases, $J.Phase)
+    $later = 0
+    for ($i = $index + 1; $i -lt $Phases.Count; $i++) { $later += $J.Expected[$Phases[$i]] }
+    $remaining = $current + $later
+    $elapsed = ((Get-Date) - $J.Started).TotalSeconds
+    $fraction = [math]::Min(0.99, $elapsed / [math]::Max(1, $elapsed + $remaining))
+    $place = ($Places | Where-Object { $fraction -ge $_[0] } | Select-Object -Last 1)[1]
+    $where = if ($place -eq 'the Shire') { 'Gandalf sets out from the Shire' } else { "Gandalf has passed $place" }
+    $eta = if ($remaining -lt 45) { 'less than a minute' } elseif ($remaining -lt 90) { 'about a minute' } else { "about $([math]::Round($remaining / 60)) minutes" }
+    $guess = if ($J.Learning) { ' (a first guess: no timings on this PC yet)' } else { '' }
+    Write-Progress -Activity 'The road to Rivendell' -Status "$where - $eta to Rivendell$guess" `
+        -CurrentOperation $Messages[$J.Phase] -PercentComplete ([int]($fraction * 100))
+}
+
+function Complete-Journey($J) {
+    Enter-Phase $J 'arrived'
+    # Not $phases: PowerShell names are case-insensitive, and that would hide $Phases
+    $times = [ordered]@{}
+    foreach ($phase in $Phases) { $times[$phase] = [math]::Round([double]$J.Done[$phase], 1) }
+    $record = [ordered]@{ kind = $J.Kind; at = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds(); phases = $times
+                          total = [math]::Round(((Get-Date) - $J.Started).TotalSeconds, 1) }
+    New-Item -ItemType Directory -Force -Path (Split-Path $HistoryFile) | Out-Null
+    Add-Content -Path $HistoryFile -Value ($record | ConvertTo-Json -Compress)
+    Write-Progress -Activity 'The road to Rivendell' -Completed
+}
+
+function Get-MissingImages {
+    # Images the stack needs that aren't here yet: a cold start
+    $ErrorActionPreference = 'Continue'
+    $files = Get-ComposeFiles
+    Push-Location $Root
+    try { $images = docker compose @files config --images 2>$null } finally { Pop-Location }
+    return @($images | Where-Object { $_ } | Sort-Object -Unique | Where-Object {
+        docker image inspect $_ *> $null
+        $LASTEXITCODE -ne 0
+    })
+}
+
+function Invoke-ComposeUp($J, [string[]]$Extra) {
+    # Native output through the pipeline: 'Continue', or Windows PowerShell stops on stderr
+    $ErrorActionPreference = 'Continue'
+    $files = Get-ComposeFiles
+    Push-Location $Root
+    try {
+        docker compose @files up -d @Extra 2>&1 | ForEach-Object {
+            $line = "$_"
+            if ($J.Phase -eq 'images' -and $line -match '\b(Creating|Created|Starting|Started|Recreate|Running)\b') {
+                Enter-Phase $J 'containers'
+            }
+            Write-Host $line
+            Show-Journey $J
+        }
+        $code = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($code -ne 0) { throw "docker compose up exited with status $code" }
+}
+
 function Open-Window {
     # Edge ships with Windows 10 and 11; Chrome is the fallback, then the default browser
     $browsers = @(
@@ -108,6 +232,16 @@ function Open-Window {
 }
 
 try {
+    if ($Server) {
+        if ($Stop) {
+            Write-Host "Rivendell runs on $Server; its admins start and stop it."
+            Start-Sleep -Seconds 4
+            exit 0
+        }
+        Open-Window
+        exit 0
+    }
+
     if ($Stop) {
         Wait-Docker
         Write-Host 'Stopping Rivendell...'
@@ -118,21 +252,36 @@ try {
     }
 
     if (-not (Test-Frontend)) {
+        $script:Journey = New-Journey 'warm'
+        Show-Journey $script:Journey
         Wait-Docker
         $extra = @(Initialize-AppCopy)
-        Write-Host 'Starting Rivendell (the first start builds the images and takes a while)...'
-        Invoke-Compose (@('up', '-d') + $extra)
+        $missing = @(Get-MissingImages)
+        $kind = if ($missing.Count -or ($extra -contains '--build')) { 'cold' } else { 'warm' }
+        if ($kind -ne $script:Journey.Kind) {
+            $fresh = New-Journey $kind
+            $fresh.Started = $script:Journey.Started
+            $fresh.PhaseStarted = $script:Journey.PhaseStarted
+            $script:Journey = $fresh
+        }
+        if ($missing.Count) { Write-Host "$($missing.Count) image(s) to fetch or build: the first start takes a while." }
+        Write-Host 'Starting Rivendell...'
+        Enter-Phase $script:Journey 'images'
+        Invoke-ComposeUp $script:Journey $extra
+        if ($script:Journey.Phase -eq 'images') { Enter-Phase $script:Journey 'containers' }
         if ($extra -contains '--build') {
             Copy-Item (Join-Path $Root '.rivendell-version') (Join-Path $Root '.rivendell-built') -Force
         }
-        Write-Host "Waiting for the web UI on $Url..."
+        Enter-Phase $script:Journey 'ui'
         $deadline = (Get-Date).AddMinutes(15)
         while (-not (Test-Frontend)) {
             if ((Get-Date) -gt $deadline) {
                 throw "The stack started but nothing answered on $Url. Try 'docker compose ps' in $Root."
             }
+            Show-Journey $script:Journey
             Start-Sleep -Seconds 2
         }
+        Complete-Journey $script:Journey
     }
     Open-Window
 } catch {

@@ -6,7 +6,7 @@ PostgreSQL-based storage for jobs using SQLAlchemy.
 
 import os
 from datetime import datetime
-from typing import Optional, List
+from typing import Dict, Iterable, List, Optional
 from sqlalchemy import create_engine, Column, String, Integer, Text, DateTime, Enum as SQLEnum, JSON
 from sqlalchemy.orm import sessionmaker, declarative_base, defer
 from sqlalchemy.pool import NullPool
@@ -43,6 +43,17 @@ class JobModel(Base):
     created_at = Column(DateTime, default=datetime.now, index=True)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+
+
+class JobAccessModel(Base):
+    """Who owns a job and who it's shared with (server mode). A table of its own, so the
+    jobs table stays as it is; create_all adds it to existing databases."""
+    __tablename__ = "job_access"
+
+    job_id = Column(String, primary_key=True)
+    owner_id = Column(String, nullable=True, index=True)
+    owner_username = Column(String, nullable=True)
+    shared_with = Column(JSON, default=list)
 
 
 class JobStorage:
@@ -198,6 +209,7 @@ class JobStorage:
         status: Optional[JobStatus] = None,
         limit: int = 50,
         offset: int = 0,
+        job_ids: Optional[Iterable[str]] = None,
     ) -> List[Job]:
         """
         List jobs from storage.
@@ -206,6 +218,7 @@ class JobStorage:
             status: Filter by job status
             limit: Maximum number of jobs to return
             offset: Offset for pagination
+            job_ids: Only these jobs (None for all)
 
         Returns:
             List of jobs
@@ -220,6 +233,8 @@ class JobStorage:
 
             if status:
                 query = query.filter_by(status=status.value)
+            if job_ids is not None:
+                query = query.filter(JobModel.id.in_(list(job_ids)))
 
             job_models = query.offset(offset).limit(limit).all()
 
@@ -228,12 +243,13 @@ class JobStorage:
         finally:
             session.close()
 
-    def count_jobs(self, status: Optional[JobStatus] = None) -> int:
+    def count_jobs(self, status: Optional[JobStatus] = None, job_ids: Optional[Iterable[str]] = None) -> int:
         """
         Count jobs in storage.
 
         Args:
             status: Filter by job status
+            job_ids: Only these jobs (None for all)
 
         Returns:
             Number of jobs
@@ -244,6 +260,8 @@ class JobStorage:
 
             if status:
                 query = query.filter_by(status=status.value)
+            if job_ids is not None:
+                query = query.filter(JobModel.id.in_(list(job_ids)))
 
             return query.count()
         finally:
@@ -262,9 +280,71 @@ class JobStorage:
 
             if job_model:
                 session.delete(job_model)
-                session.commit()
+            session.query(JobAccessModel).filter_by(job_id=job_id).delete()
+            session.commit()
         except Exception as e:
             session.rollback()
             raise
+        finally:
+            session.close()
+
+    # ── Access (server mode) ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _access_dict(row: JobAccessModel) -> dict:
+        return {
+            "owner_id": row.owner_id,
+            "owner_username": row.owner_username,
+            "shared_with": list(row.shared_with or []),
+        }
+
+    def set_owner(self, job_id: str, owner_id: str, owner_username: str) -> None:
+        """Record who created a job."""
+        session = self.Session()
+        try:
+            row = session.query(JobAccessModel).filter_by(job_id=job_id).first()
+            if row:
+                row.owner_id, row.owner_username = owner_id, owner_username
+            else:
+                session.add(JobAccessModel(job_id=job_id, owner_id=owner_id,
+                                           owner_username=owner_username, shared_with=[]))
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def set_shared(self, job_id: str, usernames: List[str]) -> dict:
+        """Replace who a job is shared with; returns the access record."""
+        session = self.Session()
+        try:
+            row = session.query(JobAccessModel).filter_by(job_id=job_id).first()
+            if not row:
+                row = JobAccessModel(job_id=job_id, owner_id=None, owner_username=None)
+                session.add(row)
+            row.shared_with = sorted(set(usernames))
+            session.commit()
+            return self._access_dict(row)
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def get_access(self, job_id: str) -> Optional[dict]:
+        """The owner and sharing of one job, or None if it has no record."""
+        session = self.Session()
+        try:
+            row = session.query(JobAccessModel).filter_by(job_id=job_id).first()
+            return self._access_dict(row) if row else None
+        finally:
+            session.close()
+
+    def all_access(self) -> Dict[str, dict]:
+        """Every job's access record, by job ID."""
+        session = self.Session()
+        try:
+            return {row.job_id: self._access_dict(row) for row in session.query(JobAccessModel).all()}
         finally:
             session.close()

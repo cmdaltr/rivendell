@@ -60,7 +60,7 @@ const AccountPage = () => {
     setProfileMessage({ type: '', text: '' });
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/auth/profile', {
         method: 'PUT',
         headers: {
@@ -96,7 +96,7 @@ const AccountPage = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
@@ -131,7 +131,7 @@ const AccountPage = () => {
       setMfaMessage({ type: 'info', text: 'MFA setup requires backend implementation. Coming soon.' });
     } else {
       try {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('access_token');
         const response = await fetch('/api/auth/mfa/disable', {
           method: 'POST',
           headers: {
@@ -162,7 +162,7 @@ const AccountPage = () => {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch('/api/auth/tokens', {
         method: 'POST',
         headers: {
@@ -188,7 +188,7 @@ const AccountPage = () => {
 
   const handleRevokeToken = async (tokenName) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('access_token');
       const response = await fetch(`/api/auth/tokens/${tokenName}`, {
         method: 'DELETE',
         headers: {

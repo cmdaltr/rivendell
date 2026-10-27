@@ -1,6 +1,7 @@
-// First run and updates for Rivendell.app: find or install a container runtime (OrbStack),
-// put Rivendell's files somewhere (the copy a release build carries, or a checkout the
-// user already has), and mount evidence folders through docker-compose.local.yml.
+// First run and updates for Rivendell.app: either connect to a team's Rivendell server,
+// or run Rivendell here: find or install a container runtime (OrbStack), put Rivendell's
+// files somewhere (the copy a release build carries, or a checkout the user already
+// has), and mount evidence folders through docker-compose.local.yml.
 import AppKit
 
 let localComposeHeader = "# Written by Rivendell.app's setup"
@@ -20,7 +21,8 @@ final class SetupState {
     var orbText: String?
     var orbPct: Double?
     var orbError: String?
-    var mode = "bundled"
+    var mode = "bundled"  // bundled, existing, or server
+    var serverAddress = ""
     var installParent = URL(fileURLWithPath: NSHomeDirectory())
     var existingPath: String?
     var evidence: [String] = []
@@ -29,6 +31,22 @@ final class SetupState {
     var error: String?
 
     var installTarget: URL { installParent.appendingPathComponent("Rivendell") }
+}
+
+/// A server address as typed, as the URL to open: https unless it's this machine,
+/// scheme added when missing, nothing after the host and port
+func parseServerAddress(_ text: String) -> URL? {
+    var text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !text.contains("://") { text = "https://\(text)" }
+    guard let parts = URLComponents(string: text), let host = parts.host, !host.isEmpty,
+          let scheme = parts.scheme?.lowercased() else { return nil }
+    let local = ["localhost", "127.0.0.1", "::1"].contains(host)
+    guard scheme == "https" || (scheme == "http" && local) else { return nil }
+    var clean = URLComponents()
+    clean.scheme = scheme
+    clean.host = host
+    clean.port = parts.port
+    return clean.url
 }
 
 /// A folder Rivendell can run from: the launcher and the compose file
@@ -80,7 +98,10 @@ extension AppDelegate {
         setup.error = nil
         setup.busy = nil
         if bundledSource == nil { setup.mode = "existing" }
-        if let current = root {
+        if let server = serverURL {
+            setup.mode = "server"
+            setup.serverAddress = server.absoluteString
+        } else if let current = root {
             if isAppCopy(current) && bundledSource != nil {
                 setup.mode = "bundled"
                 setup.installParent = URL(fileURLWithPath: current).deletingLastPathComponent()
@@ -111,13 +132,18 @@ extension AppDelegate {
                 NSWorkspace.shared.open(url)
             }
         case "mode":
-            setup.mode = body["mode"] as? String == "bundled" ? "bundled" : "existing"
+            let mode = body["mode"] as? String ?? ""
+            setup.mode = ["bundled", "existing", "server"].contains(mode) ? mode : "existing"
             setup.error = nil
             loadEvidence()
             renderSetup()
         case "chooseInstall": chooseInstallFolder()
         case "chooseExisting": chooseExistingCopy()
         case "addEvidence": addEvidence()
+        case "serverAddress":
+            setup.serverAddress = body["address"] as? String ?? ""
+            setup.error = nil
+            renderSetup()
         case "removeEvidence":
             setup.evidence.removeAll { $0 == body["path"] as? String }
             renderSetup()
@@ -153,6 +179,8 @@ extension AppDelegate {
             "installPath": setup.installTarget.path,
             "installNote": installNote(),
             "existingPath": orNull(setup.existingPath),
+            "serverAddress": setup.serverAddress,
+            "serverValid": parseServerAddress(setup.serverAddress) != nil,
             "evidence": setup.evidence,
             "evidenceLocked": setup.evidenceLocked,
             "busy": orNull(setup.busy),
@@ -434,6 +462,17 @@ extension AppDelegate {
     // MARK: Finishing
 
     func finishSetup() {
+        if setup.mode == "server" {
+            guard let server = parseServerAddress(setup.serverAddress) else {
+                setup.error = "Enter the server's address, e.g. rivendell.example.org (https only)."
+                renderSetup()
+                return
+            }
+            UserDefaults.standard.set(server.absoluteString, forKey: "RivendellServer")
+            window.title = "Rivendell"
+            launch()
+            return
+        }
         let mode = setup.mode
         let target = setup.installTarget
         let existing = setup.existingPath
@@ -464,6 +503,7 @@ extension AppDelegate {
                 if !locked { try self.writeEvidenceCompose(root: root, folders: folders) }
                 DispatchQueue.main.async {
                     UserDefaults.standard.set(root, forKey: "RivendellRoot")
+                    UserDefaults.standard.removeObject(forKey: "RivendellServer")
                     self.setup.busy = nil
                     self.window.title = "Rivendell"
                     self.launch()

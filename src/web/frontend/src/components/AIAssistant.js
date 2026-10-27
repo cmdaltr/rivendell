@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../apiBase';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 
 // API base URL - adjust based on environment
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5688';
+const API_BASE = API_BASE_URL;
 
 function AIAssistant() {
   const [messages, setMessages] = useState([]);

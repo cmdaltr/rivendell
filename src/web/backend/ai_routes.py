@@ -16,8 +16,10 @@ from pydantic import BaseModel
 
 try:
     from . import eru_offline
+    from .auth import access
 except ImportError:  # main.py imports the routes as top-level modules too
     import eru_offline
+    from auth import access
 
 # Initialize router
 router = APIRouter(prefix="/api/ai", tags=["AI"])
@@ -173,8 +175,10 @@ async def list_offline_questions():
 
 
 @router.post("/offline/answer")
-async def answer_offline_question(request: OfflineRequest):
+async def answer_offline_question(request: OfflineRequest, http_request: Request):
     """Answer one offline question, from the selected case's files where it needs a case."""
+    if request.case_id and not access.case_allowed(access.current_user(http_request), request.case_id):
+        raise HTTPException(status_code=404, detail="Case not found")
     case_path = await _find_case_path(request.case_id) if request.case_id else None
     try:
         answer = eru_offline.answer(request.question_id, case_path)
@@ -184,7 +188,7 @@ async def answer_offline_question(request: OfflineRequest):
 
 
 @router.get("/cases")
-async def list_indexed_cases():
+async def list_indexed_cases(request: Request):
     """
     List cases with indexed vector databases.
 
@@ -233,6 +237,9 @@ async def list_indexed_cases():
     except Exception as e:
         logger.error(f"Error listing cases: {e}")
 
+    visible = access.visible_cases(access.current_user(request))
+    if visible is not None:
+        cases = [c for c in cases if c["case_id"] in visible]
     return {"cases": cases}
 
 

@@ -11,13 +11,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 try:
     from .config import settings
+    from .auth import access
+    from .auth.users import load_users
     from .auth.routes_simple import router as auth_router  # Simple file-based auth
     from .ai_routes import router as ai_router  # AI assistant routes
     from .mordor_routes import router as mordor_router  # Mordor dataset management
@@ -36,6 +39,8 @@ try:
 except ImportError:
     # Fallback for standalone execution
     from config import settings
+    from auth import access
+    from auth.users import load_users
     from auth.routes_simple import router as auth_router  # Simple file-based auth
     from ai_routes import router as ai_router  # AI assistant routes
     from mordor_routes import router as mordor_router  # Mordor dataset management
@@ -96,6 +101,10 @@ app = FastAPI(
     debug=settings.debug,
 )
 
+# Who is calling; in server mode this also enforces sign-in, admin areas and job
+# access for every /api route (auth/access.py). Added before CORS so CORS wraps it.
+app.middleware("http")(access.middleware)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -107,6 +116,29 @@ app.add_middleware(
 
 # Initialize storage
 job_storage = JobStorage()
+access.configure(job_storage)
+
+
+class SharingUpdate(BaseModel):
+    """Who a job is shared with (usernames)."""
+    usernames: List[str]
+
+
+def _job_for(request: Request, job_id: str) -> Optional[Job]:
+    """A job the caller may see, or None (for bulk actions over a list of IDs)."""
+    if not access.can_access_job(access.current_user(request), job_id):
+        return None
+    return job_storage.get_job(job_id)
+
+
+def _with_access(jobs: List[Job]) -> List[Job]:
+    """Fill in each job's owner and who it's shared with."""
+    records = job_storage.all_access() if jobs else {}
+    for job in jobs:
+        record = records.get(job.id) or {}
+        job.owner = record.get("owner_username")
+        job.shared_with = record.get("shared_with") or []
+    return jobs
 
 
 # Startup event
@@ -275,7 +307,7 @@ async def browse_filesystem(path: str = Query("/", description="Path to browse")
 
 # Job Management API
 @app.post("/api/jobs", response_model=Job)
-async def create_job(job_request: JobCreate):
+async def create_job(job_request: JobCreate, request: Request):
     """
     Create a new analysis job.
 
@@ -362,8 +394,11 @@ async def create_job(job_request: JobCreate):
             created_at=datetime.now(),
         )
 
-        # Save job
+        # Save job, and who it belongs to
         job_storage.save_job(job)
+        owner = access.current_user(request)
+        job_storage.set_owner(job.id, owner["id"], owner["username"])
+        job.owner = owner["username"]
 
         # Start analysis task and store Celery task ID
         task = start_analysis.delay(job_id)
@@ -383,6 +418,7 @@ async def create_job(job_request: JobCreate):
 
 @app.get("/api/jobs", response_model=JobListResponse)
 async def list_jobs(
+    request: Request,
     status: Optional[JobStatus] = None,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -401,8 +437,9 @@ async def list_jobs(
         List of jobs
     """
     try:
-        jobs = job_storage.list_jobs(status=status, limit=limit, offset=offset)
-        total = job_storage.count_jobs(status=status)
+        visible = access.visible_job_ids(access.current_user(request))
+        jobs = _with_access(job_storage.list_jobs(status=status, limit=limit, offset=offset, job_ids=visible))
+        total = job_storage.count_jobs(status=status, job_ids=visible)
 
         # Truncate logs to avoid sending massive payloads
         if log_limit > 0:
@@ -417,7 +454,7 @@ async def list_jobs(
 
 
 @app.get("/api/validate/case-id/{case_id}")
-async def validate_case_id(case_id: str):
+async def validate_case_id(case_id: str, request: Request):
     """
     Check if a case ID already exists.
 
@@ -428,15 +465,19 @@ async def validate_case_id(case_id: str):
         {"exists": bool, "jobs": [list of matching job IDs]}
     """
     try:
-        all_jobs = job_storage.list_jobs()
+        # Case numbers name output directories, so a clash is reported whoever owns
+        # the other job; only the caller's own jobs are listed
+        all_jobs = job_storage.list_jobs(limit=100000)
+        visible = access.visible_job_ids(access.current_user(request))
+        clashes = [job for job in all_jobs if job.case_number == case_id]
         matching_jobs = [
             {"id": job.id, "status": job.status, "created_at": job.created_at}
-            for job in all_jobs
-            if job.case_number == case_id
+            for job in clashes
+            if visible is None or job.id in visible
         ]
 
         return {
-            "exists": len(matching_jobs) > 0,
+            "exists": len(clashes) > 0,
             "case_id": case_id,
             "jobs": matching_jobs
         }
@@ -467,7 +508,7 @@ async def get_job(job_id: str, log_limit: int = Query(100, description="Max log 
         if log_limit > 0 and len(job.log) > log_limit:
             job.log = job.log[-log_limit:]
 
-        return job
+        return _with_access([job])[0]
 
     except HTTPException:
         raise
@@ -565,7 +606,7 @@ async def delete_job(job_id: str):
 # =====================================================
 
 @app.post("/api/jobs/bulk/cancel")
-async def bulk_cancel_jobs(job_ids: list[str]):
+async def bulk_cancel_jobs(job_ids: list[str], request: Request):
     """
     Cancel multiple jobs at once.
 
@@ -580,7 +621,7 @@ async def bulk_cancel_jobs(job_ids: list[str]):
         from celery import current_app
 
         for job_id in job_ids:
-            job = job_storage.get_job(job_id)
+            job = _job_for(request, job_id)
 
             if not job:
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
@@ -618,7 +659,7 @@ async def bulk_cancel_jobs(job_ids: list[str]):
 
 
 @app.post("/api/jobs/bulk/delete")
-async def bulk_delete_jobs(job_ids: list[str]):
+async def bulk_delete_jobs(job_ids: list[str], request: Request):
     """
     Delete multiple completed/failed/cancelled jobs at once.
 
@@ -632,7 +673,7 @@ async def bulk_delete_jobs(job_ids: list[str]):
         results = []
 
         for job_id in job_ids:
-            job = job_storage.get_job(job_id)
+            job = _job_for(request, job_id)
 
             if not job:
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
@@ -652,7 +693,7 @@ async def bulk_delete_jobs(job_ids: list[str]):
 
 
 @app.post("/api/jobs/bulk/archive")
-async def bulk_archive_jobs(job_ids: list[str]):
+async def bulk_archive_jobs(job_ids: list[str], request: Request):
     """
     Archive multiple jobs at once.
 
@@ -666,7 +707,7 @@ async def bulk_archive_jobs(job_ids: list[str]):
         results = []
 
         for job_id in job_ids:
-            job = job_storage.get_job(job_id)
+            job = _job_for(request, job_id)
 
             if not job:
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
@@ -692,7 +733,7 @@ async def bulk_archive_jobs(job_ids: list[str]):
 
 
 @app.post("/api/jobs/bulk/restart")
-async def bulk_restart_jobs(job_ids: list[str], fresh: bool = False):
+async def bulk_restart_jobs(job_ids: list[str], request: Request, fresh: bool = False):
     """
     Restart multiple failed, cancelled, or completed jobs at once.
 
@@ -708,7 +749,7 @@ async def bulk_restart_jobs(job_ids: list[str], fresh: bool = False):
         results = []
 
         for job_id in job_ids:
-            job = job_storage.get_job(job_id)
+            job = _job_for(request, job_id)
 
             if not job:
                 results.append({"job_id": job_id, "success": False, "error": "Job not found"})
@@ -1202,6 +1243,34 @@ if platform.system() == 'Darwin' or platform.system() == 'Linux':
     REQUIRED_FILES_DIR = '/tmp/rivendell'
 else:
     REQUIRED_FILES_DIR = os.path.join(os.environ.get('TEMP', 'C:\\Temp'), 'rivendell')
+
+
+@app.get("/api/jobs/{job_id}/sharing")
+async def get_job_sharing(job_id: str, request: Request):
+    """Who owns a job, who it's shared with, and whether the caller may change that."""
+    if not job_storage.get_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    record = job_storage.get_access(job_id) or {}
+    return {
+        "owner": record.get("owner_username"),
+        "shared_with": record.get("shared_with") or [],
+        "can_manage": access.can_manage_job(access.current_user(request), job_id),
+    }
+
+
+@app.put("/api/jobs/{job_id}/sharing")
+async def set_job_sharing(job_id: str, update: SharingUpdate, request: Request):
+    """Share a job with other users (its owner or an admin), replacing the list."""
+    if not job_storage.get_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    if not access.can_manage_job(access.current_user(request), job_id):
+        raise HTTPException(status_code=403, detail="Only the job's owner or an admin can share it")
+    known = {u["username"] for u in load_users().values() if u.get("is_active", True)}
+    unknown = sorted(set(update.usernames) - known)
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"No such user: {', '.join(unknown)}")
+    record = job_storage.set_shared(job_id, update.usernames)
+    return {"owner": record.get("owner_username"), "shared_with": record["shared_with"], "can_manage": True}
 
 
 @app.post("/api/check-required-files")

@@ -19,7 +19,10 @@ usage() {
 Usage: rivendell <command> [options]
 
 The platform (Docker):
-  start | stop | restart | status   Run the stack (--testing: no Splunk/Elastic; --logs: follow logs)
+  start | stop | restart | status   Run the stack (--testing: no Splunk/Elastic; --logs: follow logs;
+                                    --server: the shared-server profile, automatic after 'server init';
+                                    --progress[=zenity]: phases and an ETA, waiting for the web UI)
+  server init|users|ca              A team server: TLS proxy, sign-in, per-user jobs (docs/SERVER.md)
   anduril <command>                 Administer Rivendell's containers (status, logs, restart, ...)
 
 Forensics (run from the directory you're working in; relative paths stay relative):
@@ -95,6 +98,16 @@ ensure_docker() {
 
 print_urls() {
     echo ""
+    if $SERVER; then
+        local host
+        host="$(sed -n 's/^RIVENDELL_HOSTNAME=//p' "$ROOT/.env" | tail -1)"
+        echo "  Rivendell:     https://$host"
+        echo "  Splunk, Kibana, Navigator (with COMPOSE_PROFILES=siem): https://$host:7755, :5601, :5602"
+        echo ""
+        echo "  Users: 'rivendell server users list'. Nothing else is published."
+        echo ""
+        return
+    fi
     if $TESTING; then
         echo "  Frontend:    http://localhost:5687"
         echo "  Backend API: http://localhost:5688"
@@ -119,10 +132,17 @@ stack() {
     shift
     TESTING=false
     FOLLOW_LOGS=false
+    SERVER=false
+    PROGRESS=""
+    # `rivendell server init` marks a server in .env; --server asks for it explicitly
+    grep -q '^RIVENDELL_DEPLOYMENT=server' "$ROOT/.env" 2>/dev/null && SERVER=true
     for arg in "$@"; do
         case "$arg" in
             --testing) TESTING=true ;;
             --logs)    FOLLOW_LOGS=true ;;
+            --server)  SERVER=true ;;
+            --progress) PROGRESS=json ;;
+            --progress=zenity) PROGRESS=zenity ;;
             *)
                 echo "Error: unknown argument: $arg" >&2
                 exit 1
@@ -134,9 +154,17 @@ stack() {
     if $TESTING; then
         COMPOSE_FILES="$COMPOSE_FILES -f tests/docker-compose.testing.yml"
     fi
+    if $SERVER; then
+        server_preflight
+        COMPOSE_FILES="$COMPOSE_FILES -f deploy/server/docker-compose.server.yml"
+    fi
     # Evidence folders added in the desktop app's setup (gitignored, so a pull never touches it)
     if [ -f "$ROOT/docker-compose.local.yml" ]; then
         COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.local.yml"
+    fi
+    if [ "$command" = start ] && [ -n "$PROGRESS" ] && progress_python; then
+        start_with_progress
+        return
     fi
     ensure_docker
     case "$command" in
@@ -163,6 +191,48 @@ stack() {
             compose_cmd ps
             ;;
     esac
+}
+
+# start --progress: src/common/startup_progress.py wakes Docker, starts the stack and
+# waits for the web UI, timing each phase against this machine's earlier starts for the
+# ETA (Rivendell.app's journey; zenity on Linux)
+progress_python() {
+    command -v "$PYTHON" &>/dev/null || return 1
+    # On a Mac without the command-line tools, /usr/bin/python3 is a stub that opens an installer
+    if [[ "$(uname)" == "Darwin" ]] && [ "$(command -v "$PYTHON")" = /usr/bin/python3 ] && ! xcode-select -p &>/dev/null; then
+        return 1
+    fi
+}
+
+start_with_progress() {
+    local url="http://localhost:5687" status
+    $SERVER && url="https://localhost"
+    prepare_app_copy
+    local args=(--root "$ROOT" --url "$url")
+    [ -n "$BUILD_FLAG" ] && args+=(--build)
+    $SERVER && args+=(--server)
+    [ "$PROGRESS" = zenity ] && args+=(--zenity)
+    # shellcheck disable=SC2086 # DC and COMPOSE_FILES are word lists
+    "$PYTHON" "$ROOT/src/common/startup_progress.py" "${args[@]}" -- $DC $COMPOSE_FILES
+    status=$?
+    [ $status -eq 0 ] || exit $status
+    [ -n "$BUILD_FLAG" ] && cat "$ROOT/.rivendell-version" > "$ROOT/.rivendell-built"
+    [ "$PROGRESS" = zenity ] || print_urls
+}
+
+# The server profile resets the base file's published ports with !reset (Compose 2.24)
+server_preflight() {
+    local version major minor
+    version="$($DC version --short 2>/dev/null | sed 's/^v//')"
+    major="${version%%.*}"; minor="${version#*.}"; minor="${minor%%.*}"
+    if [ "${major:-0}" -lt 2 ] || { [ "$major" -eq 2 ] && [ "${minor:-0}" -lt 24 ]; }; then
+        echo "Error: the server profile needs Docker Compose 2.24 or later (this is ${version:-unknown})." >&2
+        exit 1
+    fi
+    if ! grep -q '^RIVENDELL_HOSTNAME=' "$ROOT/.env" 2>/dev/null; then
+        echo "Error: this isn't set up as a server yet. Run: rivendell server init <hostname>" >&2
+        exit 1
+    fi
 }
 
 # A copy the desktop app installed (not a git clone) carries .rivendell-version. It gets

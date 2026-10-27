@@ -1,17 +1,18 @@
-// Rivendell.app: shows Rivendell's web UI in its own window, starting the Docker stack
-// through the launcher when the UI isn't answering. Setup.swift handles the first run
-// (container runtime, where Rivendell's files live, evidence folders) and updates.
+// Rivendell.app: shows Rivendell's web UI in its own window. Either it runs Rivendell
+// here, starting the Docker stack through the launcher when the UI isn't answering, or
+// it connects to a team's Rivendell server. Setup.swift handles the first run (where
+// Rivendell runs, the container runtime, evidence folders) and updates.
 import AppKit
 import WebKit
 
-let frontendURL = URL(string: "http://localhost:5687")!
+let localURL = URL(string: "http://localhost:5687")!
 let startTimeout: TimeInterval = 900
 
 enum Page { case splash, setup, ui }
 
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate,
-                         WKDownloadDelegate, WKScriptMessageHandler {
+                         WKDownloadDelegate, WKScriptMessageHandler, NSMenuItemValidation {
     var window: NSWindow!
     var webView: WKWebView!
     var page = Page.splash
@@ -37,6 +38,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var bundledSource: URL? {
         Bundle.main.url(forResource: "rivendell-src", withExtension: "tar.gz")
     }
+
+    /// The team server chosen in setup; when set, nothing runs on this Mac
+    var serverURL: URL? {
+        UserDefaults.standard.string(forKey: "RivendellServer").flatMap(URL.init(string:))
+    }
+
+    /// Where the web UI is: the server, or the local stack
+    var uiURL: URL { serverURL ?? localURL }
 
     /// The Rivendell copy to run: RIVENDELL_ROOT, then the one chosen in setup, then the
     /// checkout a local build (`rivendell app install`) was made from
@@ -78,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: Starting the stack
 
     func launch() {
+        if let server = serverURL {
+            connect(to: server)
+            return
+        }
         guard let root = root else {
             showSetup()
             return
@@ -97,21 +110,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
 
     func probe(_ done: @escaping (Bool) -> Void) {
-        var request = URLRequest(url: frontendURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 2)
+        probe(uiURL, timeout: 2) { up, _ in done(up) }
+    }
+
+    /// Whether anything answers at `url`, with the error when nothing does
+    func probe(_ url: URL, timeout: TimeInterval, _ done: @escaping (Bool, Error?) -> Void) {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
         request.httpMethod = "HEAD"
-        URLSession.shared.dataTask(with: request) { _, response, _ in
-            DispatchQueue.main.async { done(response is HTTPURLResponse) }
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            DispatchQueue.main.async { done(response is HTTPURLResponse, error) }
         }.resume()
+    }
+
+    func connect(to server: URL) {
+        showSplash()
+        splashPlain("Connecting to \(server.host ?? server.absoluteString)…")
+        probe(server, timeout: 10) { up, error in
+            if up {
+                self.showUI()
+            } else {
+                self.splashError(self.connectionProblem(server, error))
+            }
+        }
+    }
+
+    /// What went wrong reaching a server, in terms of what to do about it
+    func connectionProblem(_ server: URL, _ error: Error?) -> String {
+        let host = server.host ?? server.absoluteString
+        let code = (error as NSError?)?.code ?? 0
+        let certificate = [NSURLErrorServerCertificateUntrusted, NSURLErrorServerCertificateHasUnknownRoot,
+                           NSURLErrorServerCertificateHasBadDate, NSURLErrorServerCertificateNotYetValid,
+                           NSURLErrorSecureConnectionFailed]
+        if certificate.contains(code) {
+            return "This Mac doesn't trust \(host)'s certificate. Ask its admin for the root certificate ('rivendell server ca'), add it to Keychain Access as Always Trust, then try again."
+        }
+        let detail = error?.localizedDescription ?? "no answer"
+        return "Can't reach \(host) (\(detail)). Check the address and your network or VPN; Rivendell › Set Up Rivendell… changes the server."
     }
 
     func startStack() {
         splashStatus("Starting the Docker stack…")
-        runLauncher(["start"], output: splashLine) { status in
+        runLauncher(["start", "--progress"], output: splashLine) { status in
             guard status == 0 else {
                 self.splashError("'rivendell start' exited with status \(status). The output is above.")
                 return
             }
-            self.splashStatus("Waiting for the web UI on \(frontendURL.host!):\(frontendURL.port!)…")
+            self.splashStatus("Waiting for the web UI on \(localURL.host!):\(localURL.port!)…")
             self.waitForUI(deadline: Date().addingTimeInterval(startTimeout))
         }
     }
@@ -121,7 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             if up {
                 self.showUI()
             } else if Date() > deadline {
-                self.splashError("The stack started but nothing answered on \(frontendURL) after \(Int(startTimeout / 60)) minutes. Try 'rivendell status'.")
+                self.splashError("The stack started but nothing answered on \(localURL) after \(Int(startTimeout / 60)) minutes. Try 'rivendell status'.")
             } else {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.waitForUI(deadline: deadline) }
             }
@@ -176,34 +220,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    /// The journey page: Gandalf on the road to Rivendell while the stack starts
+    /// (journey.html), or plain words for stopping and connecting
     func showSplash() {
         show(.splash)
-        let html = """
-        <!doctype html><html><head><meta charset="utf-8"><style>
-        :root { color-scheme: dark; }
-        body { margin: 0; height: 100vh; display: flex; flex-direction: column; align-items: center;
-               justify-content: center; background: #0b1210; color: #b9c9b4;
-               font: 14px -apple-system, system-ui, sans-serif; }
-        img { width: 420px; max-width: 70vw; }
-        #status { margin: 18px 0 10px; font-size: 15px; }
-        #status.error { color: #e8a07a; }
-        pre { width: min(900px, 90vw); height: 32vh; overflow: auto; margin: 0; padding: 12px;
-              background: #050908; border: 1px solid #1d2b26; border-radius: 6px;
-              font: 12px "JetBrains Mono", Menlo, monospace; color: #8fa58a; white-space: pre-wrap; }
-        button { margin-top: 14px; padding: 6px 18px; background: #1d3a2e; color: #d6e6d0;
-                 border: 1px solid #2f5a47; border-radius: 6px; font: inherit; cursor: pointer; display: none; }
-        </style></head><body>
-        <img src="rivendell.png" alt="Rivendell">
-        <div id="status">Checking whether Rivendell is running…</div>
-        <pre id="log"></pre>
-        <button id="retry" onclick="webkit.messageHandlers.rivendell.postMessage('retry')">Try again</button>
-        <script>
-        function line(t) { const l = document.getElementById('log'); l.textContent += t + '\\n'; l.scrollTop = l.scrollHeight; }
-        function status(t, error) { const s = document.getElementById('status'); s.textContent = t;
-          s.className = error ? 'error' : ''; document.getElementById('retry').style.display = error ? 'inline-block' : 'none'; }
-        </script></body></html>
-        """
-        webView.loadHTMLString(html, baseURL: Bundle.main.resourceURL)
+        let page = Bundle.main.url(forResource: "journey", withExtension: "html")!
+        webView.loadFileURL(page, allowingReadAccessTo: Bundle.main.resourceURL!)
     }
 
     /// Calls a function on the splash or setup page, holding calls until the page has loaded.
@@ -214,13 +236,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         if pageReady { webView.evaluateJavaScript(call) } else { pageQueue.append(call) }
     }
 
-    func splashLine(_ text: String) { js("line", [text]) }
+    /// A line of launcher output: a progress report for the journey, or one for the log
+    func splashLine(_ text: String) {
+        let marker = "@@progress "
+        if text.hasPrefix(marker), let data = text.dropFirst(marker.count).data(using: .utf8),
+           let report = try? JSONSerialization.jsonObject(with: data) {
+            js("progress", [report])
+        } else {
+            js("line", [text])
+        }
+    }
+    func splashPlain(_ text: String) { js("plain", [text]) }
     func splashStatus(_ text: String) { js("status", [text, false]) }
     func splashError(_ text: String) { js("status", [text, true]) }
 
     func showUI() {
         show(.ui)
-        webView.load(URLRequest(url: frontendURL))
+        window.title = serverURL.map { "Rivendell — \($0.host ?? "")" } ?? "Rivendell"
+        webView.load(URLRequest(url: uiURL))
     }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -234,7 +267,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     // MARK: Menu actions
 
     @objc func openInBrowser(_ sender: Any?) {
-        NSWorkspace.shared.open(page == .ui ? webView.url ?? frontendURL : frontendURL)
+        NSWorkspace.shared.open(page == .ui ? webView.url ?? uiURL : uiURL)
     }
 
     @objc func stopStack(_ sender: Any?) {
@@ -243,6 +276,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     @objc func stopAndQuit(_ sender: Any?) {
         stopThen { NSApp.terminate(nil) }
+    }
+
+    /// Starting and stopping is for the stack on this Mac; a server's admins do that
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(stopStack(_:)), #selector(stopAndQuit(_:)):
+            return serverURL == nil && root != nil
+        case #selector(startStackMenu(_:)):
+            return serverURL == nil
+        default:
+            return true
+        }
     }
 
     @objc func startStackMenu(_ sender: Any?) { launch() }
@@ -263,7 +308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             return
         }
         showSplash()
-        splashStatus("Stopping the Docker stack…")
+        splashPlain("Stopping the Docker stack…")
         runLauncher(["stop"], output: splashLine) { _ in next() }
     }
 
@@ -339,7 +384,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
         // Links off the frontend (Splunk, Kibana, ATT&CK, GitHub) go to the default browser
         if let url = action.request.url, action.navigationType == .linkActivated,
-           url.host != frontendURL.host || url.port != frontendURL.port {
+           url.host != uiURL.host || url.port != uiURL.port {
             NSWorkspace.shared.open(url)
             decisionHandler(.cancel)
             return
@@ -383,7 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         // target="_blank": the frontend's own pages stay in the window, anything else opens in the browser
         if let url = action.request.url {
-            if url.host == frontendURL.host && url.port == frontendURL.port {
+            if url.host == uiURL.host && url.port == uiURL.port {
                 webView.load(action.request)
             } else {
                 NSWorkspace.shared.open(url)
@@ -448,6 +493,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         // The stack went away under us (stopped elsewhere, Docker quit): back to the splash
         guard page == .ui, (error as NSError).domain == NSURLErrorDomain else { return }
         showSplash()
-        splashError("Lost the web UI: \(error.localizedDescription)")
+        if let server = serverURL {
+            splashError(connectionProblem(server, error))
+        } else {
+            splashError("Lost the web UI: \(error.localizedDescription)")
+        }
     }
 }

@@ -37,6 +37,10 @@ It follows its own link back to the repository, so moving the clone means runnin
 | Command | Runs |
 |---|---|
 | `rivendell start \| stop \| restart \| status [--testing] [--logs]` | The Docker stack (`--testing` leaves out Splunk and Elastic) |
+| `rivendell start --progress[=zenity]` | The same, reporting progress and an ETA learnt from earlier starts (what the desktop apps show) |
+| `rivendell server init <hostname> [--tls internal\|<email>\|files]` | Turns this install into a team server; `start`, `stop` and `status` then use the server profile (`--server` forces it). See `docs/SERVER.md` |
+| `rivendell server users <list\|add\|password\|role\|disable\|enable>` | A server's accounts |
+| `rivendell server ca` | Prints the root certificate clients trust when the server uses Caddy's own CA |
 | `rivendell gandalf [bash\|python] <args>` | `gandalf.sh` (the default) or `gandalf.py` |
 | `rivendell acquire <args>` | Gandalf through the Python CLI |
 | `rivendell analyse <args>` | Elrond (`analyze` works too) |

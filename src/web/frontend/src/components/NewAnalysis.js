@@ -5,6 +5,7 @@ import GandalfJobBrowser from './GandalfJobBrowser';
 import OptionsPanel from './OptionsPanel';
 import { createJob, getLocalMordorDatasets } from '../api';
 import axios from 'axios';
+import { API_BASE_URL } from '../apiBase';
 
 // File requirements for certain options
 const FILE_REQUIREMENTS = {
@@ -54,7 +55,7 @@ function NewAnalysis() {
       if (caseNumber.length >= 6) {  // Only check if case number is valid length
         setCheckingCaseId(true);
         try {
-          const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5688'}/api/validate/case-id/${encodeURIComponent(caseNumber)}`);
+          const response = await axios.get(`${API_BASE_URL}/api/validate/case-id/${encodeURIComponent(caseNumber)}`);
           setCaseIdExists(response.data.exists);
         } catch (err) {
           console.error('Error checking case ID:', err);
@@ -217,7 +218,7 @@ function NewAnalysis() {
       // Check which files exist on the server
       try {
         const response = await axios.post(
-          `${process.env.REACT_APP_API_URL || 'http://localhost:5688'}/api/check-required-files`,
+          `${API_BASE_URL}/api/check-required-files`,
           { options: requiredOptions }
         );
 
@@ -270,7 +271,7 @@ function NewAnalysis() {
       });
 
       await axios.post(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5688'}/api/upload-required-files`,
+        `${API_BASE_URL}/api/upload-required-files`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );

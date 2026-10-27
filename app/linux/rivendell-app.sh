@@ -4,8 +4,10 @@
 # or the default browser). Progress goes to desktop notifications and the log below.
 #
 # From a checkout it runs that checkout. Installed from the .deb (/opt/rivendell, next to
-# rivendell-src.tar.gz), it runs the copy chosen in setup: zenity dialogs that check for
-# Docker, unpack the bundled source (or take an existing checkout) and mount evidence.
+# rivendell-src.tar.gz), it runs what setup chose: zenity dialogs that either take a team
+# server's address, or check for Docker, unpack the bundled source (or take an existing
+# checkout) and mount evidence. A server (RIVENDELL_SERVER, or the one setup saved)
+# needs nothing local: the window opens on it.
 #   rivendell-app.sh [--setup | --stop]
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -43,6 +45,35 @@ is_copy() { [ -x "$1/rivendell" ] && [ -f "$1/docker-compose.yml" ]; }
 app_version() { cat "$HERE/VERSION" 2>/dev/null || echo 0; }
 
 up() { curl -s -o /dev/null --max-time 2 "$URL"; }
+
+saved_server() {
+    if [ -n "${RIVENDELL_SERVER:-}" ]; then echo "$RIVENDELL_SERVER"; return; fi
+    cat "$CONFIG/server" 2>/dev/null
+}
+
+# A typed address as https://host[:port], or nothing if it isn't one (http for localhost only)
+normalise_server() {
+    local text="$1" scheme rest host
+    text="$(printf '%s' "$text" | tr -d '[:space:]')"
+    [[ "$text" == *://* ]] || text="https://$text"
+    scheme="${text%%://*}"; rest="${text#*://}"; host="${rest%%/*}"
+    [[ "$host" =~ ^[A-Za-z0-9.-]+(:[0-9]+)?$ ]] || return 1
+    case "$scheme" in
+        https) ;;
+        http) [[ "${host%%:*}" =~ ^(localhost|127\.0\.0\.1)$ ]] || return 1 ;;
+        *) return 1 ;;
+    esac
+    echo "$scheme://$host"
+}
+
+setup_server() {
+    local typed server
+    typed="$(zenity --entry --title="Set up Rivendell" --width=440 \
+        --text="Your team's Rivendell server (https):" --entry-text="$(saved_server)" 2>/dev/null)" || exit 1
+    server="$(normalise_server "$typed")" || { say error "'$typed' isn't a server address, e.g. rivendell.example.org (https only)."; exit 1; }
+    printf '%s\n' "$server" > "$CONFIG/server"
+    say info "Rivendell will open $server. If the browser warns about its certificate, ask the server's admin for its root certificate."
+}
 
 # ── Setup (the packaged app) ──────────────────────────────────────────────────
 check_docker() {
@@ -106,13 +137,19 @@ write_evidence() {
 }
 
 setup() {
-    check_docker
     local root="" choice target folders=()
     if has_zenity; then
-        choice="$(zenity --list --radiolist --title="Set up Rivendell" --width=520 --height=260 \
-            --text="Where should Rivendell's files live?" --column="" --column="Option" \
-            TRUE "Install Rivendell $(app_version) into a folder" \
-            FALSE "Use a copy I already have (a git clone, for instance)" 2>/dev/null)" || exit 1
+        choice="$(zenity --list --radiolist --title="Set up Rivendell" --width=560 --height=300 \
+            --text="Where does Rivendell run?" --column="" --column="Option" \
+            TRUE "Install Rivendell $(app_version) on this computer" \
+            FALSE "Use a copy I already have (a git clone, for instance)" \
+            FALSE "Connect to my team's Rivendell server" 2>/dev/null)" || exit 1
+        if [[ "$choice" == Connect* ]]; then
+            setup_server
+            return
+        fi
+        rm -f "$CONFIG/server"
+        check_docker
         if [[ "$choice" == Use* ]]; then
             root="$(zenity --file-selection --directory --title="Choose your Rivendell folder" 2>/dev/null)" || exit 1
             is_copy "$root" || { say error "$root doesn't look like Rivendell: there's no rivendell launcher and docker-compose.yml in it."; exit 1; }
@@ -122,6 +159,7 @@ setup() {
             root="${target%/}/Rivendell"
         fi
     else
+        check_docker
         root="$HOME/Rivendell"
         notify "Installing Rivendell into $root (install zenity to choose)"
     fi
@@ -185,8 +223,13 @@ case "${1:-}" in
     --setup)
         [ -f "$BUNDLED" ] || { say info "This is a checkout's launcher: it always runs $(cd -P "$HERE/../.." && pwd)."; exit 0; }
         setup >/dev/null
+        [ -n "$(saved_server)" ] || exit 0
         ;;
     --stop)
+        if [ -n "$(saved_server)" ]; then
+            say info "Rivendell runs on $(saved_server); its admins start and stop it."
+            exit 0
+        fi
         ROOT="$(resolve_root)" || exit 1
         notify "Stopping Rivendell…"
         "$ROOT/rivendell" stop >> "$LOG" 2>&1 && notify "Rivendell is stopped."
@@ -194,12 +237,34 @@ case "${1:-}" in
         ;;
 esac
 
+SERVER="$(saved_server)"
+if [ -n "$SERVER" ]; then
+    URL="$SERVER"
+    open_window
+fi
+
 ROOT="$(resolve_root)" || exit 1
+# Setup may just have chosen a server
+SERVER="$(saved_server)"
+if [ -n "$SERVER" ]; then
+    URL="$SERVER"
+    open_window
+fi
 maybe_update "$ROOT"
 
 if ! up; then
-    notify "Starting the Docker stack…"
-    if ! "$ROOT/rivendell" start >> "$LOG" 2>&1; then
+    if has_zenity; then
+        # The road to Rivendell: phases and an ETA from this machine's earlier starts
+        "$ROOT/rivendell" start --progress=zenity 2>&1 | tee -a "$LOG" |
+            zenity --progress --title="The road to Rivendell" --width=480 --auto-close --no-cancel \
+                --text="Gandalf sets out from the Shire" --percentage=0 2>/dev/null
+        status=${PIPESTATUS[0]}
+    else
+        notify "Starting the Docker stack…"
+        "$ROOT/rivendell" start >> "$LOG" 2>&1
+        status=$?
+    fi
+    if [ "$status" -ne 0 ]; then
         notify "'rivendell start' failed. See $LOG"
         exit 1
     fi

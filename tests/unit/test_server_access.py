@@ -1,0 +1,189 @@
+"""Unit tests for server mode: sign-in, job ownership and sharing, admin areas.
+
+Drives the real backend app (src/web/backend/main.py) through FastAPI's test client,
+with SQLite standing in for Postgres and a temporary user store. Needs the backend's
+Python requirements; skipped without them.
+
+Run: python3 -m unittest tests/unit/test_server_access.py
+"""
+
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+TMP = tempfile.mkdtemp(prefix="rivendell-access-")
+# The backend's settings read .env from the working directory; never the repository's
+os.chdir(TMP)
+os.environ.update({
+    "DATABASE_URL": f"sqlite:///{TMP}/jobs.db",
+    "USERS_FILE": f"{TMP}/users.json",
+    "SECRET_KEY": "test-secret-key-for-unit-tests-only-0123456789",
+    "RIVENDELL_ADMIN_PASSWORD": "correct horse battery staple",
+    "RIVENDELL_PUBLIC_URL": "https://rivendell.test",
+})
+
+try:
+    from fastapi.testclient import TestClient
+except ImportError:  # backend requirements not installed
+    TestClient = None
+
+BACKEND = Path(__file__).resolve().parents[2] / "src" / "web" / "backend"
+
+
+def load_app():
+    sys.path.insert(0, str(BACKEND))
+    # No Celery or forensic tools here: the job queue is a stand-in. (Not patch.dict, which
+    # would unload config with it and leave the test holding a second settings object.)
+    fake_tasks = mock.MagicMock()
+    fake_tasks.start_analysis.delay.return_value = mock.Mock(id="celery-task")
+    sys.modules["tasks_docker"] = fake_tasks
+    import main  # noqa: E402
+    return main
+
+
+@unittest.skipIf(TestClient is None, "backend requirements (fastapi) not installed")
+class ServerAccessTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.main = load_app()
+        from config import settings
+        cls.settings = settings
+        cls.evidence = Path(TMP) / "evidence"
+        cls.evidence.mkdir(exist_ok=True)
+        cls.allowed = mock.patch.object(type(settings), "allowed_paths",
+                                        new_callable=mock.PropertyMock, return_value=[str(cls.evidence)])
+        cls.allowed.start()
+        settings.rivendell_server_mode = True
+        cls.client = TestClient(cls.main.app)
+        cls.admin = cls.login("admin", "correct horse battery staple")
+        for name in ("alice", "bob"):
+            resp = cls.client.post("/api/auth/users", headers=cls.admin, json={
+                "username": name, "email": f"{name}@example.org", "password": f"{name}-password-123"})
+            assert resp.status_code == 200, resp.text
+        cls.alice = cls.login("alice", "alice-password-123")
+        cls.bob = cls.login("bob", "bob-password-123")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.allowed.stop()
+        cls.settings.rivendell_server_mode = False
+
+    @classmethod
+    def login(cls, username, password):
+        resp = cls.client.post("/api/auth/login", data={"username": username, "password": password})
+        assert resp.status_code == 200, resp.text
+        cls.client.cookies.clear()  # each test says who it is with a header
+        return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    def create_job(self, headers, case):
+        source = self.evidence / f"{case}.E01"
+        source.write_bytes(b"")
+        resp = self.client.post("/api/jobs", headers=headers, json={
+            "case_number": case, "source_paths": [str(source)],
+            "destination_path": str(self.evidence / "out" / case)})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        return resp.json()["id"]
+
+    def ids(self, headers):
+        resp = self.client.get("/api/jobs", headers=headers)
+        self.assertEqual(resp.status_code, 200, resp.text)
+        return {job["id"] for job in resp.json()["jobs"]}
+
+    def test_sign_in_required(self):
+        for path in ("/api/jobs", "/api/fs/browse", "/api/ai/cases", "/api/auth/me"):
+            self.assertEqual(self.client.get(path).status_code, 401, path)
+        self.assertEqual(self.client.get("/api/health").status_code, 200)
+        config = self.client.get("/api/auth/config").json()
+        self.assertTrue(config["server_mode"])
+        self.assertFalse(config["guest"])
+
+    def test_no_guest_or_open_sign_up(self):
+        # Refused by the middleware (401) before the route's own 403
+        self.assertIn(self.client.post("/api/auth/guest").status_code, (401, 403))
+        resp = self.client.post("/api/auth/register", json={
+            "username": "mallory", "email": "m@example.org", "password": "mallory-password-1"})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_builtin_admin_password_refused(self):
+        resp = self.client.post("/api/auth/login", data={"username": "admin", "password": self.settings.default_admin_password})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_jobs_visible_to_owner_shared_users_and_admins(self):
+        job = self.create_job(self.alice, "CASE-ALICE-1")
+        self.assertIn(job, self.ids(self.alice))
+        self.assertIn(job, self.ids(self.admin))
+        self.assertNotIn(job, self.ids(self.bob))
+        self.assertEqual(self.client.get(f"/api/jobs/{job}", headers=self.bob).status_code, 404)
+        self.assertEqual(self.client.get(f"/api/jobs/{job}", headers=self.alice).json()["owner"], "alice")
+
+        resp = self.client.put(f"/api/jobs/{job}/sharing", headers=self.alice, json={"usernames": ["bob"]})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertIn(job, self.ids(self.bob))
+        self.assertEqual(self.client.get(f"/api/jobs/{job}", headers=self.bob).status_code, 200)
+        # Shared with, not owner: can't reshare
+        resp = self.client.put(f"/api/jobs/{job}/sharing", headers=self.bob, json={"usernames": []})
+        self.assertEqual(resp.status_code, 403)
+
+    def test_sharing_with_unknown_user_refused(self):
+        job = self.create_job(self.alice, "CASE-ALICE-2")
+        resp = self.client.put(f"/api/jobs/{job}/sharing", headers=self.alice, json={"usernames": ["nobody"]})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_bulk_actions_skip_other_peoples_jobs(self):
+        job = self.create_job(self.alice, "CASE-ALICE-3")
+        resp = self.client.post("/api/jobs/bulk/cancel", headers=self.bob, json=[job])
+        self.assertEqual(resp.json()["results"][0]["error"], "Job not found")
+
+    def test_case_clash_reported_without_listing_others_jobs(self):
+        self.create_job(self.alice, "CASE-CLASH-1")
+        body = self.client.get("/api/validate/case-id/CASE-CLASH-1", headers=self.bob).json()
+        self.assertTrue(body["exists"])
+        self.assertEqual(body["jobs"], [])
+
+    def test_job_from_before_server_mode_is_admin_only(self):
+        from models.job import Job, JobStatus, AnalysisOptions
+        legacy = Job(id="00000000-0000-0000-0000-000000000001", case_number="LEGACY-01", source_paths=[],
+                     destination_path=None, options=AnalysisOptions(), status=JobStatus.COMPLETED)
+        self.main.job_storage.save_job(legacy)
+        self.assertIn(legacy.id, self.ids(self.admin))
+        self.assertNotIn(legacy.id, self.ids(self.alice))
+
+    def test_admin_areas(self):
+        self.assertEqual(self.client.get("/api/lab/status", headers=self.alice).status_code, 403)
+        self.assertEqual(self.client.get("/api/auth/users", headers=self.alice).status_code, 403)
+        self.assertEqual(self.client.get("/api/auth/users", headers=self.admin).status_code, 200)
+        self.assertEqual(self.client.get("/api/auth/directory", headers=self.alice).status_code, 200)
+
+    def test_verify_for_the_proxy(self):
+        self.assertEqual(self.client.get("/api/auth/verify").status_code, 401)
+        resp = self.client.get("/api/auth/verify?login_redirect=1", follow_redirects=False)
+        self.assertEqual(resp.headers["location"], "https://rivendell.test/login")
+        resp = self.client.get("/api/auth/verify", headers=self.bob)
+        self.assertEqual(resp.headers["X-Rivendell-User"], "bob")
+
+    def test_lockout_after_repeated_failures(self):
+        for _ in range(self.settings.max_login_attempts):
+            self.client.post("/api/auth/login", data={"username": "locktest", "password": "wrong"})
+        resp = self.client.post("/api/auth/login", data={"username": "locktest", "password": "wrong"})
+        self.assertEqual(resp.status_code, 429)
+
+    def test_last_admin_stays_admin(self):
+        users = self.client.get("/api/auth/users", headers=self.admin).json()
+        admin_id = next(u["id"] for u in users if u["username"] == "admin")
+        resp = self.client.patch(f"/api/auth/users/{admin_id}", headers=self.admin, json={"role": "user"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_local_mode_stays_open(self):
+        self.settings.rivendell_server_mode = False
+        try:
+            self.assertEqual(self.client.get("/api/jobs").status_code, 200)
+            self.assertEqual(self.client.get("/api/auth/me").json()["username"], "local")
+        finally:
+            self.settings.rivendell_server_mode = True
+
+
+if __name__ == "__main__":
+    unittest.main()

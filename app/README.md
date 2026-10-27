@@ -66,15 +66,20 @@ The checkout build records the repo's path, so reinstall after moving the checko
 
 Quitting leaves the stack running, since a Celery job may be mid-analysis. `rivendell stop` works wherever the launcher does.
 
-On macOS, the window shows `rivendell start`'s output while it waits, and falls back to that page with a **Try again** button if the stack goes away. Downloads go to `~/Downloads`, and Splunk, Kibana, Navigator and other external links open in the default browser. On Linux, progress goes to desktop notifications and `~/.local/state/rivendell/app.log`. On Windows, it's in the shortcut's console, which starts minimised. The Linux and Windows windows use their own browser profile, so the Rivendell login stays apart from everyday browsing. On Wayland, Chromium may ignore `--class`, and the dock then shows the browser's icon.
+On macOS, the window shows Gandalf walking from the Shire to Rivendell while the stack starts, with an ETA taken from this machine's earlier starts (`rivendell start --progress`; the first start is a guess, and a build paces itself on its steps). The Linux app shows the same journey as a zenity progress bar, and Windows as a console progress bar. If the stack goes away, the window falls back to the start page with a **Try again** button. Downloads go to `~/Downloads`, and Splunk, Kibana, Navigator and other external links open in the default browser. On Linux, progress goes to desktop notifications and `~/.local/state/rivendell/app.log`. On Windows, it's in the shortcut's console, which starts minimised. The Linux and Windows windows use their own browser profile, so the Rivendell login stays apart from everyday browsing. On Wayland, Chromium may ignore `--class`, and the dock then shows the browser's icon.
 
 Windows won't let a program pin itself to the taskbar: right-click Rivendell in the Start menu › **Pin to taskbar**. On GNOME and KDE, right-click the running app's dock icon to pin it.
+
+### Connecting to a server
+
+In setup, **Connect to my team's Rivendell server** takes a hostname (`https://` is assumed) and nothing else: no Docker, no checkout, and start and stop do nothing. The Mac app opens the server in its own window and needs the server's certificate trusted in the Keychain when it comes from the server's own CA (`rivendell server ca`); Linux and Windows open it in the app-mode browser window. The address is kept in `RivendellServer` (macOS defaults), `~/.config/rivendell/server` (Linux) or `.rivendell-server` beside the Windows install, and `RIVENDELL_SERVER` overrides it on Linux and Windows. The Windows installer asks at its first page, and leaves Docker and the source tree out for a client. See `docs/SERVER.md` for the server side.
 
 ## Layout
 
 | Path | What |
 |---|---|
 | `macos/Rivendell.swift`, `macos/Setup.swift`, `macos/setup.html` | The Mac app: window, splash and menus; first-run setup and updates; the setup page |
+| `macos/journey.html` | The start-up journey (its map, `journey.png`, is cut from `docs/images/middle_earth.png` at build time) |
 | `macos/build.sh`, `macos/package.sh` | Checkout and release builds; the signed, notarised DMG |
 | `linux/rivendell-app.sh` | Launcher and zenity setup, for a checkout or the `.deb` |
 | `linux/rivendell.desktop.in`, `linux/desktop-entry.sh`, `linux/install.sh`, `linux/package-deb.sh` | Menu entry, checkout install, `.deb` |

@@ -79,7 +79,9 @@ fi
 
 cp "$ROOT/app/icons/rivendell.icns" "$BUNDLE/Contents/Resources/Rivendell.icns"
 cp "$ROOT/docs/images/rivendell.png" "$BUNDLE/Contents/Resources/rivendell.png"
-cp "$HERE/setup.html" "$BUNDLE/Contents/Resources/setup.html"
+cp "$HERE/setup.html" "$HERE/journey.html" "$BUNDLE/Contents/Resources/"
+# The journey's map: the Shire to the Misty Mountains, cut from the Middle-earth map
+sips -c 300 520 --cropOffset 150 120 "$ROOT/docs/images/middle_earth.png" --out "$BUNDLE/Contents/Resources/journey.png" >/dev/null
 
 cat > "$BUNDLE/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

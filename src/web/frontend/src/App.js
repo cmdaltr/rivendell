@@ -6,6 +6,7 @@ import GandalfLanding from './components/GandalfLanding';
 import ElrondLanding from './components/ElrondLanding';
 import MordorTelemetry from './components/MordorTelemetry';
 import LoginPage from './components/LoginPage';
+import SsoCallback from './components/SsoCallback';
 import RegisterPage from './components/RegisterPage';
 import ForgotPasswordPage from './components/ForgotPasswordPage';
 import ResetPasswordPage from './components/ResetPasswordPage';
@@ -88,6 +89,7 @@ function AppContent() {
             <Route path="/mordor/datasets" element={<Navigate to="/mordor" replace />} />
             <Route path="/mordor/telemetry" element={<Navigate to="/mordor" replace />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/login/sso" element={<SsoCallback />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />

@@ -41,6 +41,9 @@ Gandalf (acquisition) → Elrond (analysis) → Eru (AI analyst)
 | `src/analysis/tools/definitions.py` | Forensic tool definitions (executables, paths, platforms) |
 | `src/web/backend/` | FastAPI (:5688): jobs, auth, `ai_routes.py` + `eru_offline.py` (Eru), Mordor, lab, Andúril proxy |
 | `src/web/frontend/` | React (:5687); About is `components/HelpPage.js` |
+| `deploy/server/`, `scripts/server/` | Team server profile: Compose override (Caddy in front, nothing else published, production frontend), Caddyfile, `server init/users/ca`; guide in `docs/SERVER.md` |
+| `src/web/backend/auth/` | Sign-in: `users.py` (file store), `access.py` (the server-mode middleware: every route, job ownership and sharing via the `job_access` table), `oidc.py` (SSO), `manage_users.py` |
+| `src/common/startup_progress.py` | `rivendell start --progress`: phases, ETA from start history, the Shire-to-Rivendell places the apps draw |
 | `src/mordor/` | Security datasets and recorded attack telemetry |
 | `src/models/` | Ollama Modelfiles for the eru-* models |
 | `app/` | Desktop app: `macos/` (Swift WebKit app + first-run setup, `build.sh`/`package.sh` → DMG), `linux/` (launcher + zenity setup, `.deb`), `windows/` (launcher, Inno Setup installer); release builds in `.github/workflows/desktop-release.yml`; `rivendell app install` for a checkout; see `app/README.md` |

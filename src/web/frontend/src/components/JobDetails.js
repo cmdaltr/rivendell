@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { getJob, cancelJob, pauseJob, resumeJob, deleteJob, restartJob, exportSiem, confirmSudo, cancelSudo } from '../api';
+import { serviceUrl } from '../apiBase';
+import JobSharing from './JobSharing';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 
@@ -231,12 +233,12 @@ function JobDetails() {
     if (!job) return null;
     switch (optionKey) {
       case 'splunk':
-        return 'http://localhost:7755/en-GB/app/elrond/mitre';
+        return serviceUrl(7755, '/en-GB/app/elrond/mitre');
       case 'elastic':
-        return `http://localhost:5601/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-20y,to:now))&_a=(columns:!(),filters:!(),index:${job.case_number},interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))`;
+        return `${serviceUrl(5601)}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-20y,to:now))&_a=(columns:!(),filters:!(),index:${job.case_number},interval:auto,query:(language:kuery,query:''),sort:!(!('@timestamp',desc)))`;
       case 'navigator':
-        const layerUrl = `http://localhost:5602/assets/${job.case_number}.json`;
-        return `http://localhost:5602/#layerURL=${encodeURIComponent(layerUrl)}`;
+        const layerUrl = serviceUrl(5602, `/assets/${job.case_number}.json`);
+        return `${serviceUrl(5602)}/#layerURL=${encodeURIComponent(layerUrl)}`;
       default:
         return null;
     }
@@ -794,6 +796,8 @@ function JobDetails() {
             <div className="error">{job.error}</div>
           </div>
         )}
+
+        <JobSharing jobId={job.id} />
 
         <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
           <div className="source-paths-section" style={{ flex: '1', minWidth: '0' }}>
