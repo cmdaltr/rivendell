@@ -353,6 +353,8 @@ MAP
     collect_directory "/etc/cron.d" "${acq_dir}/artefacts/cron" "$hostname" "$audit_log" "$meta_log" || true
     collect_directory "/etc/systemd" "${acq_dir}/artefacts/conf" "$hostname" "$audit_log" "$meta_log" || true
 
+    collect_linux_extras "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+
     # User directories (limited to key files)
     for user_home in /home/* /root; do
         if [ -d "$user_home" ]; then
@@ -360,6 +362,118 @@ MAP
             collect_user_artifacts "$user_home" "$username" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
         fi
     done
+}
+
+# Linux artefacts beyond the core set, into artefacts/linux/ under their path with
+# '/' as '+' (etc+pam.d+sshd). Elrond's collect/linux.py and gandalf.py carry the
+# same lists. A file reached twice through a symlink (/lib -> /usr/lib) is taken once.
+collect_linux_extras() {
+    local acq_dir="$1"
+    local hostname="$2"
+    local audit_log="$3"
+    local meta_log="$4"
+    local linux="${acq_dir}/artefacts/linux"
+    local seen=$'\n' source real dest top depth max_size suffix user_home username web=0
+
+    take() {  # source destination [max bytes]
+        [ -f "$1" ] && [ ! -L "$1" ] && [ -s "$1" ] || return 0
+        if [ -n "${3:-}" ] && [ "$(wc -c < "$1" 2>/dev/null || echo 0)" -gt "$3" ]; then return 0; fi
+        real=$(readlink -f "$1" 2>/dev/null || echo "$1")
+        case "$seen" in *$'\n'"$real"$'\n'*) return 0 ;; esac
+        seen="${seen}${real}"$'\n'
+        collect_file "$1" "$2" "$hostname" "$meta_log" && log_audit "$audit_log" "$hostname" "$1"
+        return 0
+    }
+    flat() { printf '%s/%s' "$linux" "$(printf '%s' "${1#/}" | tr '/' '+')"; }
+
+    for source in /etc/ld.so.preload /etc/ld.so.conf /etc/environment /etc/profile /etc/bash.bashrc \
+        /etc/bashrc /etc/rc.local /etc/sudoers /run/utmp /var/run/utmp /var/log/wtmp /var/log/btmp \
+        /var/log/lastlog /var/log/faillog /var/lib/wtmpdb/wtmp.db /var/lib/lastlog/lastlog2.db; do
+        take "$source" "$(flat "$source")" 67108864
+    done
+    # directory|depth|largest file|file name suffix (empty: any)
+    while IFS='|' read -r top depth max_size suffix; do
+        [ -d "$top" ] || continue
+        while IFS= read -r -d '' source; do
+            take "$source" "$(flat "$source")" "$max_size"
+        done < <(find "$top" -maxdepth "$depth" -type f ${suffix:+-name "*${suffix}"} -print0 2>/dev/null)
+    done <<'DIRS'
+/etc/ld.so.conf.d|1|1048576|
+/etc/profile.d|1|1048576|
+/etc/pam.d|1|1048576|
+/etc/sudoers.d|1|1048576|
+/etc/udev/rules.d|1|1048576|.rules
+/usr/lib/udev/rules.d|1|1048576|.rules
+/lib/udev/rules.d|1|1048576|.rules
+/etc/systemd/system-generators|1|10485760|
+/etc/systemd/user-generators|1|10485760|
+/usr/local/lib/systemd/system-generators|1|10485760|
+/etc/xdg/autostart|1|1048576|.desktop
+/etc/update-motd.d|1|1048576|
+/etc/nginx|3|1048576|
+/etc/apache2|3|1048576|
+/etc/httpd|3|1048576|
+DIRS
+    # Web roots: server-side scripts only, at most 5000
+    for top in /var/www /srv/www /srv/http /usr/share/nginx/html; do
+        [ -d "$top" ] || continue
+        while IFS= read -r -d '' source; do
+            [ "$web" -lt 5000 ] || break
+            take "$source" "$(flat "$source")" 1048576
+            web=$((web + 1))
+        done < <(find "$top" -maxdepth 6 -type f \( -iname '*.php' -o -iname '*.phtml' -o -iname '*.php[3457]' \
+            -o -iname '*.phar' -o -iname '*.inc' -o -iname '*.jsp' -o -iname '*.jspx' -o -iname '*.asp' \
+            -o -iname '*.aspx' -o -iname '*.ashx' -o -iname '*.asmx' -o -iname '*.cgi' -o -iname '*.pl' \
+            -o -iname '*.py' -o -iname '*.sh' -o -iname '*.cfm' \) -print0 2>/dev/null)
+    done
+    # Per user: extra histories into user/<name>/, autostart and systemd user units into linux/
+    for user_home in /root /home/*; do
+        [ -d "$user_home" ] || continue
+        username=$(basename "$user_home")
+        for source in .zsh_history .viminfo .lesshst .python_history .mysql_history .psql_history .wget-hsts \
+            .local/share/recently-used.xbel; do
+            take "${user_home}/${source}" "${acq_dir}/artefacts/user/${username}/$(basename "$source")"
+        done
+        while IFS= read -r -d '' source; do
+            take "$source" "$(flat "$source")" 1048576
+        done < <(find "${user_home}/.config/autostart" "${user_home}/.config/systemd/user" -maxdepth 1 -type f \
+            \( -name '*.desktop' -o -name '*.service' -o -name '*.timer' \) -print0 2>/dev/null)
+    done
+
+    mkdir -p "$linux"
+    # Loaded kernel modules, the file each came from and its hash ('?': no modinfo)
+    if [ -r /proc/modules ]; then
+        local name size instances deps state address taint path hash
+        {
+            echo "Name,Size,Instances,State,Taint,Path,SHA256"
+            while read -r name size instances deps state address taint; do
+                path="?"; hash=""
+                if command -v modinfo &> /dev/null; then path=$(modinfo -n "$name" 2>/dev/null || true); fi
+                if [ -n "$path" ] && [ "$path" != "?" ] && [ -f "$path" ]; then hash=$(sha256_of "$path"); fi
+                taint="${taint#(}"; taint="${taint%)}"
+                echo "${name},${size},${instances},${state},${taint},${path},${hash}"
+            done < /proc/modules
+        } > "${linux}/gandalf+kernel_modules.csv"
+        echo "${hostname},/proc/modules,$(sha256_of "${linux}/gandalf+kernel_modules.csv")" >> "$meta_log"
+    fi
+    # Executables in the temp directories: ELF, scripts, anything with an exec bit
+    local listing="${linux}/gandalf+tmp_executables.csv" rows="" kind head mode uid mtime fsize
+    while IFS= read -r -d '' source; do
+        case "$source" in "$WORK_DIR"/*|*/gandalf_collect.sh) continue ;; esac
+        head=$(head -c 4 "$source" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+        if [ "$head" = "7f454c46" ]; then kind="elf"
+        elif [ "${head:0:4}" = "2321" ]; then kind="script"
+        elif [ -x "$source" ]; then kind="executable"
+        else continue; fi
+        read -r fsize mode uid mtime < <(stat -c '%s %a %u %Y' "$source" 2>/dev/null) || continue
+        hash=""
+        [ "$fsize" -le 104857600 ] && hash=$(sha256_of "$source")
+        rows="${rows}\"${source//\"/\"\"}\",${fsize},0o${mode},${uid},${kind},${hash},${mtime}"$'\n'
+    done < <(find /tmp /var/tmp /dev/shm -maxdepth 3 -type f -print0 2>/dev/null)
+    if [ -n "$rows" ]; then
+        printf 'Path,Size,Mode,UID,Kind,SHA256,MTime\n%s' "$rows" > "$listing"
+        echo "${hostname},temp-directory executables,$(sha256_of "$listing")" >> "$meta_log"
+    fi
 }
 
 # Collect directory with depth limit

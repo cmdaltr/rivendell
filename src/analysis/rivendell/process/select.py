@@ -9,6 +9,7 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 from rivendell.process.process import determine_vss_image
 from rivendell.process.process import process_artefacts
+from rivendell.process.linux_artefacts import is_linux_artefact
 from rivendell.utils import safe_listdir, safe_iterdir
 
 # Gandalf's Windows collections beyond the core set (process/windows_artefacts.py)
@@ -18,6 +19,8 @@ WINDOWS_RAW_FOLDERS = re.compile(
 
 
 def select_artefacts_to_process(img, process_list, artefacts_list, processed_artefacts):
+    # Whole paths, not substrings: raw/SYSTEM is a prefix of raw/SYSTEM.LOG1, etc+sudoers of etc+sudoers.d+x
+    seen = set(processed_artefacts)
     for each in process_list:
         file_count = 0
         for root, _, files in os.walk(each):
@@ -27,7 +30,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                 if file_count % 20000 == 0:
                     print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> ...scanned {file_count:,} files...")
                 if (img.split("::")[0] in root) and (
-                    root + "/" + f not in str(processed_artefacts)
+                    root + "/" + f not in seen
                 ): # ensure to check both the file (f) and the path (root) for specific matching strings
                     if (
                         f.endswith("MFT")
@@ -83,9 +86,11 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                         or "/raw/browsers" in root + "/" + f
                         or "/carved/" in root
                         or WINDOWS_RAW_FOLDERS.search(root + "/")
+                        or is_linux_artefact(root + "/" + f)
                     ):
                         artefacts_list.append(each + ": " + root + "/" + f)
                         processed_artefacts.append(root + "/" + f)
+                        seen.add(root + "/" + f)
         print(f" -> {datetime.now().isoformat().replace('T', ' ')} -> {file_count:,} files scanned, {len(artefacts_list):,} artefacts found")
     return artefacts_list
 

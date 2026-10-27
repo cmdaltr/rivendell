@@ -1,4 +1,5 @@
 #!/usr/bin/env python3 -tt
+import csv
 import hashlib
 import os
 import platform
@@ -398,6 +399,196 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
             _collect_one(source, os.path.join(dest, "shared", rel), gandalf_host)
     print(
         "      \033[1;32mAcquired macOS shell history, persistence and staging artefacts from '{}'\033[1;m".format(
+            gandalf_host.split("/")[-1]
+        )
+    )
+
+
+# Linux artefacts beyond the system_artefacts walk, into artefacts/linux/ under their
+# path with '/' as '+'. Elrond's collect/linux.py and gandalf.sh carry the same lists.
+LINUX_EXTRA_FILES = (
+    "/etc/ld.so.preload", "/etc/ld.so.conf", "/etc/environment", "/etc/profile", "/etc/bash.bashrc",
+    "/etc/bashrc", "/etc/rc.local", "/etc/sudoers", "/run/utmp", "/var/run/utmp", "/var/log/wtmp",
+    "/var/log/btmp", "/var/log/lastlog", "/var/log/faillog",
+    "/var/lib/wtmpdb/wtmp.db", "/var/lib/lastlog/lastlog2.db",
+)
+# directory, depth, largest file, file name suffixes (empty: any)
+LINUX_EXTRA_DIRS = (
+    ("/etc/ld.so.conf.d", 1, 1 << 20, ()),
+    ("/etc/profile.d", 1, 1 << 20, ()),
+    ("/etc/pam.d", 1, 1 << 20, ()),
+    ("/etc/sudoers.d", 1, 1 << 20, ()),
+    ("/etc/udev/rules.d", 1, 1 << 20, (".rules",)),
+    ("/usr/lib/udev/rules.d", 1, 1 << 20, (".rules",)),
+    ("/lib/udev/rules.d", 1, 1 << 20, (".rules",)),
+    ("/etc/systemd/system-generators", 1, 10 << 20, ()),
+    ("/etc/systemd/user-generators", 1, 10 << 20, ()),
+    ("/usr/local/lib/systemd/system-generators", 1, 10 << 20, ()),
+    ("/etc/xdg/autostart", 1, 1 << 20, (".desktop",)),
+    ("/etc/update-motd.d", 1, 1 << 20, ()),
+    ("/etc/nginx", 3, 1 << 20, ()),
+    ("/etc/apache2", 3, 1 << 20, ()),
+    ("/etc/httpd", 3, 1 << 20, ()),
+)
+LINUX_WEB_ROOTS = ("/var/www", "/srv/www", "/srv/http", "/usr/share/nginx/html")
+LINUX_WEB_SCRIPTS = (".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".phar", ".inc", ".jsp", ".jspx",
+                     ".asp", ".aspx", ".ashx", ".asmx", ".cgi", ".pl", ".py", ".sh", ".cfm")
+LINUX_WEB_MAX_FILES = 5000
+# under each home, into user/<user>/ (Elrond reads them as user_profiles/<user>+<name>)
+LINUX_USER_FILES = (".zsh_history", ".viminfo", ".lesshst", ".python_history", ".mysql_history",
+                    ".psql_history", ".wget-hsts", ".local/share/recently-used.xbel")
+LINUX_USER_DIRS = ((".config/autostart", (".desktop",)), (".config/systemd/user", (".service", ".timer")))
+LINUX_TMP_DIRS = ("/tmp", "/var/tmp", "/dev/shm")
+LINUX_HASH_MAX_BYTES = 100 * 1024 * 1024
+
+
+def _walk_files(top, depth):
+    """Files under top, at most depth levels down, without following symlinks."""
+    top_depth = top.rstrip("/").count("/")
+    for root, dirs, files in os.walk(top):
+        if root.count("/") - top_depth + 1 >= depth:
+            dirs[:] = []
+        for name in files:
+            yield os.path.join(root, name)
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _executable_kind(path):
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(4)
+        mode = os.lstat(path).st_mode
+    except OSError:
+        return ""
+    if head == b"\x7fELF":
+        return "elf"
+    if head[:2] == b"#!":
+        return "script"
+    return "executable" if mode & 0o111 else ""
+
+
+def _write_listing(path, rows, gandalf_host):
+    if not rows:
+        return
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", newline="") as out:
+        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    audit_meta(gandalf_host, path)
+
+
+def kernel_module_listing():
+    """Loaded modules from /proc/modules with the file each was loaded from and its hash.
+    Path is '?' where modinfo isn't installed, '' where it can't find the module."""
+    rows = []
+    have_modinfo = shutil.which("modinfo") is not None
+    try:
+        with open("/proc/modules") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return rows
+    for line in lines:
+        fields = line.split()
+        if len(fields) < 6:
+            continue
+        path = "?"
+        if have_modinfo:
+            result = subprocess.run(["modinfo", "-n", fields[0]], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            path = result.stdout.decode(errors="replace").strip()
+        digest = ""
+        if path not in ("", "?", "(builtin)") and os.path.isfile(path):
+            try:
+                digest = _sha256_file(path)
+            except OSError:
+                pass
+        rows.append({"Name": fields[0], "Size": fields[1], "Instances": fields[2], "State": fields[4],
+                     "Taint": fields[6].strip("()") if len(fields) > 6 else "", "Path": path, "SHA256": digest})
+    return rows
+
+
+def collect_linux_extras(gandalf_artefact_destination, gandalf_host):
+    """
+    Linux persistence, login-record and history artefacts the system_artefacts walk
+    misses (preload, PAM, sudoers.d, udev, generators, autostart, utmp/wtmp/btmp,
+    lastlog, web roots, extra shell histories), plus listings of loaded kernel
+    modules and of executables in the temp directories.
+    """
+    linux = os.path.join(gandalf_artefact_destination, "linux")
+    seen = set()
+
+    def take(source, destination, limit=None):
+        try:
+            if not os.path.isfile(source) or os.path.islink(source):
+                return
+            real = os.path.realpath(source)
+            size = os.path.getsize(source)
+            if real in seen or (limit and size > limit):
+                return
+            seen.add(real)
+        except OSError:
+            return
+        _collect_one(source, destination, gandalf_host)
+
+    def flat(path):
+        return os.path.join(linux, path.lstrip("/").replace("/", "+"))
+
+    for path in LINUX_EXTRA_FILES:
+        take(path, flat(path), 64 << 20)
+    for top, depth, limit, suffixes in LINUX_EXTRA_DIRS:
+        if os.path.isdir(top):
+            for source in _walk_files(top, depth):
+                if not suffixes or source.endswith(suffixes):
+                    take(source, flat(source), limit)
+    web = 0
+    for top in LINUX_WEB_ROOTS:
+        if os.path.isdir(top):
+            for source in _walk_files(top, 6):
+                if web >= LINUX_WEB_MAX_FILES:
+                    break
+                if source.lower().endswith(LINUX_WEB_SCRIPTS):
+                    take(source, flat(source), 1 << 20)
+                    web += 1
+    homes = ["/root"] + sorted(os.path.join("/home", h) for h in listdir_readable("/home")) if os.path.isdir("/home") else ["/root"]
+    for home in homes:
+        if not os.path.isdir(home):
+            continue
+        user = os.path.basename(home)
+        for name in LINUX_USER_FILES:
+            take(os.path.join(home, name), os.path.join(gandalf_artefact_destination, "user", user, os.path.basename(name)))
+        for sub, suffixes in LINUX_USER_DIRS:
+            if os.path.isdir(os.path.join(home, sub)):
+                for source in _walk_files(os.path.join(home, sub), 1):
+                    if source.endswith(suffixes):
+                        take(source, flat(source), 1 << 20)
+    _write_listing(os.path.join(linux, "gandalf+kernel_modules.csv"), kernel_module_listing(), gandalf_host)
+    rows = []
+    for top in LINUX_TMP_DIRS:
+        if not os.path.isdir(top):
+            continue
+        for source in _walk_files(top, 3):
+            if source.startswith("/tmp/gandalf/"):
+                continue
+            kind = _executable_kind(source)
+            if not kind:
+                continue
+            try:
+                info = os.lstat(source)
+                digest = _sha256_file(source) if info.st_size <= LINUX_HASH_MAX_BYTES else ""
+            except OSError:
+                continue
+            rows.append({"Path": source, "Size": info.st_size, "Mode": oct(info.st_mode & 0o7777), "UID": info.st_uid,
+                         "Kind": kind, "SHA256": digest, "MTime": int(info.st_mtime)})
+    _write_listing(os.path.join(linux, "gandalf+tmp_executables.csv"), rows, gandalf_host)
+    print(
+        "      \033[1;32mAcquired Linux persistence, login-record and history artefacts from '{}'\033[1;m".format(
             gandalf_host.split("/")[-1]
         )
     )
@@ -1026,6 +1217,8 @@ def acquire_artefacts(
             pass
     if platform.system() == "Darwin":
         collect_macos_extras(gandalf_artefact_destination, gandalf_host)
+    elif platform.system() == "Linux":
+        collect_linux_extras(gandalf_artefact_destination, gandalf_host)
     if access_times != "None":
         print()
         print(

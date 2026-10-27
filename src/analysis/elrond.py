@@ -360,6 +360,7 @@ system_artefacts = [
     "/System/Library/LaunchDaemons",
     "/System/Library/StartupItems",
     "/boot",
+    "/etc",
     "/etc/crontab",
     "/etc/group",
     "/etc/hosts",

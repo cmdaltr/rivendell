@@ -31,6 +31,7 @@ from rivendell.process.windows import process_usb
 from rivendell.process.windows import process_usn
 from rivendell.process.windows import process_wbem
 from rivendell.process.windows import process_wmi
+from rivendell.process.linux_artefacts import process_linux_artefact
 from rivendell.process.windows_artefacts import process_windows_artefact
 
 
@@ -87,6 +88,10 @@ def process_artefacts(
             verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
         ):
             pass  # raw/<recyclebin|tasks|startup|bits|search|defender|pca|wer|lnk|notepad>/, hosts
+        elif process_linux_artefact(
+            verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
+        ):
+            pass  # raw/linux/, and the extra user_profiles/ histories
         elif artefact.endswith("$UsnJrnl"):
             process_usn(
                 verbosity,

@@ -65,6 +65,7 @@ WINDOWS_ARTEFACTS = [
 
 LINUX_ARTEFACTS = [
     "/.Trashes",
+    "/etc",
     "/etc/passwd",
     "/etc/shadow",
     "/etc/group",

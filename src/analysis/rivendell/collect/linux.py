@@ -1,10 +1,169 @@
 #!/usr/bin/env python3 -tt
+import csv
+import hashlib
 import os
 import shutil
+import stat
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
 from rivendell.collect.users.linux import linux_users
+
+# Collected into raw/linux/ under their path with '/' as '+' (process/linux_artefacts.py).
+# gandalf.sh and gandalf.py carry the same lists; keep the three in step.
+LINUX_EXTRA_FILES = (
+    "/etc/ld.so.preload", "/etc/ld.so.conf", "/etc/environment", "/etc/profile", "/etc/bash.bashrc",
+    "/etc/bashrc", "/etc/rc.local", "/etc/sudoers", "/run/utmp", "/var/run/utmp", "/var/log/wtmp",
+    "/var/log/btmp", "/var/log/lastlog", "/var/log/faillog",
+    "/var/lib/wtmpdb/wtmp.db", "/var/lib/lastlog/lastlog2.db",
+)
+# directory, depth, largest file, file name suffixes (empty: any)
+LINUX_EXTRA_DIRS = (
+    ("/etc/ld.so.conf.d", 1, 1 << 20, ()),
+    ("/etc/profile.d", 1, 1 << 20, ()),
+    ("/etc/pam.d", 1, 1 << 20, ()),
+    ("/etc/sudoers.d", 1, 1 << 20, ()),
+    ("/etc/udev/rules.d", 1, 1 << 20, (".rules",)),
+    ("/usr/lib/udev/rules.d", 1, 1 << 20, (".rules",)),
+    ("/lib/udev/rules.d", 1, 1 << 20, (".rules",)),
+    ("/etc/systemd/system-generators", 1, 10 << 20, ()),
+    ("/etc/systemd/user-generators", 1, 10 << 20, ()),
+    ("/usr/local/lib/systemd/system-generators", 1, 10 << 20, ()),
+    ("/etc/xdg/autostart", 1, 1 << 20, (".desktop",)),
+    ("/etc/update-motd.d", 1, 1 << 20, ()),
+    ("/etc/nginx", 3, 1 << 20, ()),
+    ("/etc/apache2", 3, 1 << 20, ()),
+    ("/etc/httpd", 3, 1 << 20, ()),
+)
+WEB_ROOTS = ("/var/www", "/srv/www", "/srv/http", "/usr/share/nginx/html")
+WEB_SCRIPTS = (".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".phar", ".inc", ".jsp", ".jspx",
+               ".asp", ".aspx", ".ashx", ".asmx", ".cgi", ".pl", ".py", ".sh", ".cfm")
+WEB_MAX_FILES = 5000
+# under each home: user_profiles/<user>+<name without the dot>
+LINUX_USER_FILES = (".zsh_history", ".viminfo", ".lesshst", ".python_history", ".mysql_history",
+                    ".psql_history", ".wget-hsts", ".local/share/recently-used.xbel")
+LINUX_USER_DIRS = ((".config/autostart", (".desktop",)), (".config/systemd/user", (".service", ".timer")))
+TMP_DIRS = ("/tmp", "/var/tmp", "/dev/shm")
+LISTING_MAX_HASH = 100 << 20
+
+
+def _flat(path):
+    return path.lstrip("/").replace("/", "+")
+
+
+def _walk(top, depth):
+    """Files under top, at most depth levels down, without following symlinks."""
+    top_depth = top.rstrip("/").count("/")
+    for root, dirs, files in os.walk(top):
+        if root.count("/") - top_depth + 1 >= depth:
+            dirs[:] = []
+        for name in files:
+            yield os.path.join(root, name)
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def executable_kind(path):
+    """'elf', 'script' or 'executable' for a file worth listing in a temp directory, else ''."""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(4)
+        mode = os.lstat(path).st_mode
+    except OSError:
+        return ""
+    if head == b"\x7fELF":
+        return "elf"
+    if head[:2] == b"#!":
+        return "script"
+    return "executable" if mode & 0o111 else ""
+
+
+def collect_linux_extras(mnt, dest, img, output_directory, stage, verbosity):
+    """
+    The persistence, login-record and history artefacts process/linux_artefacts.py
+    parses, from a mounted Linux image: into raw/linux/ (and raw/user_profiles/), with
+    a listing of executables in the temp directories as raw/linux/gandalf+tmp_executables.csv.
+    """
+    linux, profiles = dest + "linux/", dest + "user_profiles/"
+    os.makedirs(linux, exist_ok=True)
+    seen, count = set(), 0
+
+    def take(source, destination, limit=None):
+        nonlocal count
+        try:
+            info = os.lstat(source)
+            real = os.path.realpath(source)
+            if not stat.S_ISREG(info.st_mode) or info.st_size == 0 or real in seen:
+                return
+            if limit and info.st_size > limit:
+                return
+            seen.add(real)
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            shutil.copy2(source, destination)
+            count += 1
+        except OSError:
+            pass
+
+    for path in LINUX_EXTRA_FILES:
+        take(mnt + path, linux + _flat(path), 64 << 20)
+    for top, depth, limit, suffixes in LINUX_EXTRA_DIRS:
+        if os.path.isdir(mnt + top):
+            for source in _walk(mnt + top, depth):
+                if not suffixes or source.endswith(suffixes):
+                    take(source, linux + _flat(source[len(mnt):]), limit)
+    web = 0
+    for top in WEB_ROOTS:
+        if os.path.isdir(mnt + top):
+            for source in _walk(mnt + top, 6):
+                if web >= WEB_MAX_FILES:
+                    break
+                if source.lower().endswith(WEB_SCRIPTS):
+                    take(source, linux + _flat(source[len(mnt):]), 1 << 20)
+                    web += 1
+    homes = [mnt + "/root"]
+    if os.path.isdir(mnt + "/home"):
+        homes += [os.path.join(mnt + "/home", h) for h in sorted(os.listdir(mnt + "/home"))]
+    for home in homes:
+        if not os.path.isdir(home):
+            continue
+        user = os.path.basename(home)
+        for name in LINUX_USER_FILES:
+            take(os.path.join(home, name), profiles + user + "+" + os.path.basename(name).lstrip("."))
+        for sub, suffixes in LINUX_USER_DIRS:
+            if os.path.isdir(os.path.join(home, sub)):
+                for source in _walk(os.path.join(home, sub), 1):
+                    if source.endswith(suffixes):
+                        take(source, linux + _flat(source[len(mnt):]), 1 << 20)
+    rows = []
+    for top in TMP_DIRS:
+        if os.path.isdir(mnt + top):
+            for source in _walk(mnt + top, 3):
+                kind = executable_kind(source)
+                if not kind:
+                    continue
+                info = os.lstat(source)
+                rows.append({"Path": source[len(mnt):], "Size": info.st_size, "Mode": oct(info.st_mode & 0o7777),
+                             "UID": info.st_uid, "Kind": kind,
+                             "SHA256": _sha256(source) if info.st_size <= LISTING_MAX_HASH else "",
+                             "MTime": int(info.st_mtime)})
+    if rows:
+        with open(linux + "gandalf+tmp_executables.csv", "w", newline="") as out:
+            writer = csv.DictWriter(out, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+    entry, prnt = "{},{},{},linux persistence and history artefacts\n".format(
+        datetime.now().isoformat(), img.split("::")[0], stage
+    ), " -> {} -> {} {} Linux persistence, login-record and history artefacts from '{}'".format(
+        datetime.now().isoformat().replace("T", " "), stage, count, img.split("::")[0]
+    )
+    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
 
 
 def collect_linux_artefacts(
@@ -428,6 +587,8 @@ def collect_linux_artefacts(
                             )
                         except:
                             pass
+        if item == mnt + "/etc":
+            collect_linux_extras(mnt, dest, img, output_directory, stage, verbosity)
         if item == mnt + "/home":
             dest = linux_users(
                 dest,
