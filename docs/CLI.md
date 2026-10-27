@@ -116,29 +116,37 @@ sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 
 #### Locked files and `disk_tools.zip`
 
-Some artefacts are held open by Windows. Gandalf reads `$MFT` itself, straight off the volume (boot sector, MFT record 0, then the runs of its `$DATA` attribute), so it needs no tools for that. For `hiberfil.sys` and `pagefile.sys` it looks for `tools\disk_tools.zip`, which isn't shipped with Rivendell because it contains third-party binaries: put `RawCopy.exe` and `RawCopy64.exe` from [jschicht/RawCopy](https://github.com/jschicht/RawCopy) in it.
+Windows holds many artefacts open (registry hives, `Amcache.hve`, `SRUDB.dat`, the Search and BITS databases, `$MFT`, `$LogFile`, `$UsnJrnl:$J`). Gandalf tries an ordinary copy first and, when that's refused, reads the file straight off the volume with its own NTFS reader (`GandalfNtfs`, compiled in Windows PowerShell 5.1 by `Add-Type`): boot sector, MFT, attribute lists, sparse and partially initialised streams, and alternate data streams such as `$UsnJrnl:$J`. It needs admin and no third-party tools, and reads by MFT record, so it isn't affected by file locks. The reader was checked byte for byte against The Sleuth Kit on a Windows 10 image (`$MFT`, `$LogFile`, `$J`, hives, Amcache, SRUM, hosts); compressed and EFS-encrypted files are refused rather than copied wrongly.
+
+`tools\disk_tools.zip` (RawCopy and Sleuth Kit; not shipped, as it holds third-party binaries) is now only a fallback for files the reader can't take:
 
 | Artefact | How Gandalf gets it |
 |---|---|
-| `$MFT` | raw volume read (needs admin) |
-| `Amcache.hve`, `SRUDB.dat` | RawCopy when `disk_tools.zip` is present, otherwise a temporary shadow copy of C:, deleted afterwards and noted in `log.audit` |
-| `setupapi.dev.log` | RawCopy, or a direct copy (it isn't locked) |
-| `hiberfil.sys`, `pagefile.sys` | RawCopy only |
+| `$MFT`, `$LogFile`, `$UsnJrnl:$J` | raw volume read |
+| Registry hives and their `.LOG1`/`.LOG2`, `RegBack`, `NTUSER.DAT`, `UsrClass.dat` | copy, else raw volume read |
+| `Amcache.hve`, `SRUDB.dat` | copy, else raw read, else RawCopy, else a temporary shadow copy of C: (deleted afterwards, noted in `log.audit`) |
+| `hiberfil.sys`, `pagefile.sys`, `swapfile.sys` | copy, else raw read, else RawCopy |
 
-Creating the shadow copy writes to the target's System Volume Information and adds VSS events to its logs; weigh that against getting Amcache and SRUM before using the fallback on a sensitive system.
+Creating the shadow copy writes to the target's System Volume Information and adds VSS events to its logs; it's only reached when everything before it failed.
 
----|---|
-| `sleuthkit-4.12.1-win32\` (the extracted folder; Gandalf renames it `tsk`) | [The Sleuth Kit releases](https://github.com/sleuthkit/sleuthkit/releases), `sleuthkit-4.12.1-win32.zip` |
-| `RawCopy.exe`, `RawCopy64.exe` | [jschicht/RawCopy](https://github.com/jschicht/RawCopy) |
+On Windows, beyond the event logs, registry, prefetch, `$MFT` and browsers, Gandalf collects into `raw\<folder>\`:
 
-| Artefact | With `disk_tools.zip` | Without it |
+| Folder | Artefacts | Elrond parses with |
 |---|---|---|
-| `$MFT` | `icat` (Sleuth Kit) | not collected |
-| `Amcache.hve`, `SRUDB.dat` | RawCopy | copied from a temporary shadow copy of C:, which is deleted afterwards and logged in `log.audit` |
-| `setupapi.dev.log` | RawCopy | copied directly (it isn't locked) |
-| `hiberfil.sys`, `pagefile.sys` | RawCopy | not collected |
+| `recyclebin` | `$Recycle.Bin` `$I` files | Artemis |
+| `tasks` | `System32\Tasks` XML | Artemis |
+| `startup` | Startup folders (all users and each user) | Elrond; tags **T1547.001** |
+| `bits` | BITS `qmgr.db` / `qmgr*.dat` | Artemis |
+| `search` | `Windows.edb` / `Windows.db` | Artemis |
+| `lnk` | Recent, Office Recent and Desktop shortcuts | Artemis |
+| `defender` | `MPLog`, `MPDetection`, DetectionHistory | Elrond |
+| `pca` | Program Compatibility Assistant (Windows 11 22H2+) | Elrond |
+| `wer` | `Report.wer` (system and per user) | Elrond |
+| `notepad` | Windows 11 Notepad TabState | Elrond |
+| `registry\original` | hive files, transaction logs, RegBack | collected for the analyst |
+| `rdpcache`, `thumbcache` | RDP bitmap cache, Explorer thumbnail caches | collected for the analyst |
 
-Creating the shadow copy writes to the target's System Volume Information and adds VSS events to its logs; weigh that against getting Amcache and SRUM before using the fallback on a sensitive system.
+The USN journal is parsed with the `$MFT` beside it, so journal entries carry full paths.
 
 ---
 
@@ -167,8 +175,31 @@ On macOS, both the Bash and Python collectors gather:
 | Browsers | Safari (`History.db`, downloads, bookmarks), Chrome, Firefox |
 | Staging | `/Users/Shared`, `/private/tmp` and each user's Trash, files up to 10 MB |
 | Volatile | Processes, `netstat`, `lsof`, loaded kexts, `launchctl list`, logins |
+| Background items | Background Task Management stores (`BackgroundItems-v*.btm`, per-user `backgrounditems.btm`): login items, agents and daemons as macOS 13+ tracks them |
+| Recent items | Shared file lists (`*.sfl2`, `*.sfl3`): recent documents, applications, servers |
+| Execution policy | `ExecPolicy`, `KextPolicy`, XProtect's `XPdb` and bundle version, Notification Center's database |
+| Scheduled and event | `/etc/periodic`, `periodic.conf`, `*.local`, `launchd.conf`, `rc.common`, emond rules and clients |
+| Usage | `InstallHistory.plist`, PowerLog, Biome streams (up to 2,000 files of 10 MB) |
+| Unified logs | A filtered export (`log show --style ndjson`) of sudo, su, sshd, loginwindow, screen sharing, syspolicyd, XProtect, authd, TCC and BTM events over the last day (`GANDALF_UNIFIED_LOG_WINDOW`, e.g. `3d`), capped at 500,000 events |
 
-TCC.db, KnowledgeC, Safari and Mail are protected by macOS: they're only readable when the process collecting them has Full Disk Access (for Remote mode, enable "Allow full disk access for remote users" under System Settings → General → Sharing → Remote Login). Anything unreadable is skipped and left out of `log.meta`. Unified logs aren't collected yet.
+TCC.db, KnowledgeC, Safari, Mail, ExecPolicy and XPdb are protected by macOS: they're only readable when the process collecting them has Full Disk Access (for Remote mode, enable "Allow full disk access for remote users" under System Settings → General → Sharing → Remote Login). Anything unreadable is skipped and left out of `log.meta`. SQLite databases come with their `-wal`, so rows not yet checkpointed aren't lost. The full unified-log store isn't taken (it runs to gigabytes and Elrond has no `tracev3` parser); the export above is the live-host substitute, so a disk image has no unified logs.
+
+Elrond parses the macOS additions into `btm_items.csv` (third-party items flagged; enabled ones tag **T1543.001** or **T1547.015**), `shared_file_lists.csv` (paths decoded from the bookmarks), `notifications.csv`, `execpolicy_*.csv`, `kextpolicy_*.csv` (third-party kexts tag **T1547.006**), `xprotect_*.csv`, `emond_rules.csv` (**T1546.014**), `periodic.csv` and `unified_log.csv`. Biome and PowerLog are collected for the analyst only.
+
+On Linux, both collectors also take, into `linux/` (Elrond's image collection takes the same set):
+
+| Area | Artefacts | Elrond output |
+|---|---|---|
+| Logins | `utmp`, `wtmp`, `btmp`, `lastlog`, `faillog`, and `wtmpdb`/`lastlog2` (Ubuntu 24.04+) | `login_records.csv`, `lastlog.csv`, `faillog.csv`; repeated btmp failures tag **T1110.001** |
+| Loader and shell start-up | `ld.so.preload`, `ld.so.conf(.d)`, `/etc/environment`, `/etc/profile(.d)`, `bash.bashrc`/`bashrc`, `rc.local`, `update-motd.d` | `preload.csv` (**T1574.006**), `shell_init.csv` (**T1546.004**, **T1037.004**) |
+| Authentication | PAM stacks, `sudoers` and `sudoers.d` | `pam.csv` (**T1556.003**), `sudoers.csv` (**T1548.003**) |
+| Persistence | XDG autostart (system and per user), per-user systemd units, systemd generators, udev rules | `autostart.csv` (**T1547.013**, **T1543.002**), `generators.csv`, `udev_rules.csv` (**T1546.017**) |
+| Kernel | loaded modules with their file and SHA-256 (live only) | `kernel_modules.csv`; modules with no file, or one outside `/lib/modules`, tag **T1547.006** |
+| Staging | executables (ELF, scripts, exec bit) in `/tmp`, `/var/tmp`, `/dev/shm`, listed with hashes | `tmp_executables.csv` |
+| Web | web-root scripts (`/var/www`, `/srv/www`, `/srv/http`, nginx html; up to 5,000 of 1 MB) and nginx/Apache configs | `webshells.csv` (**T1505.003**) |
+| Histories | zsh, vim (`.viminfo`), less, python, mysql, psql, wget HSTS, `recently-used.xbel` | `shell_histories.csv`, `viminfo.csv`, `wget_hsts.csv`, `recently_used.csv` |
+
+Endpoint antivirus on the analysis machine may quarantine or block collected web shells (and archives holding them), so they can be missing from `webshells.csv`; Elrond logs the file as unreadable ("Operation not permitted") and carries on. Exclude the case directory from scanning if that matters.
 
 Pass the directory holding the archives to Elrond with `--Gandalf`. It must end in `acquisitions/` (subfolders per host are fine). Elrond extracts each archive, maps Gandalf's layout onto its own (`etc+passwd` → `raw/passwd`, `user/<name>/.zsh_history` → `raw/user_profiles/<name>+zsh_history`, `browsers/<browser>/<name>+History` → `raw/browsers/<name>/<browser>/History`, and so on), then runs processing, keyword search and analysis exactly as for a disk image. An archive with a member that points outside it is refused as possible tampering.
 

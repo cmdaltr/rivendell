@@ -1,5 +1,6 @@
 #!/usr/bin/env python3 -tt
 import csv
+import glob
 import hashlib
 import os
 import platform
@@ -399,6 +400,109 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
             _collect_one(source, os.path.join(dest, "shared", rel), gandalf_host)
     print(
         "      \033[1;32mAcquired macOS shell history, persistence and staging artefacts from '{}'\033[1;m".format(
+            gandalf_host.split("/")[-1]
+        )
+    )
+
+
+# macOS artefacts beyond the extras above, into artefacts/macos/ under their path
+# with '/' as '+'. Elrond's collect/mac.py and gandalf.sh carry the same lists.
+# SQLite databases come with their -wal so uncheckpointed rows aren't lost.
+MACOS_EXTRA_DATABASES = (
+    "/private/var/db/SystemPolicyConfiguration/ExecPolicy", "/private/var/db/SystemPolicyConfiguration/KextPolicy",
+    "/private/var/protected/xprotect/XPdb", "/private/var/db/com.apple.backgroundtaskmanagement/BackgroundItems-v*.btm",
+    "/private/var/folders/*/*/0/com.apple.notificationcenter/db2/db",
+)
+MACOS_EXTRA_FILES = (
+    "/Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist", "/private/etc/periodic.conf",
+    "/private/etc/daily.local", "/private/etc/weekly.local", "/private/etc/monthly.local", "/private/etc/launchd.conf",
+    "/private/etc/rc.common", "/Library/Receipts/InstallHistory.plist",
+)
+MACOS_POWERLOG = "/private/var/db/powerlog/Library/BatteryLife/CurrentPowerlog.PLSQL"
+MACOS_EXTRA_DIRS = (("/private/etc/periodic", 2), ("/private/etc/emond.d", 2), ("/private/var/db/emondClients", 1))
+MACOS_BIOME_MAX_FILES = 2000
+MACOS_UNIFIED_LOG_PREDICATE = (
+    'process IN {"sudo","su","sshd","sshd-session","loginwindow","screensharingd","syspolicyd","XprotectService",'
+    '"backgroundtaskmanagementd","authd"} OR subsystem IN {"com.apple.TCC","com.apple.xprotect",'
+    '"com.apple.syspolicy.exec","com.apple.backgroundtaskmanagement"}'
+)
+MACOS_UNIFIED_LOG_MAX_EVENTS = 500000
+
+
+def collect_macos_more(gandalf_artefact_destination, gandalf_host):
+    """
+    BTM login and background items, shared file lists, Notification Center,
+    ExecPolicy, KextPolicy, XProtect, emond, periodic, InstallHistory, PowerLog,
+    Biome streams, and a filtered unified-log export (G17): the store itself runs
+    to gigabytes, so this takes security-relevant processes and subsystems over
+    GANDALF_UNIFIED_LOG_WINDOW (default 1d), capped at 500,000 events.
+    """
+    macos = os.path.join(gandalf_artefact_destination, "macos")
+
+    def take(source, limit=64 << 20):
+        try:
+            if not os.path.isfile(source) or os.path.islink(source) or os.path.getsize(source) > limit:
+                return
+        except OSError:
+            return
+        _collect_one(source, os.path.join(macos, source.lstrip("/").replace("/", "+")), gandalf_host)
+
+    for pattern in MACOS_EXTRA_DATABASES:
+        for source in sorted(glob.glob(pattern)):
+            take(source)
+            take(source + "-wal")
+    take(MACOS_POWERLOG, 256 << 20)
+    take(MACOS_POWERLOG + "-wal", 256 << 20)
+    for source in MACOS_EXTRA_FILES:
+        take(source)
+    for top, depth in MACOS_EXTRA_DIRS:
+        if os.path.isdir(top):
+            for source in _walk_files(top, depth):
+                take(source, 1 << 20)
+    homes = [os.path.join("/Users", u) for u in sorted(listdir_readable("/Users")) if u != "Shared"] if os.path.isdir("/Users") else []
+    biome_roots = ["/private/var/db/biome/streams/restricted"]
+    for home in homes + ["/var/root"]:
+        if not os.path.isdir(home):
+            continue
+        support = os.path.join(home, "Library", "Application Support")
+        take(os.path.join(support, "com.apple.backgroundtaskmanagementagent", "backgrounditems.btm"))
+        notifications = os.path.join(home, "Library", "Group Containers", "group.com.apple.usernoted", "db2", "db")
+        take(notifications)
+        take(notifications + "-wal")
+        shared = os.path.join(support, "com.apple.sharedfilelist")
+        if os.path.isdir(shared):
+            for source in _walk_files(shared, 2):
+                if source.endswith((".sfl2", ".sfl3")):
+                    take(source, 10 << 20)
+        biome_roots.append(os.path.join(home, "Library", "Biome", "streams", "restricted"))
+    biome = 0
+    for root in biome_roots:
+        if os.path.isdir(root):
+            for source in _walk_files(root, 4):
+                if biome >= MACOS_BIOME_MAX_FILES:
+                    break
+                take(source, 10 << 20)
+                biome += 1
+    if shutil.which("log"):
+        os.makedirs(macos, exist_ok=True)
+        export = os.path.join(macos, "gandalf+unifiedlog.ndjson")
+        command = ["log", "show", "--last", os.environ.get("GANDALF_UNIFIED_LOG_WINDOW", "1d"), "--style", "ndjson",
+                   "--predicate", MACOS_UNIFIED_LOG_PREDICATE]
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            with open(export, "wb") as out:
+                for count, line in enumerate(process.stdout):
+                    if count >= MACOS_UNIFIED_LOG_MAX_EVENTS:
+                        break
+                    out.write(line)
+            process.kill()
+            process.wait()
+        except OSError:
+            pass
+        if os.path.isfile(export) and os.path.getsize(export) > 0:
+            audit_meta(gandalf_host, export)
+    print(
+        "      \033[1;32mAcquired macOS background items, policy databases and unified-log export from '{}'\033[1;m".format(
             gandalf_host.split("/")[-1]
         )
     )
@@ -1217,6 +1321,7 @@ def acquire_artefacts(
             pass
     if platform.system() == "Darwin":
         collect_macos_extras(gandalf_artefact_destination, gandalf_host)
+        collect_macos_more(gandalf_artefact_destination, gandalf_host)
     elif platform.system() == "Linux":
         collect_linux_extras(gandalf_artefact_destination, gandalf_host)
     if access_times != "None":

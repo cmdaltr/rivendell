@@ -10,6 +10,7 @@ from rivendell.audit import write_audit_log_entry
 from rivendell.process.process import determine_vss_image
 from rivendell.process.process import process_artefacts
 from rivendell.process.linux_artefacts import is_linux_artefact
+from rivendell.process.mac_artefacts import is_mac_artefact
 from rivendell.utils import safe_listdir, safe_iterdir
 
 # Gandalf's Windows collections beyond the core set (process/windows_artefacts.py)
@@ -87,6 +88,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                         or "/carved/" in root
                         or WINDOWS_RAW_FOLDERS.search(root + "/")
                         or is_linux_artefact(root + "/" + f)
+                        or is_mac_artefact(root + "/" + f)
                     ):
                         artefacts_list.append(each + ": " + root + "/" + f)
                         processed_artefacts.append(root + "/" + f)

@@ -645,6 +645,80 @@ collect_plists() {
 # macOS filesystem artefacts. Protected locations (TCC.db, Safari, Mail,
 # KnowledgeC) are only readable when sshd or the terminal has Full Disk Access;
 # anything unreadable is skipped and left out of log.meta.
+# macOS artefacts beyond the core set, into artefacts/macos/ under their path with
+# '/' as '+'. Elrond's collect/mac.py and gandalf.py carry the same lists. SQLite
+# databases come with their -wal so uncheckpointed rows aren't lost.
+collect_macos_extras() {
+    local acq_dir="$1"
+    local hostname="$2"
+    local audit_log="$3"
+    local meta_log="$4"
+    local macos="${acq_dir}/artefacts/macos"
+    local source top depth max_size suffix user_home biome=0
+
+    mtake() {  # source [max bytes]
+        [ -f "$1" ] && [ ! -L "$1" ] && [ -s "$1" ] || return 0
+        if [ -n "${2:-}" ] && [ "$(wc -c < "$1" 2>/dev/null | tr -d ' ' || echo 0)" -gt "$2" ]; then return 0; fi
+        collect_file "$1" "${macos}/$(printf '%s' "${1#/}" | tr '/' '+')" "$hostname" "$meta_log" && log_audit "$audit_log" "$hostname" "$1"
+        return 0
+    }
+
+    for source in /private/var/db/SystemPolicyConfiguration/ExecPolicy /private/var/db/SystemPolicyConfiguration/KextPolicy \
+        /private/var/protected/xprotect/XPdb /private/var/db/com.apple.backgroundtaskmanagement/BackgroundItems-v*.btm \
+        /private/var/folders/*/*/0/com.apple.notificationcenter/db2/db; do
+        mtake "$source" 67108864
+        mtake "${source}-wal" 67108864
+    done
+    mtake /private/var/db/powerlog/Library/BatteryLife/CurrentPowerlog.PLSQL 268435456
+    mtake /private/var/db/powerlog/Library/BatteryLife/CurrentPowerlog.PLSQL-wal 268435456
+    for source in /Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist \
+        /private/etc/periodic.conf /private/etc/daily.local /private/etc/weekly.local /private/etc/monthly.local \
+        /private/etc/launchd.conf /private/etc/rc.common /Library/Receipts/InstallHistory.plist; do
+        mtake "$source" 67108864
+    done
+    # directory|depth|largest file
+    while IFS='|' read -r top depth max_size; do
+        [ -d "$top" ] || continue
+        while IFS= read -r -d '' source; do
+            mtake "$source" "$max_size"
+        done < <(find "$top" -maxdepth "$depth" -type f -print0 2>/dev/null)
+    done <<'DIRS'
+/private/etc/periodic|2|1048576
+/private/etc/emond.d|2|1048576
+/private/var/db/emondClients|1|1048576
+DIRS
+    for user_home in /Users/* /var/root; do
+        [ -d "$user_home" ] || continue
+        [ "$(basename "$user_home")" = "Shared" ] && continue
+        mtake "${user_home}/Library/Application Support/com.apple.backgroundtaskmanagementagent/backgrounditems.btm" 67108864
+        mtake "${user_home}/Library/Group Containers/group.com.apple.usernoted/db2/db" 67108864
+        mtake "${user_home}/Library/Group Containers/group.com.apple.usernoted/db2/db-wal" 67108864
+        while IFS= read -r -d '' source; do
+            mtake "$source" 10485760
+        done < <(find "${user_home}/Library/Application Support/com.apple.sharedfilelist" -maxdepth 2 -type f \
+            \( -name '*.sfl2' -o -name '*.sfl3' \) -print0 2>/dev/null)
+    done
+    # Biome streams (app focus, notifications, Safari...): at most 2000 files of 10 MB
+    while IFS= read -r -d '' source; do
+        [ "$biome" -lt 2000 ] || break
+        mtake "$source" 10485760
+        biome=$((biome + 1))
+    done < <(find /private/var/db/biome/streams/restricted /Users/*/Library/Biome/streams/restricted -maxdepth 4 \
+        -type f -print0 2>/dev/null)
+
+    # Unified logs (G17): a filtered, time-boxed export rather than the multi-GB store.
+    # GANDALF_UNIFIED_LOG_WINDOW sets how far back (default 1d); capped at 500,000 events.
+    if command -v log &> /dev/null; then
+        mkdir -p "$macos"
+        log show --last "${GANDALF_UNIFIED_LOG_WINDOW:-1d}" --style ndjson --predicate \
+            'process IN {"sudo","su","sshd","sshd-session","loginwindow","screensharingd","syspolicyd","XprotectService","backgroundtaskmanagementd","authd"} OR subsystem IN {"com.apple.TCC","com.apple.xprotect","com.apple.syspolicy.exec","com.apple.backgroundtaskmanagement"}' \
+            2>/dev/null | head -n 500000 > "${macos}/gandalf+unifiedlog.ndjson" || true
+        if [ -s "${macos}/gandalf+unifiedlog.ndjson" ]; then
+            echo "${hostname},unified log export,$(sha256_of "${macos}/gandalf+unifiedlog.ndjson")" >> "$meta_log"
+        fi
+    fi
+}
+
 collect_macos_artifacts() {
     local acq_dir="$1"
     local hostname="$2"
@@ -705,6 +779,8 @@ MAP
         [ "$username" = "Shared" ] && continue
         collect_macos_user_artifacts "$user_home" "$username" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
     done
+
+    collect_macos_extras "$acq_dir" "$hostname" "$audit_log" "$meta_log"
 }
 
 collect_macos_user_artifacts() {

@@ -1,10 +1,89 @@
 #!/usr/bin/env python3 -tt
+import glob
 import os
 import shutil
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.collect.linux import _flat, _walk
 from rivendell.collect.users.mac import mac_users
+
+# Collected into raw/macos/ under their path with '/' as '+' (process/mac_artefacts.py).
+# gandalf.sh and gandalf.py carry the same lists; keep the three in step.
+MACOS_EXTRA_DATABASES = (
+    "/private/var/db/SystemPolicyConfiguration/ExecPolicy", "/private/var/db/SystemPolicyConfiguration/KextPolicy",
+    "/private/var/protected/xprotect/XPdb", "/private/var/db/com.apple.backgroundtaskmanagement/BackgroundItems-v*.btm",
+    "/private/var/folders/*/*/0/com.apple.notificationcenter/db2/db",
+    "/Users/*/Library/Group Containers/group.com.apple.usernoted/db2/db",
+)
+MACOS_EXTRA_FILES = (
+    "/Library/Apple/System/Library/CoreServices/XProtect.bundle/Contents/Info.plist", "/private/etc/periodic.conf",
+    "/private/etc/daily.local", "/private/etc/weekly.local", "/private/etc/monthly.local", "/private/etc/launchd.conf",
+    "/private/etc/rc.common", "/Library/Receipts/InstallHistory.plist",
+    "/Users/*/Library/Application Support/com.apple.backgroundtaskmanagementagent/backgrounditems.btm",
+)
+MACOS_POWERLOG = "/private/var/db/powerlog/Library/BatteryLife/CurrentPowerlog.PLSQL"
+# directory, depth, largest file, file name suffixes (empty: any)
+MACOS_EXTRA_DIRS = (
+    ("/private/etc/periodic", 2, 1 << 20, ()),
+    ("/private/etc/emond.d", 2, 1 << 20, ()),
+    ("/private/var/db/emondClients", 1, 1 << 20, ()),
+    ("/Users/*/Library/Application Support/com.apple.sharedfilelist", 2, 10 << 20, (".sfl2", ".sfl3")),
+)
+MACOS_BIOME = ("/private/var/db/biome/streams/restricted", "/Users/*/Library/Biome/streams/restricted")
+MACOS_BIOME_MAX_FILES = 2000
+
+
+def collect_macos_extras(mnt, dest, img, output_directory, stage, verbosity):
+    """
+    BTM items, shared file lists, Notification Center, ExecPolicy, KextPolicy,
+    XProtect, emond, periodic, InstallHistory, PowerLog and Biome from a mounted
+    macOS image, into raw/macos/. The unified log store isn't taken: Elrond has
+    no tracev3 parser, and Gandalf's live export covers it on a running host.
+    """
+    macos = dest + "macos/"
+    os.makedirs(macos, exist_ok=True)
+    count = 0
+
+    def take(source, limit=64 << 20):
+        nonlocal count
+        try:
+            if not os.path.isfile(source) or os.path.islink(source) or not 0 < os.path.getsize(source) <= limit:
+                return
+            shutil.copy2(source, macos + _flat(source[len(mnt):]))
+            count += 1
+        except OSError:
+            pass
+
+    for pattern in MACOS_EXTRA_DATABASES:
+        for source in sorted(glob.glob(mnt + pattern)):
+            take(source)
+            take(source + "-wal")
+    take(mnt + MACOS_POWERLOG, 256 << 20)
+    take(mnt + MACOS_POWERLOG + "-wal", 256 << 20)
+    for pattern in MACOS_EXTRA_FILES:
+        for source in sorted(glob.glob(mnt + pattern)):
+            take(source)
+    for pattern, depth, limit, suffixes in MACOS_EXTRA_DIRS:
+        for top in sorted(glob.glob(mnt + pattern)):
+            for source in _walk(top, depth):
+                if not suffixes or source.endswith(suffixes):
+                    take(source, limit)
+    biome = 0
+    for pattern in MACOS_BIOME:
+        for top in sorted(glob.glob(mnt + pattern)):
+            for source in _walk(top, 4):
+                if biome >= MACOS_BIOME_MAX_FILES:
+                    break
+                take(source, 10 << 20)
+                biome += 1
+    entry, prnt = "{},{},{},macos background items and policy databases\n".format(
+        datetime.now().isoformat(), img.split("::")[0], stage
+    ), " -> {} -> {} {} macOS background-item, policy-database and Biome artefacts from '{}'".format(
+        datetime.now().isoformat().replace("T", " "), stage, count, img.split("::")[0]
+    )
+    write_audit_log_entry(verbosity, output_directory, entry, prnt)
+
 
 
 def collect_mac_artefacts(
@@ -284,6 +363,8 @@ def collect_mac_artefacts(
                     except:
                         pass
 
+        if item == mnt + "/etc":
+            collect_macos_extras(mnt, dest, img, output_directory, stage, verbosity)
         if item == mnt + "/Users/":
             dest = mac_users(
                 dest,
