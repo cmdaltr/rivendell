@@ -1,6 +1,18 @@
-# Eru - Rivendell Forensic AI Models
+# Eru - the AI Analyst
 
-This directory contains Ollama Modelfiles for creating Eru, the Rivendell forensic AI assistant.
+Eru answers questions about a case. In the web app it's **Ask Eru**; from a shell it's `python3 -m src.analysis.rivendell.ai.cli` ([CLI.md](CLI.md#eru-ai-analyst)); the endpoints are in [API.md](API.md#eru-ai-analyst).
+
+## With Ollama
+
+Free-text answers, case summaries and investigation suggestions come from a local model through Ollama. The backend finds it at `OLLAMA_HOST` (default `http://host.docker.internal:11434`, so Ollama on the Docker host) and uses `RIVENDELL_MODEL_NAME` (default `llama3.2:3b`). Nothing leaves the machine.
+
+## Without Ollama
+
+If Ollama isn't running, or the model isn't pulled, Ask Eru says which and how to fix it, turns off free text, and offers fixed questions answered exactly from Elrond's output for the selected case: which hosts are in it, which ATT&CK techniques were tagged, what persistence was flagged, who logged in (and failed to), which IOCs were extracted, and which shell commands look suspicious. A few general questions (persistence locations per OS, what Gandalf collects) need no case. These answers are read from the files, not generated, so they are the same every time.
+
+## Eru Models
+
+The Ollama Modelfiles in `src/models/` build Eru variants: a forensic system prompt over different base models.
 
 ## Available Models
 

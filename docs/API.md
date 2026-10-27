@@ -17,10 +17,12 @@
 6. [File System](#file-system)
 7. [Docker Administration (Anduril)](#docker-administration-anduril)
 8. [Mordor: Recorded Attack Telemetry](#mordor-recorded-attack-telemetry)
-9. [Health Check](#health-check)
-10. [Request/Response Formats](#requestresponse-formats)
-11. [Error Handling](#error-handling)
-12. [Code Examples](#code-examples)
+9. [Eru (AI Analyst)](#eru-ai-analyst)
+10. [Lab](#lab)
+11. [Health Check](#health-check)
+12. [Request/Response Formats](#requestresponse-formats)
+13. [Error Handling](#error-handling)
+14. [Code Examples](#code-examples)
 
 ---
 
@@ -1085,6 +1087,47 @@ The machines recordings run on (`src/mordor/lab`, ported from Archer). Docker, T
 | `POST` | `/api/mordor/lab/record` | `{"engine", "name", "os", "techniques", "revert_to", "execute"}`. With `execute: false` it returns the plan and warnings and runs nothing; with `true` it runs Atomic Red Team in the machine and imports the recording. Starts a job |
 
 A job returns `202` with a lab run (`id`, `label`, `status`); poll `/api/lab/runs/{id}?offset=` for its output. One job runs at a time across the whole lab (`409` otherwise).
+
+---
+
+## Eru (AI Analyst)
+
+**Authentication:** none
+
+Ask Eru's back end. Free-text answers come from Ollama at `OLLAMA_HOST` (default `http://host.docker.internal:11434`) with the model `RIVENDELL_MODEL_NAME` (default `llama3.2:3b`). Without them, `/status` says why and the offline endpoints answer fixed questions from Elrond's output.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/ai/status` | `llm_available`, `ollama_running`, `model_name`, `models`, `ollama_host`, `data_dir`, and `reason`: why free text won't work (empty when it will) |
+| `GET` | `/api/ai/offline/questions` | The fixed questions: `id`, `question`, `needs_case` |
+| `POST` | `/api/ai/offline/answer` | `{"question_id": "techniques", "case_id": "CASE-001"}` (`case_id` only where `needs_case`). Returns `{"answer", "offline": true}`; `404` for an unknown question |
+| `GET` | `/api/ai/cases` | Cases Eru can see: indexed vector stores and completed jobs, with `indexed` and `has_artifacts` |
+| `POST` | `/api/ai/chat` | `{"message": "..."}` without case context. Returns `{"response", "model", "processing_time"}` |
+| `GET` | `/api/ai/cases/{case_id}/info` | What is indexed for a case |
+| `POST` | `/api/ai/cases/{case_id}/query` | `{"question": "..."}` answered from the case's data |
+| `POST` | `/api/ai/cases/{case_id}/suggestions` | Investigation paths to follow |
+| `POST` | `/api/ai/cases/{case_id}/summary` | An executive summary of the case |
+
+The LLM endpoints return `503` when Ollama or the model isn't available.
+
+---
+
+## Lab
+
+**Role Required:** `ADMIN` (except `/status`)
+
+The test lab (`lab/`) from the browser: Linux targets, Tart and UTM VMs, Gandalf against seeded hosts. Docker, Tart and UTM are on the host, so these proxy to the lab agent (`./lab.sh agent start`, loopback `:5691`).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/lab/status` | Whether the agent is reachable. No authentication; returns `available`, and `reason` and `start_command` when it isn't |
+| `GET` | `/api/lab/state` | Host profile, lab settings, whether the lab password is stored, and any running command |
+| `PUT` | `/api/lab/config` | `{"settings": {...}}`: change `lab.conf` on the host |
+| `PUT` | `/api/lab/password` | `{"password": "..."}`: store the lab password in the host's keyring |
+| `POST` | `/api/lab/run` | `{"command": "gandalf-collect", "args": ["bash"]}`: start a `lab.sh` command |
+| `GET` | `/api/lab/runs` | Recent runs |
+| `GET` | `/api/lab/runs/{id}?offset=` | A run's status and its output from byte `offset` on |
+| `POST` | `/api/lab/runs/{id}/cancel` | Cancel a run |
 
 ---
 

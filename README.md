@@ -3,7 +3,7 @@
 <div align="center">
   <img src="./docs/images/rivendell.png" alt="Rivendell - The Last Homely House" width="800"/>
 
-  **Digital Forensics Suite v2.0.0**
+  **Digital Forensics Suite v2.1.0**
 </div>
 <div align="center">
   <i>The Last Homely House</i><br><br>
@@ -23,6 +23,7 @@
 # 1. Clone repository
 git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
+./rivendell install   # optional: run `rivendell` from anywhere
 
 # 2. Install OrbStack (macOS - RECOMMENDED) or Docker Desktop
 # OrbStack: 2-3x faster, uses less RAM, no networking bugs
@@ -144,7 +145,7 @@ _3. Additional optional features_
 - **Automated Analysis** - Process evidence with 30+ integrated forensic tools
 - **MITRE ATT&CK Integration** - Automatic technique mapping with comprehensive content-based detection and ATT&CK Navigator visualization
 - **Cloud Forensics** - AWS, Azure, and GCP investigation support
-- **AI-Powered Analysis** - Natural language queries of investigation data
+- **Eru, the AI analyst** - Natural-language questions over a case with a local model (Ollama); fixed questions answered from the case files when there's no model
 - **Memory Forensics** - Volatility 3 integration for memory analysis
 - **Timeline Generation** - Plaso/log2timeline for comprehensive timelines
 - **SIEM Integration** - Direct export to Splunk and Elasticsearch
@@ -191,7 +192,8 @@ Collect forensic artifacts from local and remote systems.
 - Remote acquisition via SSH and PowerShell
 - Memory dump collection
 - Encrypted evidence packaging
-- SHA256 hashing and audit trails
+- Live state first, then files in order of volatility; everything copied locally, then SHA-256 hashed into `log.meta`, which Elrond re-checks on arrival
+- Audit trail of when each artefact was taken
 - Comprehensive artifact collection
 
 
@@ -230,8 +232,9 @@ Process and analyze forensic evidence with integrated tools.
 - Volatility 3 (memory analysis)
 - Plaso/log2timeline (timeline generation)
 - RegRipper (registry parsing)
-- EvtxCmd (event log parsing)
-- Bulk Extractor (IOC extraction)
+- Artemis (event logs, $MFT, $UsnJrnl, prefetch, SRUM, jump lists, shimcache)
+- YARA and ClamAV (signature scanning)
+- The Sleuth Kit, libewf, apfs-fuse (images and file systems)
 - 25+ additional forensic utilities
 
 [Full Documentation →](docs/CLI.md#elrond---analysis)
@@ -353,9 +356,9 @@ python3 -m src.analysis.rivendell.cloud.cli aws analyze-logs \
 
 ---
 
-### Feature 5: AI-Powered Analysis Agent
+### Feature 5: Eru, the AI Analyst
 
-Query investigation data using natural language with local AI.
+Query investigation data using natural language with local AI. In the web app, **Ask Eru** talks to Ollama; when Ollama isn't running or the model isn't pulled, Eru says why and offers fixed questions (hosts, techniques, persistence, logins, IOCs, commands) answered straight from Elrond's output. See [docs/ERU.md](docs/ERU.md).
 
 **Features:**
 - Natural language queries of forensic data
@@ -498,7 +501,9 @@ Rivendell integrates many excellent open-source forensic tools:
 - **Volatility 3** - Memory forensics framework
 - **Plaso/log2timeline** - Timeline generation
 - **RegRipper** - Registry analysis
-- **Bulk Extractor** - IOC extraction
+- **Artemis** - Windows, Linux and macOS artefact parsing
+- **YARA** - Signature scanning
+- **The Sleuth Kit** - File system analysis
 - **MITRE ATT&CK** - Adversary tactics and techniques
 - **Ollama** - Local LLM inference
 - **LangChain** - AI orchestration

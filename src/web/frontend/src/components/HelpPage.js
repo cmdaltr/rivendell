@@ -74,64 +74,41 @@ const HelpPage = () => {
       content: (
         <>
           <h3>Quick Installation</h3>
-
-          <br />
-          <h4>Linux</h4>
           <pre className="code-block">
 {`git clone https://github.com/cmdaltr/rivendell.git
 cd rivendell
-chmod +x scripts/install_linux.sh
-sudo ./scripts/install_linux.sh`}
+./rivendell install              # optional: run 'rivendell' from anywhere
+
+# Docker: OrbStack on macOS (faster, lighter), Docker Desktop or Docker Engine elsewhere
+brew install --cask orbstack     # macOS
+python3 scripts/install-rivendell.py   # other platforms: checks and installs prerequisites
+
+python3 scripts/image-paths.py   # where your forensic images live
+rivendell start --testing        # the stack without Splunk and Elastic
+# Web interface: http://localhost:5687 · API: http://localhost:5688`}
           </pre>
 
-          <br />
-          <h4>macOS</h4>
-          <pre className="code-block">
-{`git clone https://github.com/cmdaltr/rivendell.git
-cd rivendell
-chmod +x scripts/install_macos.sh
-./scripts/install_macos.sh`}
-          </pre>
-
-          <br />
-          <h4>Windows (WSL2)</h4>
-          <pre className="code-block">
-{`git clone https://github.com/cmdaltr/rivendell.git
-cd rivendell
-.\\scripts\\install_windows_wsl.ps1`}
-          </pre>
-
-          <br />
-          <h4>Docker Deployment</h4>
-          <pre className="code-block">
-{`docker-compose up -d
-# Access web interface at http://localhost:5687`}
-          </pre>
-
-          <br />
           <br />
           <h4>Dependencies</h4>
           <br />
           <p><strong>Core Requirements:</strong></p>
           <ul>
-            <li>Python 3.8+</li>
-            <li>Volatility 3 (memory analysis)</li>
-            <li>Plaso/log2timeline (timeline generation)</li>
-            <li>30+ forensic tools (automatically installed)</li>
+            <li>Docker (OrbStack, Docker Desktop or Docker Engine) with 8 GB or more for its VM</li>
+            <li>Python 3.8+ on the host, for the <code>rivendell</code> command and scripts</li>
+            <li>The forensic tools (Volatility 3, Plaso, Artemis, RegRipper, YARA, The Sleuth Kit) are in the worker image</li>
           </ul>
 
           <br />
           <p><strong>Optional:</strong></p>
           <ul>
-            <li>Docker (for containerized deployment)</li>
-            <li>Ollama (for AI agent)</li>
-            <li>Splunk/Elasticsearch (for SIEM integration)</li>
+            <li>Ollama, for Eru's free-text answers (Eru answers fixed questions without it)</li>
+            <li>Splunk or Elasticsearch, for SIEM export (<code>rivendell start</code> without <code>--testing</code>)</li>
           </ul>
 
           <br />
           <h4>Verification</h4>
           <pre className="code-block">
-{`elrond --check-dependencies`}
+{`rivendell status`}
           </pre>
         </>
       )
@@ -189,56 +166,55 @@ rivendell map [realm|elrond|gandalf|machine] # open an architecture page`}
             <li>Remote acquisition via SSH/PowerShell</li>
             <li>Encrypted evidence packaging</li>
             <li>Memory dump acquisition</li>
-            <li>Audit logging with SHA256 hashing</li>
-            <li>Network-based collection</li>
+            <li>Collection in order of volatility, copied locally first</li>
+            <li>SHA-256 manifest (<code>log.meta</code>) checked by Elrond on arrival</li>
           </ul>
 
           <h4>Basic Usage</h4>
+          <p>
+            Every collector takes an encryption mode (<code>Key</code>, <code>Password</code> or <code>None</code>) and an
+            acquisition mode (<code>Local</code> or <code>Remote</code>). Remotely, bash takes a host with
+            <code> -h</code> or a list with <code>-f</code>, the Python collector reads <code>src/acquisition/lists/hosts.list</code>,
+            and PowerShell uses PSRemoting.
+          </p>
 
-          <h5>Local Acquisition</h5>
+          <h5>Linux and macOS (bash)</h5>
           <pre className="code-block">
-{`# Windows (PowerShell)
-.\\acquisition\\powershell\\gandalf.ps1 Password Local -M -o C:\\evidence
-
-# Linux/macOS (Python)
-sudo python3 acquisition/python/gandalf.py Password Local -M -o /evidence`}
+{`sudo ./src/acquisition/bash/gandalf.sh Password Local -m -o /evidence
+sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
+# or, from anywhere: rivendell gandalf Key Local -m`}
           </pre>
 
-          <h5>Remote Acquisition (SSH)</h5>
+          <h5>Linux and macOS (Python)</h5>
           <pre className="code-block">
-{`python3 acquisition/python/gandalf.py Password 192.168.1.100 \\
-  -u admin \\
-  -M \\
-  -o /evidence/CASE-001`}
+{`cd src/acquisition
+sudo python3 python/gandalf.py Key Local -M -O /evidence/CASE-001
+sudo python3 python/gandalf.py Password Remote -O /evidence/CASE-001`}
           </pre>
 
-          <h5>Windows Remote (PowerShell)</h5>
+          <h5>Windows (PowerShell, as administrator)</h5>
           <pre className="code-block">
-{`.\\acquisition\\powershell\\gandalf.ps1 \\
-  -Target 192.168.1.100 \\
-  -User administrator \\
-  -Memory \\
-  -Output C:\\evidence`}
+{`.\\src\\acquisition\\windows\\Invoke-Gandalf.ps1 -EncryptionObject Key -Acquisition Local \`
+  -OutputDirectory C:\\TEMP\\gandalf\\gandalf -Memory -CollectFiles`}
           </pre>
 
           <h4>Collection Options</h4>
-          <ul>
-            <li><code>-M</code> Memory dump</li>
-            <li><code>-R</code> Registry hives (Windows)</li>
-            <li><code>-E</code> Event logs (Windows)</li>
-            <li><code>-B</code> Browser artifacts</li>
-            <li><code>-F</code> File collection</li>
-            <li><code>-U</code> User profiles</li>
-            <li><code>-L</code> Last access times</li>
-            <li><code>-H</code> Hash artifacts</li>
-          </ul>
+          <table>
+            <thead><tr><th>bash</th><th>Python</th><th>PowerShell</th><th>Does</th></tr></thead>
+            <tbody>
+              <tr><td><code>-o DIR</code></td><td><code>-O DIR</code></td><td><code>-OutputDirectory</code></td><td>Where the archive goes</td></tr>
+              <tr><td><code>-m</code></td><td><code>-M</code></td><td><code>-Memory</code></td><td>Memory dump (AVML, osxpmem, DumpIt)</td></tr>
+              <tr><td><code>-a</code></td><td><code>-A</code></td><td></td><td>Last-access times for every file</td></tr>
+              <tr><td><code>-c</code></td><td><code>-F</code></td><td><code>-CollectFiles</code></td><td>Files named in <code>lists/files.list</code></td></tr>
+              <tr><td><code>-h HOST -u USER</code>, <code>-f FILE</code></td><td>hosts.list</td><td>PSRemoting</td><td>Remote targets</td></tr>
+            </tbody>
+          </table>
 
           <h4>Encryption Modes</h4>
           <ul>
-            <li><strong>Password:</strong> Symmetric encryption with password</li>
-            <li><strong>Certificate:</strong> PKI-based encryption</li>
-            <li><strong>Key:</strong> Pre-shared key encryption</li>
-            <li><strong>None:</strong> No encryption (not recommended)</li>
+            <li><strong>Key:</strong> a random key per host, written beside the archive as <code>&lt;host&gt;.shadowfax.key</code> (recommended)</li>
+            <li><strong>Password:</strong> key derived from a password you type (PBKDF2)</li>
+            <li><strong>None:</strong> no encryption</li>
           </ul>
 
           <h4>Collection Order and Integrity</h4>

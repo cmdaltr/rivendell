@@ -1,6 +1,6 @@
 # Elrond - Digital Forensics Automation Tool
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](https://github.com/cmdaltr/elrond)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/cmdaltr/elrond)
 [![Python](https://img.shields.io/badge/python-3.8+-green.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -127,22 +127,17 @@ elrond/
 
 ### Option 1: Docker (Recommended)
 
+Elrond runs inside Rivendell's stack, as the Celery worker behind the web UI. From the repository root:
+
 ```bash
-# Clone repository
-git clone https://github.com/cmdaltr/elrond.git
-cd elrond
-
-# Start with Docker (easiest)
-./scripts/docker-start.sh
-
-# Or manually
-docker-compose -f docker/docker-compose.yml up
+rivendell start --testing      # or ./rivendell start --testing
 ```
 
-Access the application:
-- **Web Interface**: http://localhost:3000
+- **Web Interface**: http://localhost:5687
 - **API Documentation**: http://localhost:5688/docs
 - **API Health**: http://localhost:5688/api/health
+
+See [docs/QUICKSTART.md](../../docs/QUICKSTART.md).
 
 ### Option 2: Native Installation
 
@@ -164,7 +159,7 @@ python elrond.py CASE-001 /path/to/image.E01 /output --Collect --Process --quick
 
 ### Web Interface
 
-1. Navigate to http://localhost:3000
+1. Navigate to http://localhost:5687
 2. Click **"New Analysis"**
 3. Select disk image from file browser
 4. Configure analysis options
@@ -233,37 +228,7 @@ python elrond.py CASE-001 /evidence/disk.E01 /output --Collect
 
 ## 🐳 Docker Usage
 
-### Development
-
-```bash
-# Start all services
-./scripts/docker-start.sh
-
-# Or with options
-./scripts/docker-start.sh --build --detached
-
-# View logs
-./scripts/docker-start.sh --logs
-
-# Stop services
-./scripts/docker-start.sh --stop
-```
-
-### Production
-
-```bash
-# Configure environment
-cp .env.example .env
-# Edit .env with production settings
-
-# Deploy
-./scripts/docker-start.sh --prod --build --detached
-
-# Monitor
-docker-compose -f docker/docker-compose.prod.yml logs -f
-```
-
-See [docs/DOCKER.md](docs/DOCKER.md) for comprehensive Docker documentation.
+Rivendell's `docker-compose.yml` at the repository root runs Elrond; use `rivendell start | stop | restart | status` ([docs/CLI.md](../../docs/CLI.md#the-rivendell-command)). The compose files and `docs/DOCKER*.md` here describe the earlier standalone Elrond stack (ports 3000 and 8000) and are kept for reference only.
 
 ## 🧪 Testing
 

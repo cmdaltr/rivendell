@@ -1,5 +1,7 @@
 # Docker Troubleshooting Guide for Rivendell
 
+> **Legacy.** This describes the standalone Elrond stack in `src/analysis/web` and `src/analysis/docker` (ports 3000 and 8000), which Rivendell no longer uses. Rivendell runs from the repository's `docker-compose.yml` (web UI on :5687, API on :5688): start with [docs/QUICKSTART.md](../../../docs/QUICKSTART.md) and the `rivendell` command.
+
 This guide covers common Docker issues with Rivendell and their solutions.
 
 ## Table of Contents

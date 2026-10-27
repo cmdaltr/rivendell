@@ -14,7 +14,7 @@ Every command below can be run through the `rivendell` command from any director
 4. [Elrond - Analysis](#elrond---analysis)
 5. [MITRE ATT&CK Tools](#mitre-attck-tools)
 6. [Cloud Forensics](#cloud-forensics)
-7. [AI Agent](#ai-agent)
+7. [Eru (AI Analyst)](#eru-ai-analyst)
 8. [SIEM Integration](#siem-integration)
 9. [Docker Administration (Anduril)](#docker-administration-anduril)
 10. [Utility Commands](#utility-commands)
@@ -71,7 +71,7 @@ The web UI and API (see [API.md](API.md)) drive Elrond through the same command 
 
 ### Overview
 
-Gandalf collects artefacts from a live host into a zip archive, optionally encrypted, with a SHA-256 audit log for chain of custody.
+Gandalf collects artefacts from a live host, in order of volatility, into an archive (zip from the Python and PowerShell collectors, tar.gz from bash), optionally encrypted, with a SHA-256 manifest (`log.meta`) and an audit log (`log.audit`) for chain of custody.
 
 | Variant | Path | Runs on |
 |---|---|---|
@@ -482,9 +482,9 @@ python3 -m src.analysis.rivendell.cloud.cli gcp acquire-disk -i myinstance --zon
 
 ---
 
-## AI Agent
+## Eru (AI Analyst)
 
-Eru indexes case output into a vector store and answers questions over it with a local LLM (Ollama by default, or llama.cpp).
+In the web app this is **Ask Eru**; without Ollama it falls back to fixed questions answered from the case files ([ERU.md](ERU.md)). From the command line, Eru indexes case output into a vector store and answers questions over it with a local LLM (Ollama by default, or llama.cpp).
 
 ```bash
 python3 -m src.analysis.rivendell.ai.cli COMMAND ...

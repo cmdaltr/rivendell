@@ -12,17 +12,27 @@
 - **[USAGE.md](USAGE.md)** - Common tasks and workflows quick reference
 - **[CONFIG.md](CONFIG.md)** - Configuration, setup, and troubleshooting
 - **[PERFORMANCE.md](PERFORMANCE.md)** - Processing time per option, image type and size
+- **[ACCESSING-DATA.md](ACCESSING-DATA.md)** - Getting case output out of the containers
 
 ### 🔧 Technical References
 
 - **[API.md](API.md)** ⭐ - Complete REST API documentation with examples
 - **[CLI.md](CLI.md)** ⭐ - Command-line tools reference (gandalf, elrond, MITRE, cloud, AI, SIEM)
 - **[SECURITY.md](SECURITY.md)** - Security features, MFA, authentication, best practices
+- **[ERU.md](ERU.md)** - Eru, the AI analyst: with Ollama, without it, and the Eru models
 
 ### 📐 Architecture
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, components, data flow
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, components, data flow; the realm map, Elrond's roads, Gandalf's acquisition flow and the 3D machine (`rivendell map`)
 - **[REQUIREMENTS.md](REQUIREMENTS.md)** - System requirements and dependencies
+- **[FUNCTIONALITY.md](FUNCTIONALITY.md)** - File-descriptor handling, retries and other operational behaviour
+- **[PROGRESS_TRACKING.md](PROGRESS_TRACKING.md)** - How a job's progress percentage is worked out
+- **[INTEGRATION_SUMMARY.md](INTEGRATION_SUMMARY.md)** - Where the file-descriptor retry logic is applied
+
+### 🧪 Testing
+
+- **[../lab/README.md](../lab/README.md)** - The test lab: Linux targets, Tart and UTM VMs, Gandalf against seeded hosts, Mordor recordings
+- **[../tests/docs/BUGS.md](../tests/docs/BUGS.md)** - Every bug found in testing, and its fix
 
 ---
 
@@ -51,7 +61,7 @@
 - Elrond analysis (all modes)
 - MITRE ATT&CK tools
 - Cloud forensics (AWS, Azure, GCP)
-- AI agent commands
+- Eru (AI analyst) commands
 - SIEM integration
 
 ### For Administrators
@@ -76,8 +86,13 @@ docs/
 │
 ├── ARCHITECTURE.md        # System architecture and design
 ├── REQUIREMENTS.md        # System requirements
+├── ERU.md                 # Eru, the AI analyst
+├── ACCESSING-DATA.md      # Case output from the containers
+├── FUNCTIONALITY.md       # Operational behaviour
+├── PROGRESS_TRACKING.md   # Job progress
+├── INTEGRATION_SUMMARY.md # File-descriptor retries
 │
-└── diagrams/              # Architecture diagrams
+└── diagrams/              # Graphviz sources (ERD, job states)
 ```
 
 ---
@@ -122,4 +137,4 @@ See [USAGE.md](USAGE.md) for more examples.
 ---
 
 **Documentation Version:** 2.1.0
-**Last Updated:** 2026-10-22
+**Last Updated:** 2026-10-27

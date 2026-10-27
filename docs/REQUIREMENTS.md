@@ -32,7 +32,8 @@
 **Forensic Tools:**
 - Volatility 3 (memory forensics)
 - Plaso/log2timeline (timeline generation)
-- Bulk Extractor (IOC extraction)
+- Artemis (artefact parsing)
+- YARA (signature scanning)
 - TSK (The Sleuth Kit) - file system analysis
 - libewf (E01 image support)
 
@@ -119,27 +120,18 @@ wsl --install -d Ubuntu-22.04
 - **libvhdi** - VHD/VHDX support
 
 ### IOC Extraction
-- **Bulk Extractor** - Extract IOCs (IPs, emails, URLs)
-- **YARA** - Pattern matching
-
-### Browser Forensics
-- **hindsight** - Chrome/Chromium history parser
-- **firefox_analyzer** - Firefox artifact parser
+IOCs (IPs, domains, URLs, emails, hashes) are extracted by Elrond itself from the cooked artefacts; no external tool is needed.
 
 ### Artifact Parsers
 - **python-registry** - Windows Registry parser
 - **pytsk3** - Python bindings for TSK
-- **dfvfs** - Virtual file system library
-- **dfwinreg** - Windows Registry library
+- **dfvfs** - Virtual file system library (used by Plaso)
 
-### Network Analysis
-- **Wireshark/tshark** - Network protocol analyzer
-- **NetworkMiner** - Network forensics tool (optional)
+Browser history (Chromium-based browsers, Firefox and Safari) is collected by Elrond and parsed by Artemis.
 
 ### Malware Analysis
-- **YARA** - Malware pattern matching
+- **YARA** - Signature scanning
 - **ClamAV** - Antivirus engine (optional)
-- **Detect-It-Easy (DIE)** - File identifier (optional)
 
 ---
 
@@ -155,13 +147,13 @@ sudo sh get-docker.sh
 sudo apt-get install docker-compose-plugin
 ```
 
-### AI-Powered Analysis
+### Eru (AI analyst)
 ```bash
 # Install Ollama for local LLM
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull recommended model
-ollama pull llama2:13b
+# Pull the default model (RIVENDELL_MODEL_NAME); see ERU.md for the eru-* models
+ollama pull llama3.2:3b
 ```
 
 ### SIEM Integration

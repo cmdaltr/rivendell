@@ -170,7 +170,7 @@ docker exec rivendell-celery-worker ls -la /tmp/elrond/output/
 docker ps | grep rivendell
 
 # Check job status in web UI
-# Navigate to http://localhost:3000/jobs
+# Navigate to http://localhost:5687/jobs
 ```
 
 ### Files are not appearing in /tmp/rivendell
