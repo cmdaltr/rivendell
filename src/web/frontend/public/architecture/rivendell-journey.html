@@ -58,7 +58,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
 .vb { display: inline-flex; align-items: center; gap: 4px; font-size: 9.5px; font-weight: 600; letter-spacing: .02em;
   color: #0b1622; padding: 1px 6px; border-radius: 9px; white-space: nowrap; pointer-events: none; transition: opacity .3s;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); }
-.vb img { height: 11px; width: auto; display: block; }
+.vb img { height: 11px; width: 11px; display: block; }
 .badges { display: flex; gap: 3px; justify-content: center; margin-top: 3px; }
 .tag:has(.badges) { text-align: center; }
 .hide-tags .tag:not(.hot), .tag.minor:not(.hot) { opacity: 0; }
@@ -142,7 +142,11 @@ const TACTIC_HITS = { windows: [2, 3, 4, 5, 6, 7, 10, 11], linux: [2, 3, 4, 5, 6
 
 // Vendor marks: a name badge in the vendor's colour. Drop an SVG into vendor/logos/
 // and name it here to show the logo inside the badge instead.
-const LOGOS = {};
+const LOGOS = {
+  Splunk: "splunk.svg", Elastic: "elastic.svg", Kibana: "kibana.svg", PostgreSQL: "postgresql.svg", Redis: "redis.svg",
+  Docker: "docker.svg", Ollama: "ollama.svg", AWS: "amazonwebservices.svg", GCP: "googlecloud.svg", React: "react.svg",
+  FastAPI: "fastapi.svg", Celery: "celery.svg", Python: "python.svg", Bash: "gnubash.svg",
+};
 const VENDORS = {
   React: 0x61dafb, FastAPI: 0x009688, Redis: 0xff6b5e, Celery: 0xa9cc54, PostgreSQL: 0x6f9fd8, Docker: 0x2496ed,
   Ollama: 0xe6edf3, Splunk: 0x65a637, Elastic: 0x00bfb3, Kibana: 0xf04e98, AWS: 0xff9900, Azure: 0x3ea8ff,
