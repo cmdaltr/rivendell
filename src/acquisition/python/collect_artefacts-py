@@ -14,7 +14,7 @@ def audit_log(gandalf_host, artefact):
     now_time = "{}Z".format(str(datetime.now()).replace(" ", "T"))
     with open(os.path.join(gandalf_host, "log.audit"), "a") as gandalf_audit:
         gandalf_audit.write(
-            "{}Z,{},{},collected\n".format(
+            "{},{},{},collected\n".format(
                 now_time, gandalf_host.split("/")[-1], artefact
             )
         )
@@ -253,6 +253,7 @@ def collect_volatile_data(gandalf_artefact_destination):
             os.path.join(gandalf_artefact_destination, "netstat.info"), "w"
         ) as netstat_info:
             netstat_info.write(netstat)
+        audit_log(os.path.dirname(gandalf_artefact_destination), "netstat.info")
     except:
         pass
     try:
@@ -267,6 +268,7 @@ def collect_volatile_data(gandalf_artefact_destination):
             os.path.join(gandalf_artefact_destination, "ss.info"), "w"
         ) as ss_info:
             ss_info.write(ss)
+        audit_log(os.path.dirname(gandalf_artefact_destination), "ss.info")
     except:
         pass
     processes = str(
@@ -280,6 +282,8 @@ def collect_volatile_data(gandalf_artefact_destination):
         os.path.join(gandalf_artefact_destination, "process.info"), "w"
     ) as process_info:
         process_info.write(processes)
+    audit_log(os.path.dirname(gandalf_artefact_destination), "process.info")
+    audit_log(os.path.dirname(gandalf_artefact_destination), "host.info")
     print(
         "      \033[1;32mAcquired volatile data from '{}'\033[1;m".format(
             gandalf_artefact_destination.split("/")[-2]
@@ -373,8 +377,8 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
     """
     macOS artefacts the system_artefacts walk misses: zsh history (the default
     shell since 10.15), per-user LaunchAgents and preferences, quarantine
-    events, TCC and KnowledgeC databases, and /Users/Shared (a common staging
-    folder). Protected files need Full Disk Access and are skipped otherwise.
+    events, TCC and KnowledgeC databases. Protected files need Full Disk Access
+    and are skipped otherwise.
     """
     dest = gandalf_artefact_destination
     for source, (folder, name) in MACOS_SINGLE_FILES.items():
@@ -414,21 +418,8 @@ def collect_macos_extras(gandalf_artefact_destination, gandalf_host):
             os.path.join(dest, "tcc", user + "+TCC.db"),
             gandalf_host,
         )
-    shared = "/Users/Shared"
-    for root, dirs, files in os.walk(shared):
-        if root[len(shared):].count(os.sep) >= 3:
-            dirs[:] = []
-        for name in files:
-            source = os.path.join(root, name)
-            try:
-                if os.path.getsize(source) > SHARED_MAX_BYTES:
-                    continue
-            except OSError:
-                continue
-            rel = os.path.relpath(source, shared).replace(os.sep, "+")
-            _collect_one(source, os.path.join(dest, "shared", rel), gandalf_host)
     print(
-        "      \033[1;32mAcquired macOS shell history, persistence and staging artefacts from '{}'\033[1;m".format(
+        "      \033[1;32mAcquired macOS shell history and persistence artefacts from '{}'\033[1;m".format(
             gandalf_host.split("/")[-1]
         )
     )
@@ -458,13 +449,59 @@ MACOS_UNIFIED_LOG_PREDICATE = (
 MACOS_UNIFIED_LOG_MAX_EVENTS = 500000
 
 
+def collect_macos_staging(gandalf_artefact_destination, gandalf_host):
+    """
+    The macOS artefacts that change soonest after the temp directories:
+    /Users/Shared (a common staging folder) and a filtered unified-log export
+    (G17). The log store runs to gigabytes, so the export takes security-relevant
+    processes and subsystems over GANDALF_UNIFIED_LOG_WINDOW (default 1d),
+    capped at 500,000 events. Runs between the temp directories and the logs.
+    """
+    dest = gandalf_artefact_destination
+    shared = "/Users/Shared"
+    for root, dirs, files in os.walk(shared):
+        if root[len(shared):].count(os.sep) >= 3:
+            dirs[:] = []
+        for name in files:
+            source = os.path.join(root, name)
+            try:
+                if os.path.getsize(source) > SHARED_MAX_BYTES:
+                    continue
+            except OSError:
+                continue
+            rel = os.path.relpath(source, shared).replace(os.sep, "+")
+            _collect_one(source, os.path.join(dest, "shared", rel), gandalf_host)
+    macos = os.path.join(dest, "macos")
+    if shutil.which("log"):
+        os.makedirs(macos, exist_ok=True)
+        export = os.path.join(macos, "gandalf+unifiedlog.ndjson")
+        command = ["log", "show", "--last", os.environ.get("GANDALF_UNIFIED_LOG_WINDOW", "1d"), "--style", "ndjson",
+                   "--predicate", MACOS_UNIFIED_LOG_PREDICATE]
+        try:
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            with open(export, "wb") as out:
+                for count, line in enumerate(process.stdout):
+                    if count >= MACOS_UNIFIED_LOG_MAX_EVENTS:
+                        break
+                    out.write(line)
+            process.kill()
+            process.wait()
+        except OSError:
+            pass
+        if os.path.isfile(export) and os.path.getsize(export) > 0:
+            audit_log(gandalf_host, "unified log export")
+    print(
+        "      \033[1;32mAcquired macOS staging folder and unified-log export from '{}'\033[1;m".format(
+            gandalf_host.split("/")[-1]
+        )
+    )
+
+
 def collect_macos_more(gandalf_artefact_destination, gandalf_host):
     """
     BTM login and background items, shared file lists, Notification Center,
     ExecPolicy, KextPolicy, XProtect, emond, periodic, InstallHistory, PowerLog,
-    Biome streams, and a filtered unified-log export (G17): the store itself runs
-    to gigabytes, so this takes security-relevant processes and subsystems over
-    GANDALF_UNIFIED_LOG_WINDOW (default 1d), capped at 500,000 events.
+    and Biome streams.
     """
     macos = os.path.join(gandalf_artefact_destination, "macos")
 
@@ -512,26 +549,8 @@ def collect_macos_more(gandalf_artefact_destination, gandalf_host):
                     break
                 take(source, 10 << 20)
                 biome += 1
-    if shutil.which("log"):
-        os.makedirs(macos, exist_ok=True)
-        export = os.path.join(macos, "gandalf+unifiedlog.ndjson")
-        command = ["log", "show", "--last", os.environ.get("GANDALF_UNIFIED_LOG_WINDOW", "1d"), "--style", "ndjson",
-                   "--predicate", MACOS_UNIFIED_LOG_PREDICATE]
-        try:
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            with open(export, "wb") as out:
-                for count, line in enumerate(process.stdout):
-                    if count >= MACOS_UNIFIED_LOG_MAX_EVENTS:
-                        break
-                    out.write(line)
-            process.kill()
-            process.wait()
-        except OSError:
-            pass
-        if os.path.isfile(export) and os.path.getsize(export) > 0:
-            audit_log(gandalf_host, "unified log export")
     print(
-        "      \033[1;32mAcquired macOS background items, policy databases and unified-log export from '{}'\033[1;m".format(
+        "      \033[1;32mAcquired macOS background items and policy databases from '{}'\033[1;m".format(
             gandalf_host.split("/")[-1]
         )
     )
@@ -837,8 +856,13 @@ def acquire_artefacts(
         print()
     else:
         pass
+    staging_taken = platform.system() != "Darwin"
     for artefact, artefact_output_dir in sorted(system_artefacts.items(), key=volatility_rank):
+        if not staging_taken and volatility_rank((artefact, artefact_output_dir)) >= 2:
+            collect_macos_staging(gandalf_artefact_destination, gandalf_host)
+            staging_taken = True
         if os.path.exists(artefact):
+            audit_log(gandalf_host, artefact)
             if not artefact.endswith("/") and artefact_output_dir == "":  # file
                 copy_file(artefact, gandalf_artefact_destination)
             else:  # directory
@@ -1356,6 +1380,8 @@ def acquire_artefacts(
             )
         else:
             pass
+    if not staging_taken:
+        collect_macos_staging(gandalf_artefact_destination, gandalf_host)
     if platform.system() == "Darwin":
         collect_macos_extras(gandalf_artefact_destination, gandalf_host)
         collect_macos_more(gandalf_artefact_destination, gandalf_host)
