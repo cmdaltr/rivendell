@@ -14,6 +14,11 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+try:
+    from . import eru_offline
+except ImportError:  # main.py imports the routes as top-level modules too
+    import eru_offline
+
 # Initialize router
 router = APIRouter(prefix="/api/ai", tags=["AI"])
 
@@ -34,6 +39,11 @@ class ChatRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     question: str
+
+
+class OfflineRequest(BaseModel):
+    question_id: str
+    case_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
@@ -73,7 +83,8 @@ class OllamaClient:
                 return data.get("response", "")
         except httpx.HTTPError as e:
             logger.error(f"Ollama HTTP error: {e}")
-            raise HTTPException(status_code=503, detail=f"LLM service unavailable: {e}")
+            reason = eru_offline.unavailable_reason(await self.check_available(), self.host, self.model)
+            raise HTTPException(status_code=503, detail=reason or f"LLM service unavailable: {e}")
         except Exception as e:
             logger.error(f"Ollama error: {e}")
             raise HTTPException(status_code=500, detail=f"LLM error: {e}")
@@ -141,14 +152,35 @@ async def get_ai_status():
         LLM availability and configuration
     """
     status = await ollama.check_available()
+    usable = bool(status.get("available") and status.get("model_loaded"))
 
     return {
-        "llm_available": status.get("available", False),
-        "model_name": DEFAULT_MODEL if status.get("available") else None,
+        "llm_available": usable,
+        "ollama_running": bool(status.get("available")),
+        "model_name": DEFAULT_MODEL if usable else None,
         "models": status.get("models", []),
         "ollama_host": OLLAMA_HOST,
         "data_dir": RIVENDELL_DATA_DIR,
+        # Why free text won't work, for Ask Eru to show; empty when it will
+        "reason": "" if usable else eru_offline.unavailable_reason(status, OLLAMA_HOST, DEFAULT_MODEL),
     }
+
+
+@router.get("/offline/questions")
+async def list_offline_questions():
+    """Questions Eru answers from the case files alone, with no LLM."""
+    return {"questions": eru_offline.catalogue()}
+
+
+@router.post("/offline/answer")
+async def answer_offline_question(request: OfflineRequest):
+    """Answer one offline question, from the selected case's files where it needs a case."""
+    case_path = await _find_case_path(request.case_id) if request.case_id else None
+    try:
+        answer = eru_offline.answer(request.question_id, case_path)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"No offline question '{request.question_id}'")
+    return {"answer": answer, "offline": True}
 
 
 @router.get("/cases")

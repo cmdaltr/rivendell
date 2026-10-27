@@ -11,7 +11,8 @@ function AIAssistant() {
   const [loading, setLoading] = useState(false);
   const [cases, setCases] = useState([]);
   const [selectedCase, setSelectedCase] = useState('');
-  const [llmStatus, setLlmStatus] = useState({ available: false, model: null });
+  const [llmStatus, setLlmStatus] = useState({ available: false, model: null, reason: '', checked: false });
+  const [offlineQuestions, setOfflineQuestions] = useState([]);
   const [loadingCases, setLoadingCases] = useState(true);
   const [showHelp, setShowHelp] = useState(true);
   const messagesEndRef = useRef(null);
@@ -28,6 +29,7 @@ function AIAssistant() {
   useEffect(() => {
     fetchCases();
     checkLlmStatus();
+    fetchOfflineQuestions();
   }, []);
 
   // Auto-hide help section after 30 seconds
@@ -64,12 +66,54 @@ function AIAssistant() {
         const data = await response.json();
         setLlmStatus({
           available: data.llm_available || false,
-          model: data.model_name || null
+          model: data.model_name || null,
+          reason: data.reason || '',
+          checked: true
         });
       }
     } catch (error) {
       console.error('Error checking LLM status:', error);
-      setLlmStatus({ available: false, model: null });
+      setLlmStatus({
+        available: false,
+        model: null,
+        reason: "Rivendell's backend didn't answer, so Eru can't reach its language model or the case files. Check the backend container is running.",
+        checked: true
+      });
+    }
+  };
+
+  const fetchOfflineQuestions = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/ai/offline/questions`);
+      if (response.ok) {
+        const data = await response.json();
+        setOfflineQuestions(data.questions || []);
+      }
+    } catch (error) {
+      console.error('Error fetching offline questions:', error);
+    }
+  };
+
+  // Without an LLM, Eru answers these from the case files themselves
+  const askOffline = async (q) => {
+    setMessages(prev => [...prev, { role: 'user', content: q.question }]);
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/ai/offline/answer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_id: q.id, case_id: selectedCase || null }),
+      });
+      const data = await response.json();
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response.ok ? data.answer : (data.detail || 'No answer.'),
+        offline: true
+      }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `Couldn't reach the backend: ${error.message}` }]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -107,7 +151,7 @@ function AIAssistant() {
           };
           setMessages(prev => [...prev, assistantMessage]);
         } else {
-          const errorData = await response.json();
+          const errorData = await response.json().catch(() => ({}));
           throw new Error(errorData.detail || 'Query failed');
         }
       } else {
@@ -131,14 +175,15 @@ function AIAssistant() {
           };
           setMessages(prev => [...prev, assistantMessage]);
         } else {
-          throw new Error('General query failed');
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.detail || 'General query failed');
         }
       }
     } catch (error) {
       console.error('Error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `Sorry, I encountered an error: ${error.message}. Please check that the AI backend is running and try again.`
+        content: `Sorry, I couldn't answer that: ${error.message}`
       }]);
     } finally {
       setLoading(false);
@@ -216,7 +261,11 @@ function AIAssistant() {
 
     // Basic markdown formatting
     let formatted = content
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\n/g, '<br/>');
 
     return <span dangerouslySetInnerHTML={{ __html: formatted }} />;
@@ -359,7 +408,8 @@ function AIAssistant() {
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
               <button
                 onClick={handleGetSuggestions}
-                disabled={loading}
+                disabled={loading || !llmStatus.available}
+                title={llmStatus.available ? '' : 'Needs the language model (Ollama)'}
                 style={{
                   padding: '0.5rem 1rem',
                   fontSize: '0.85rem',
@@ -375,7 +425,8 @@ function AIAssistant() {
               </button>
               <button
                 onClick={handleGetSummary}
-                disabled={loading}
+                disabled={loading || !llmStatus.available}
+                title={llmStatus.available ? '' : 'Needs the language model (Ollama)'}
                 style={{
                   padding: '0.5rem 1rem',
                   fontSize: '0.85rem',
@@ -439,6 +490,9 @@ function AIAssistant() {
                   fontWeight: 600
                 }}>
                   {message.role === 'user' ? 'You' : 'Eru'}
+                  {message.offline && (
+                    <span style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>(from the case files, no model)</span>
+                  )}
                   {message.processing_time && (
                     <span style={{ marginLeft: '0.5rem', fontWeight: 'normal' }}>
                       ({message.processing_time.toFixed(2)}s)
@@ -502,8 +556,21 @@ function AIAssistant() {
           <h2 style={{
             marginBottom: '1rem'
           }}>
-            Quick Actions
+            {llmStatus.available ? 'Quick Actions' : 'Ask Without the Model'}
           </h2>
+          {llmStatus.checked && !llmStatus.available && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '0.75rem 1rem',
+              background: 'rgba(255, 193, 7, 0.1)',
+              border: '1px solid rgba(255, 193, 7, 0.3)',
+              borderRadius: '4px',
+              color: '#ffc107',
+              lineHeight: '1.6'
+            }}>
+              <strong>Eru can't answer free-text questions right now.</strong> {formatContent(llmStatus.reason)}
+            </div>
+          )}
           <div style={{
             position: 'absolute',
             top: '0',
@@ -541,10 +608,16 @@ function AIAssistant() {
             flexWrap: 'wrap',
             gap: '0.5rem'
           }}>
-            {quickActions.map((action, index) => (
+            {(llmStatus.available
+              ? quickActions.map((action) => ({ question: action, run: () => handleQuickAction(action) }))
+              : offlineQuestions
+                  .filter((q) => !q.needs_case || selectedCase)
+                  .map((q) => ({ question: q.question, run: () => askOffline(q) }))
+            ).map((item, index) => (
               <button
                 key={index}
-                onClick={() => handleQuickAction(action)}
+                onClick={item.run}
+                disabled={loading}
                 style={{
                   padding: '0.5rem 0.75rem',
                   fontSize: '0.85rem',
@@ -563,7 +636,7 @@ function AIAssistant() {
                   e.target.style.background = 'rgba(107, 142, 63, 0.2)';
                 }}
               >
-                {action}
+                {item.question}
               </button>
             ))}
           </div>
@@ -578,10 +651,12 @@ function AIAssistant() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={selectedCase
-              ? `Ask about case "${selectedCase}"...`
-              : "Ask me anything about forensic analysis..."}
-            disabled={loading}
+            placeholder={!llmStatus.available && llmStatus.checked
+              ? 'Free-text questions need the language model: pick a question above'
+              : selectedCase
+                ? `Ask about case "${selectedCase}"...`
+                : "Ask me anything about forensic analysis..."}
+            disabled={loading || (llmStatus.checked && !llmStatus.available)}
             style={{
               flex: 1,
               padding: '0.75rem 1rem',
@@ -595,7 +670,7 @@ function AIAssistant() {
           />
           <button
             type="submit"
-            disabled={loading || !input.trim()}
+            disabled={loading || !input.trim() || (llmStatus.checked && !llmStatus.available)}
             style={{
               padding: '0.75rem 1.5rem',
               background: loading ? 'rgba(102, 217, 239, 0.2)' : 'rgba(102, 217, 239, 0.3)',
@@ -633,7 +708,7 @@ function AIAssistant() {
           <strong>Note:</strong> AI results are never 100% accurate - always validate findings!
           {!llmStatus.available && (
             <span style={{ display: 'block', marginTop: '0.5rem' }}>
-              LLM backend not detected. Ensure Ollama is running with a model loaded.
+              Answers marked "from the case files" are read from Elrond's output, not generated.
             </span>
           )}
         </div>
