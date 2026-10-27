@@ -119,6 +119,10 @@ case "$action" in
       TART_HOME="$old_home" "$TART" delete "$VM" && ok "Removed $src"
     fi ;;
   status)
-    if vm_exists; then echo "$VM: $([ -n "$(vm_ip)" ] && echo "running at $(vm_ip), SSH 127.0.0.1:$PORT" || echo stopped)"; else echo "$VM: not created"; fi ;;
+    # Running without an IP is a boot still in progress (a first boot off a USB drive takes up to an hour)
+    if ! vm_exists; then echo "$VM: not created"
+    elif [ -n "$(vm_ip)" ]; then echo "$VM: running at $(vm_ip), SSH 127.0.0.1:$PORT"
+    elif "$TART" list 2>/dev/null | awk -v vm="$VM" '$2 == vm {print $NF}' | grep -qx running; then echo "$VM: booting (no IP yet)"
+    else echo "$VM: stopped"; fi ;;
   *) die "unknown action $action" ;;
 esac
