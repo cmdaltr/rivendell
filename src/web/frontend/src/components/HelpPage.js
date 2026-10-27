@@ -3,8 +3,13 @@ import React, { useState } from 'react';
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 const architectureMap = `${process.env.PUBLIC_URL}/architecture/rivendell-architecture.html`;
 const architecturePages = [
-  { anchor: 'realm', title: 'The realm: Gandalf to Elrond to Eru' },
-  { anchor: 'elrond', title: "Elrond's roads: branching by evidence and OS" },
+  { href: `${architectureMap}#realm`, preview: 'realm.jpg', title: 'The realm: Gandalf to Elrond to Eru' },
+  { href: `${architectureMap}#elrond`, preview: 'elrond.jpg', title: "Elrond's roads: branching by evidence and OS" },
+  {
+    href: `${process.env.PUBLIC_URL}/architecture/gandalf-acquisition.html`,
+    preview: 'gandalf.jpg',
+    title: "Gandalf's acquisition flow",
+  },
 ];
 
 const HelpPage = () => {
@@ -23,20 +28,20 @@ const HelpPage = () => {
 
           <h4>Architecture</h4>
           <p>
-            The whole platform drawn as a map of Middle-earth, and Elrond's directed graph as it branches by
-            evidence type and operating system. Open either for the full-size map.
+            The whole platform drawn as a map of Middle-earth, Elrond's directed graph as it branches by evidence
+            type and operating system, and how Gandalf acquires from a live host. Open any of them full size.
           </p>
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', margin: '1rem 0' }}>
             {architecturePages.map((page) => (
               <a
-                key={page.anchor}
-                href={`${architectureMap}#${page.anchor}`}
+                key={page.preview}
+                href={page.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ flex: '1 1 320px', color: '#a7db6c', textDecoration: 'none' }}
               >
                 <img
-                  src={`${process.env.PUBLIC_URL}/architecture/${page.anchor}.jpg`}
+                  src={`${process.env.PUBLIC_URL}/architecture/${page.preview}`}
                   alt={page.title}
                   style={{ width: '100%', borderRadius: '6px', border: '1px solid #3f4b2a' }}
                 />
