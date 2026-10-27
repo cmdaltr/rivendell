@@ -66,7 +66,10 @@ $Checks = @(
     @{ Path = "C:\Windows\INF\setupapi.dev.log" },
     @{ Path = "C:\swapfile.sys" },
     @{ Path = "$env:USERPROFILE\NTUSER.DAT" },
-    @{ Path = "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb" },
+    # Windows 11 replaced the ESE Windows.edb with a SQLite Windows.db
+    @{ Path = $(if (Test-Path "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb") {
+                "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb" }
+            else { "C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.db" }) },
     @{ Path = "C:\ProgramData\Microsoft\Network\Downloader\qmgr.db" }
 )
 
