@@ -51,9 +51,50 @@ VOLATILITY_RANKS = (
     (("/tmp/", "/private/tmp/", "/var/tmp/", "/dev/shm/", "/proc/"), 0),
     (("/swapfile", "/var/vm/"), 1),
     (("/var/log/", "/private/var/db/diagnostics/", "/private/var/db/uuidtext/", "/.fseventsd/",
-      "/Library/Logs/"), 2),
+      "/System/Volumes/Data/.fseventsd/", "/Library/Logs/"), 2),
     (("/home/", "/root/", "/Users/"), 4),
 )
+
+
+# The system_artefacts output folders the walk in acquire_artefacts copies itself
+WALK_HANDLED = ("", "memory", "boot", "home", "root", "cron", "tmp", "logs", "plists", "services", "user")
+# Folders copied by collect_labelled, each file flattened to <folder>/<path below the
+# entry, '/' as '+'> as gandalf.sh names them: depth, largest file, name suffixes (empty: any)
+LABELLED = {
+    "conf": (4, 1 << 20, ()),
+    "journal": (3, 1 << 30, (".journal", ".journal~")),
+    "audit": (1, 512 << 20, ()),
+    "docker_containers": (2, 64 << 20, (".json", ".log")),
+    "package_log": (2, 64 << 20, ()),
+    "cron_jobs": (3, 1 << 20, ()),
+    "at_jobs": (2, 1 << 20, ()),
+    "systemd_units": (2, 1 << 20, (".service", ".timer", ".socket", ".target", ".path", ".mount")),
+    "init_scripts": (1, 1 << 20, ()),
+    "var_tmp": (3, 10 << 20, ()),
+    "dev_shm": (3, 10 << 20, ()),
+    "fseventsd": (1, 64 << 20, ()),
+    "dhcp_leases": (1, 1 << 20, ()),
+    "timemachine": (2, 10 << 20, ()),
+    "crash_reports": (2, 10 << 20, ()),
+    "trash": (3, 10 << 20, ()),
+    "network_connections": (1, 16 << 20, ()),
+}
+# Folders deliberately not copied, and why: taken elsewhere, too large to be useful in
+# a triage archive, or key material Gandalf doesn't take
+NOT_COLLECTED = {
+    "unified_logs": "exported by collect_macos_staging (log show) rather than as raw tracev3",
+    "coreduet": "collect_macos_extras", "tcc": "collect_macos_extras",
+    "kernel_modules": "listed in linux/gandalf+kernel_modules.csv",
+    "login_records": "collect_linux_extras", "failed_logins": "collect_linux_extras",
+    "startup_scripts": "collect_linux_extras", "system_log": "the logs walk", "install_log": "the logs walk",
+    "docker_volumes": "whole volume contents", "docker_overlay": "whole container filesystems",
+    "spotlight": "the Spotlight index runs to gigabytes",
+    "filevault": "key material", "keychains": "key material",
+    "wmi_repo": "Windows (the PowerShell collector takes it)",
+}
+# /var/log subdirectories with their own entry, which the logs walk leaves to it
+LOGS_OWN_ENTRY = ("journal", "audit", "DiagnosticReports")
+LOGS_MAX_BYTES = 256 << 20
 
 
 def volatility_rank(item):
@@ -691,6 +732,45 @@ def collect_linux_volatile_files(gandalf_artefact_destination, gandalf_host):
     _write_listing(os.path.join(linux, "gandalf+tmp_executables.csv"), rows, gandalf_host)
 
 
+def _read_proc(source, destination):
+    """/proc files report size 0, so they're read rather than copied."""
+    try:
+        with open(source, "rb") as fh:
+            data = fh.read(16 << 20)
+    except OSError:
+        return False
+    if not data:
+        return False
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    with open(destination, "wb") as out:
+        out.write(data)
+    return True
+
+
+def collect_labelled(artefact, label, gandalf_artefact_destination, gandalf_host):
+    """Copy one system_artefacts entry whose folder is in LABELLED."""
+    depth, limit, suffixes = LABELLED[label]
+    destination = os.path.join(gandalf_artefact_destination, label)
+    top = artefact.rstrip("/")
+    sources = [top] if os.path.isfile(top) else _walk_files(top, depth)
+    for source in sources:
+        if source.startswith("/tmp/gandalf/") or os.path.islink(source):
+            continue
+        if suffixes and not source.endswith(suffixes):
+            continue
+        name = os.path.basename(source) if source == top else os.path.relpath(source, top).replace("/", "+")
+        if source.startswith("/proc/"):
+            if _read_proc(source, os.path.join(destination, name)):
+                audit_log(gandalf_host, source)
+            continue
+        try:
+            if os.path.getsize(source) > limit:
+                continue
+        except OSError:
+            continue
+        _collect_one(source, os.path.join(destination, name), gandalf_host)
+
+
 def collect_linux_extras(gandalf_artefact_destination, gandalf_host):
     """
     Linux persistence, login-record and history artefacts the system_artefacts walk
@@ -861,8 +941,12 @@ def acquire_artefacts(
         if not staging_taken and volatility_rank((artefact, artefact_output_dir)) >= 2:
             collect_macos_staging(gandalf_artefact_destination, gandalf_host)
             staging_taken = True
-        if os.path.exists(artefact):
-            audit_log(gandalf_host, artefact)
+        if os.path.exists(artefact) and artefact_output_dir in LABELLED:
+            collect_labelled(artefact, artefact_output_dir, gandalf_artefact_destination, gandalf_host)
+        elif os.path.exists(artefact):
+            # Only what the walk below copies goes in log.audit
+            if artefact_output_dir in WALK_HANDLED and not (artefact_output_dir == "" and artefact.endswith("/")):
+                audit_log(gandalf_host, artefact)
             if not artefact.endswith("/") and artefact_output_dir == "":  # file
                 copy_file(artefact, gandalf_artefact_destination)
             else:  # directory
@@ -977,9 +1061,13 @@ def acquire_artefacts(
                         make_artefact_dir(
                             gandalf_artefact_destination, artefact_output_dir
                         )
+                        if os.path.basename(gandalfroot) in LOGS_OWN_ENTRY:
+                            gandalfdirs[:] = []
+                            continue
                         for gandalffile in gandalffiles:
-                            if gandalffile.endswith(".log"):
-                                artefact_path = os.path.join(gandalfroot, gandalffile)
+                            artefact_path = os.path.join(gandalfroot, gandalffile)
+                            if os.path.isfile(artefact_path) and not os.path.islink(artefact_path) and \
+                                    os.path.getsize(artefact_path) <= LOGS_MAX_BYTES:
                                 copy_file(
                                     artefact_path,
                                     os.path.join(

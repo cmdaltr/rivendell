@@ -9,6 +9,7 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 from rivendell.process.process import determine_vss_image
 from rivendell.process.process import process_artefacts
+from rivendell.process.extra_artefacts import is_extra_artefact
 from rivendell.process.linux_artefacts import is_linux_artefact
 from rivendell.process.mac_artefacts import is_mac_artefact
 from rivendell.utils import safe_listdir, safe_iterdir
@@ -46,7 +47,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                         or f.endswith("NTUSER.DAT")
                         or f.endswith("UsrClass.dat")
                         or f.endswith(".evtx")
-                        or f.endswith("_ActivitiesCache.db")
+                        or f.endswith("ActivitiesCache.db")
                         or f.endswith("setupapi.dev.log")
                         or f.endswith("hiberfil.sys")
                         or f.endswith("MEMORY.DMP")
@@ -89,6 +90,7 @@ def select_artefacts_to_process(img, process_list, artefacts_list, processed_art
                         or WINDOWS_RAW_FOLDERS.search(root + "/")
                         or is_linux_artefact(root + "/" + f)
                         or is_mac_artefact(root + "/" + f)
+                        or is_extra_artefact(root + "/" + f)
                     ):
                         artefacts_list.append(each + ": " + root + "/" + f)
                         processed_artefacts.append(root + "/" + f)

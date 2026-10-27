@@ -7,6 +7,8 @@ from datetime import datetime
 from rivendell.audit import write_audit_log_entry
 from rivendell.utils import safe_input
 
+_WRITE_FAILED = set()
+
 
 def write_keywords(
     output_directory,
@@ -76,12 +78,17 @@ def write_keywords(
                 )
             else:
                 kw_match_entry = kw_match_entry + "\n"
-            with open(
-                output_directory + img.split("::")[0] + "/analysis/keyword_matches.csv",
-                "a",
-                encoding=encoding_choice,
-            ) as keyword_matches_results_file:
-                keyword_matches_results_file.write(kw_match_entry)
+            matches = output_directory + img.split("::")[0] + "/analysis/keyword_matches.csv"
+            try:
+                with open(matches, "a", encoding=encoding_choice) as keyword_matches_results_file:
+                    keyword_matches_results_file.write(kw_match_entry)
+            except OSError as e:
+                # endpoint AV on the analysis machine can delete or lock the CSV (it
+                # quotes the matched lines); one lost write mustn't end the host's analysis
+                if matches not in _WRITE_FAILED:
+                    _WRITE_FAILED.add(matches)
+                    print(" -> {} -> warning: could not write '{}': {}".format(
+                        datetime.now().isoformat().replace("T", " "), matches, e))
         keyword_line_number += 1
 
 
@@ -279,7 +286,8 @@ def prepare_keywords(verbosity, output_directory, auto, imgs, flags, keywords, s
             )
             time.sleep(1)
     else:
-        for each in imgs:
+        # imgs maps mount point -> "host::type"; the host is what names the output
+        for each in imgs.values():
             vsstext = ""  # Initialize vsstext for non-mounting stage
             if os.path.exists(
                 os.path.join(output_directory, each.split("::")[0], "artefacts")

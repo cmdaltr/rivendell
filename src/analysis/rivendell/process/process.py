@@ -31,6 +31,7 @@ from rivendell.process.windows import process_usb
 from rivendell.process.windows import process_usn
 from rivendell.process.windows import process_wbem
 from rivendell.process.windows import process_wmi
+from rivendell.process.extra_artefacts import process_extra_artefact
 from rivendell.process.linux_artefacts import process_linux_artefact
 from rivendell.process.mac_artefacts import process_mac_artefact
 from rivendell.process.windows_artefacts import process_windows_artefact
@@ -85,6 +86,10 @@ def process_artefacts(
                 vss_path_insert,
                 stage,
             )
+        elif process_extra_artefact(
+            verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
+        ):
+            pass  # thumbcache, $LogFile, PSReadLine, Amcache, cron, SSH, accounts, TCC, Biome, ASL, staged files
         elif process_windows_artefact(
             verbosity, vssimage, output_directory, img, vss_path_insert, stage, artefact
         ):
@@ -169,7 +174,7 @@ def process_artefacts(
                 stage,
                 re.findall(r"'([^']+)', '" + re.escape(img), str(imgs))[0],
             )
-        elif artefact.endswith("_ActivitiesCache.db"):
+        elif artefact.endswith(("_ActivitiesCache.db", "+ActivitiesCache.db")):
             process_clipboard(
                 verbosity,
                 vssimage,
@@ -355,7 +360,7 @@ def process_artefacts(
         elif (
             (
                 artefact.endswith("History")
-                and ("Edge" in artefact or "chrome" in artefact)
+                and ("edge" in artefact.lower() or "chrome" in artefact.lower())
             )
             or (artefact.endswith("History.db") and "safari" in artefact)
             or ("places.sqlite" in artefact and "firefox" in artefact)

@@ -319,7 +319,7 @@ collect_artifacts() {
 
     # Order of volatility: temp directories (cleaned by tmpfiles and reboots) and the
     # loaded modules, then logs (rotated), then configuration and user files
-    collect_linux_volatile_files "$acq_dir" "$hostname" "$audit_log"
+    collect_linux_volatile_files "$acq_dir" "$hostname" "$audit_log" "$meta_log"
     collect_directory "/var/log" "${acq_dir}/artefacts/logs" "$hostname" "$audit_log" "$meta_log" || true
 
     # Artefact mappings: source|destination under artefacts/ (a plain list, as
@@ -346,6 +346,9 @@ collect_artifacts() {
 MAP
 
     collect_directory "/etc/cron.d" "${acq_dir}/artefacts/cron" "$hostname" "$audit_log" "$meta_log" || true
+    # Per-user crontabs (/var/spool/cron/crontabs/<user> or /var/spool/cron/<user>) and at jobs
+    collect_directory "/var/spool/cron" "${acq_dir}/artefacts/cron_jobs" "$hostname" "$audit_log" "$meta_log" 3 1M || true
+    collect_directory "/var/spool/at" "${acq_dir}/artefacts/at_jobs" "$hostname" "$audit_log" "$meta_log" 2 1M || true
     collect_directory "/etc/systemd" "${acq_dir}/artefacts/conf" "$hostname" "$audit_log" "$meta_log" || true
 
     collect_linux_extras "$acq_dir" "$hostname" "$audit_log" "$meta_log"
@@ -443,8 +446,13 @@ collect_linux_volatile_files() {
     local acq_dir="$1"
     local hostname="$2"
     local audit_log="$3"
+    local meta_log="$4"
     local linux="${acq_dir}/artefacts/linux" hash
     mkdir -p "$linux"
+    # The temp directories themselves (hidden files included), capped per file
+    collect_directory "/tmp" "${acq_dir}/artefacts/tmp" "$hostname" "$audit_log" "$meta_log" 3 10M || true
+    collect_directory "/var/tmp" "${acq_dir}/artefacts/var_tmp" "$hostname" "$audit_log" "$meta_log" 3 10M || true
+    collect_directory "/dev/shm" "${acq_dir}/artefacts/dev_shm" "$hostname" "$audit_log" "$meta_log" 3 10M || true
     # Loaded kernel modules, the file each came from and its hash ('?': no modinfo)
     if [ -r /proc/modules ]; then
         local name size instances deps state address taint path hash
@@ -754,6 +762,15 @@ collect_macos_artifacts() {
     # files included), capped per file so large caches don't swamp the archive
     collect_directory "/Users/Shared" "${a}/shared" "$hostname" "$audit_log" "$meta_log" 3 10M || true
     collect_directory "/private/tmp" "${a}/tmp" "$hostname" "$audit_log" "$meta_log" 2 10M || true
+    # FSEvents: the file-system change journal, which rolls over; on the Data volume
+    # from macOS 10.15, at the root before
+    local fsevents
+    for fsevents in /System/Volumes/Data/.fseventsd /.fseventsd; do
+        if [ -d "$fsevents" ]; then
+            collect_directory "$fsevents" "${a}/fseventsd" "$hostname" "$audit_log" "$meta_log" 1 64M || true
+            break
+        fi
+    done
 
     # Logs: /var/log, /Library/Logs and the BSM audit config
     collect_directory "/private/var/log" "${a}/logs" "$hostname" "$audit_log" "$meta_log" 2 || true
@@ -863,7 +880,9 @@ create_archive() {
 
     echo -e "${BLUE}[*]${NC} Creating archive..." >&2
 
-    tar -czf "$output_file" -C "${acq_dir}" . 2>/dev/null || {
+    # COPYFILE_DISABLE: macOS tar would otherwise add an AppleDouble ._ file for each
+    # file with extended attributes
+    COPYFILE_DISABLE=1 tar -czf "$output_file" -C "${acq_dir}" . 2>/dev/null || {
         echo -e "${RED}[ERROR]${NC} Failed to create archive" >&2
         return 1
     }

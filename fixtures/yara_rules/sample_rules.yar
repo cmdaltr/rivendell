@@ -5,6 +5,7 @@
 
 rule Suspicious_PowerShell_Command {
     meta:
+        attack = "T1059.001"
         description = "Detects suspicious PowerShell commands"
         author = "Rivendell Test"
         severity = "medium"
@@ -20,6 +21,7 @@ rule Suspicious_PowerShell_Command {
 
 rule Potential_Credential_Access {
     meta:
+        attack = "T1003"
         description = "Detects potential credential access attempts"
         author = "Rivendell Test"
         severity = "high"
@@ -35,6 +37,7 @@ rule Potential_Credential_Access {
 
 rule Suspicious_Network_Activity {
     meta:
+        attack = "T1105"
         description = "Detects suspicious network-related strings"
         author = "Rivendell Test"
         severity = "medium"
@@ -51,6 +54,7 @@ rule Suspicious_Network_Activity {
 
 rule Base64_Encoded_Content {
     meta:
+        attack = "T1027"
         description = "Detects base64 encoded executable content"
         author = "Rivendell Test"
         severity = "low"
@@ -63,6 +67,7 @@ rule Base64_Encoded_Content {
 
 rule Persistence_Registry_Keys {
     meta:
+        attack = "T1547.001"
         description = "Detects references to common persistence registry keys"
         author = "Rivendell Test"
         severity = "medium"

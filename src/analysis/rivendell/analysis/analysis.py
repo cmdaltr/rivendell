@@ -11,6 +11,7 @@ from pathlib import Path
 from rivendell.audit import write_audit_log_entry
 from rivendell.analysis.iocs import compare_iocs
 from rivendell.analysis.ntfs_ads import known_stream_note, mft_alternate_data_streams
+from rivendell.process.extractions.artemis import _record_techniques
 
 
 def _analyse_artemis_mft_from_status_log(ar, f, stage, vssimage, anysd, verbosity, output_directory, analyse_mft_json_func):
@@ -261,6 +262,8 @@ def analyse_artefacts(
                         datetime.now().isoformat().replace("T", " "), stream, short, vssimage
                     )
                     write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        if total > benign:
+            _record_techniques(os.path.join(output_directory, "mitre_techniques.txt"), ["T1564.004"])
         now = datetime.now().isoformat().replace("T", " ")
         print(" -> {} ->   Alternate Data Streams: {} files ({} likely benign: Mark of the Web, compression and similar)".format(now, total, benign))
 

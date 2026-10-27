@@ -46,7 +46,7 @@ It follows its own link back to the repository, so moving the clone means runnin
 | `rivendell lab <command>` | The test lab, `lab/lab.sh` |
 | `rivendell scripts` | Lists every script under `scripts/` |
 | `rivendell <group> <name> [args]` | One of them, e.g. `rivendell jobs status`, `rivendell siem splunk-restart`, `rivendell docker clean` |
-| `rivendell map [realm\|elrond\|gandalf\|machine]` | Opens an architecture page; `machine` (3D) is served on 127.0.0.1:5690 until Ctrl-C |
+| `rivendell map [realm\|elrond\|gandalf\|journey]` | Opens an architecture page; `journey` (3D, also `machine`) is served on 127.0.0.1:5690 until Ctrl-C |
 | `rivendell where` | Prints the repository path |
 
 Forensic commands keep the directory you call them from, so relative evidence and output paths work as typed. Scripts under `scripts/` and the stack commands run from the repository root. Scripts are found when they're run (`scripts/<group>/<group>-<name>.sh`, `scripts/<group>/<name>.sh` or `.py`, or `scripts/<name>.sh`), so a new script needs no wiring. Python commands use `python3`; set `RIVENDELL_PYTHON` to use a virtualenv with Rivendell's requirements installed instead. The Windows collector is PowerShell and runs on Windows: `Invoke-Gandalf.ps1` in `src/acquisition/windows`.
@@ -194,9 +194,11 @@ On Windows, beyond the event logs, registry, prefetch, `$MFT` and browsers, Gand
 | `wer` | `Report.wer` (system and per user) | Elrond |
 | `notepad` | Windows 11 Notepad TabState | Elrond |
 | `registry\original` | hive files, transaction logs, RegBack | collected for the analyst |
-| `rdpcache`, `thumbcache` | RDP bitmap cache, Explorer thumbnail caches | collected for the analyst |
+| `thumbcache` | Explorer thumbnail and icon caches | Elrond: `thumbcache.csv`, each image saved to `cooked/thumbcache/<database>/` |
+| `powershell` | PSReadLine `ConsoleHost_history.txt` per user | Elrond: `powershell_history.csv`, download, encoded-command, Defender-tampering and other lines tagged (**T1059.001**, **T1105**, **T1027**, **T1562.001** and so on) |
+| `rdpcache` | RDP bitmap cache | collected for the analyst |
 
-The USN journal is parsed with the `$MFT` beside it, so journal entries carry full paths.
+The USN journal is parsed with the `$MFT` beside it, so journal entries carry full paths. `$LogFile` is decoded into `ntfs_logfile.csv`: names added to and removed from directories, MFT records initialised and freed, and renames (a removal and an add of the same file in one transaction), each with its `$FILE_NAME` times. It covers the last minutes to hours before collection, even where `$MFT` entries have been reused. `pagefile.sys`, `swapfile.sys` and `hiberfil.sys` are searched for URLs, command lines, Run-key paths, executable paths, e-mail and IPv4 addresses (`paged_strings.csv`, one row per distinct string with its first offset and count) whether or not `--Memory` is set; with it, the paging files also go to Volatility. `Amcache.hve` goes to Artemis.
 
 ---
 
@@ -224,6 +226,7 @@ On macOS, both the Bash and Python collectors gather:
 | Downloads and privacy | Quarantine events (`QuarantineEventsV2`), TCC databases, KnowledgeC |
 | Browsers | Safari (`History.db`, downloads, bookmarks), Chrome, Firefox |
 | Staging | `/Users/Shared`, `/private/tmp` and each user's Trash, files up to 10 MB |
+| Change journal | FSEvents (`/System/Volumes/Data/.fseventsd`, or `/.fseventsd` before 10.15), files up to 64 MB |
 | Volatile | Processes, `netstat`, `lsof`, loaded kexts, `launchctl list`, logins |
 | Background items | Background Task Management stores (`BackgroundItems-v*.btm`, per-user `backgrounditems.btm`): login items, agents and daemons as macOS 13+ tracks them |
 | Recent items | Shared file lists (`*.sfl2`, `*.sfl3`): recent documents, applications, servers |
@@ -234,7 +237,19 @@ On macOS, both the Bash and Python collectors gather:
 
 TCC.db, KnowledgeC, Safari, Mail, ExecPolicy and XPdb are protected by macOS: they're only readable when the process collecting them has Full Disk Access (for Remote mode, enable "Allow full disk access for remote users" under System Settings → General → Sharing → Remote Login). Anything unreadable is skipped and left out of `log.meta`. SQLite databases come with their `-wal`, so rows not yet checkpointed aren't lost. The full unified-log store isn't taken (it runs to gigabytes and Elrond has no `tracev3` parser); the export above is the live-host substitute, so a disk image has no unified logs.
 
-Elrond parses the macOS additions into `btm_items.csv` (third-party items flagged; enabled ones tag **T1543.001** or **T1547.015**), `shared_file_lists.csv` (paths decoded from the bookmarks), `notifications.csv`, `execpolicy_*.csv`, `kextpolicy_*.csv` (third-party kexts tag **T1547.006**), `xprotect_*.csv`, `emond_rules.csv` (**T1546.014**), `periodic.csv` and `unified_log.csv`. Biome and PowerLog are collected for the analyst only.
+Elrond parses the macOS additions into `btm_items.csv` (third-party items flagged; enabled ones tag **T1543.001** or **T1547.015**), `shared_file_lists.csv` (paths decoded from the bookmarks), `notifications.csv`, `execpolicy_*.csv`, `kextpolicy_*.csv` (third-party kexts tag **T1547.006**), `xprotect_*.csv`, `emond_rules.csv` (**T1546.014**), `periodic.csv` and `unified_log.csv`, and also:
+
+| Artefact | Elrond output |
+|---|---|
+| TCC databases | `tcc.csv`: every grant and denial, sensitive ones (Full Disk Access, Accessibility, Screen Recording, Apple Events, camera, microphone) flagged; a technique is tagged only for a client that runs from a temp, shared or hidden path |
+| KnowledgeC | `knowledgec.csv`: each event's stream, value, start, end and app |
+| Quarantine events | `quarantine_events.csv`: what was downloaded, by which app, from where; downloads by curl, scripts or Terminal and bare-IP URLs flagged (**T1105**) |
+| Biome streams | `biome.csv`: each SEGB record (v1 and v2) with its stream, state, times and the strings in its protobuf payload |
+| ASL stores | `asl.csv`: `/var/log/asl`, DiagnosticMessages and powermanagement records with sender, level, IDs and key/value pairs |
+| FSEvents | `fsevents.csv`: path, event ID, flags (created, removed, renamed, modified…) and inode, with each page file's time |
+| Staging folders | `staged_files.csv`: every file collected from `/Users/Shared` and `/private/tmp` with its hash; hidden names tag **T1564.001**, download tooling **T1105** |
+
+PowerLog is collected for the analyst only.
 
 On Linux, both collectors also take, into `linux/` (Elrond's image collection takes the same set):
 
@@ -245,7 +260,9 @@ On Linux, both collectors also take, into `linux/` (Elrond's image collection ta
 | Authentication | PAM stacks, `sudoers` and `sudoers.d` | `pam.csv` (**T1556.003**), `sudoers.csv` (**T1548.003**) |
 | Persistence | XDG autostart (system and per user), per-user systemd units, systemd generators, udev rules | `autostart.csv` (**T1547.013**, **T1543.002**), `generators.csv`, `udev_rules.csv` (**T1546.017**) |
 | Kernel | loaded modules with their file and SHA-256 (live only) | `kernel_modules.csv`; modules with no file, or one outside `/lib/modules`, tag **T1547.006** |
-| Staging | executables (ELF, scripts, exec bit) in `/tmp`, `/var/tmp`, `/dev/shm`, listed with hashes | `tmp_executables.csv` |
+| Staging | executables (ELF, scripts, exec bit) in `/tmp`, `/var/tmp`, `/dev/shm`, listed with hashes; the files themselves (up to 10 MB) into `tmp/`, `var_tmp/`, `dev_shm/` | `tmp_executables.csv`, `staged_files.csv` (hidden names **T1564.001**, download tooling **T1105**) |
+| Scheduled | `/etc/crontab`, `cron.d`, `cron.daily` and the like, per-user crontabs (`/var/spool/cron`), at jobs | `cron.csv` (jobs from temp or hidden paths, or with download or shell tradecraft, tag **T1053.003**), `at_jobs.csv` (**T1053.002**) |
+| SSH and accounts | `authorized_keys`, `known_hosts`, `sshd_config`, `passwd` with `shadow` | `ssh_keys.csv` (forced commands, root keys, keys whose comment names another host: **T1098.004**), `sshd_config.csv`, `accounts.csv` (password state and hash type only, never the hash; a second UID 0 tags **T1136.001**) |
 | Web | web-root scripts (`/var/www`, `/srv/www`, `/srv/http`, nginx html; up to 5,000 of 1 MB) and nginx/Apache configs | `webshells.csv` (**T1505.003**) |
 | Histories | zsh, vim (`.viminfo`), less, python, mysql, psql, wget HSTS, `recently-used.xbel` | `shell_histories.csv`, `viminfo.csv`, `wget_hsts.csv`, `recently_used.csv` |
 
@@ -322,7 +339,7 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 | `--extractIocs` | Extract IOCs from processed files. Slow |
 | `--iocsFile FILE` | Match extracted IOCs against a watchlist |
 | `--Keywords FILE` | Search for keywords. Remove blank and `#` lines first: they match every line |
-| `--Yara DIR` | Scan with YARA rules, against the whole mounted image or only collected files. Symbolic links are not followed (`yara -N`) |
+| `--Yara DIR` | Scan with YARA rules, against the whole mounted image or only collected files. Symbolic links are not followed (`yara -N`). A rule whose `meta` has `attack = "T1059.001, T1105"` (or `mitre`, `technique`) tags those techniques when it matches; any match on a web-root script tags **T1505.003** |
 | `--misplacedBinaries` | Find Windows system binaries in unexpected locations (**T1036.005**) |
 | `--masquerading` | RLO characters, double extensions, trailing spaces, renamed utilities (**T1036**) |
 | `--magicBytes` | Verify file signatures |

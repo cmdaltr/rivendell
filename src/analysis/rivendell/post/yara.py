@@ -6,7 +6,39 @@ import time
 from datetime import datetime
 
 from rivendell.audit import write_audit_log_entry
+from rivendell.process.extractions.artemis import _record_techniques
+from rivendell.process.linux_artefacts import WEB_ROOTS, WEB_SCRIPTS
 from rivendell.utils import safe_input
+
+# rule meta keys that carry ATT&CK technique IDs (attack = "T1059.001, T1105")
+TECHNIQUE_META = re.compile(r'^\s*(?:attack|attack_id|mitre|mitre_att|mitre_attack|technique|techniques)\s*=\s*"([^"]*)"',
+                            re.I | re.M)
+TECHNIQUE_ID = re.compile(r"\bT\d{4}(?:\.\d{3})?\b")
+RULE = re.compile(r"^\s*(?:(?:private|global)\s+)*rule\s+(\w+)", re.M)
+
+
+def rule_techniques(yara_file):
+    """{rule name: [technique IDs]} from each rule's meta section."""
+    try:
+        with open(yara_file, encoding="utf-8", errors="replace") as fh:
+            source = fh.read()
+    except OSError:
+        return {}
+    starts = [(m.start(), m.group(1)) for m in RULE.finditer(source)] + [(len(source), None)]
+    techniques = {}
+    for (start, name), (end, _) in zip(starts, starts[1:]):
+        found = [t for value in TECHNIQUE_META.findall(source[start:end]) for t in TECHNIQUE_ID.findall(value)]
+        if found:
+            techniques[name] = found
+    return techniques
+
+
+def web_script(path):
+    """A script in a web root (flattened by Gandalf, or as found on a mounted image)."""
+    name = path.split("/")[-1]
+    lower = path.lower()
+    in_root = name.startswith(WEB_ROOTS) or any("/" + r.replace("+", "/") in lower for r in WEB_ROOTS)
+    return in_root and lower.endswith(WEB_SCRIPTS)
 
 
 def validate_yara(verbosity, output_directory, img, yara_file, binary_dir):
@@ -65,6 +97,7 @@ def invoke_yara(verbosity, output_directory, img, yara_file, binary_dir):
     matches_found = 0
     current_rule = None
     current_file = None
+    matched = set()
 
     for line in yara_output.split("\n"):
         line = line.strip()
@@ -103,6 +136,16 @@ def invoke_yara(verbosity, output_directory, img, yara_file, binary_dir):
             if len(parts) >= 2:
                 current_rule = parts[0]
                 current_file = parts[1]
+                matched.add((current_rule, current_file))
+
+    # A rule's meta can name the techniques it detects; any hit on a web-root script
+    # is a likely web shell
+    by_rule = rule_techniques(yara_file)
+    techniques = {t for rule, _ in matched for t in by_rule.get(rule, [])}
+    if any(web_script(path) for _, path in matched):
+        techniques.add("T1505.003")
+    if techniques:
+        _record_techniques(os.path.join(output_directory, "mitre_techniques.txt"), sorted(techniques))
 
     if matches_found > 0:
         print(f"       Found {matches_found} YARA matches.")
