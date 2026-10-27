@@ -152,7 +152,7 @@ _3. Additional optional features_
 
 ### 🎯 Architecture
 
-Gandalf acquires, Elrond analyses, Eru answers. Four pictures show how. In the web app they're under **About**; from a shell, `rivendell map realm|elrond|gandalf|machine` opens each one.
+Gandalf acquires, Elrond analyses, Eru answers. Four pictures show how. In the web app they're under **About**; from a shell, `rivendell map realm|elrond|gandalf|journey` opens each one.
 
 <table>
   <tr>
@@ -171,8 +171,8 @@ Gandalf acquires, Elrond analyses, Eru answers. Four pictures show how. In the w
       <b>Gandalf's acquisition flow.</b> The three collectors, what each takes in order of volatility, how locked files are read, and how the hashed, encrypted archive reaches Elrond.
     </td>
     <td width="50%" valign="top">
-      <a href="./src/web/frontend/public/architecture/rivendell-machine.html"><img src="./src/web/frontend/public/architecture/machine.jpg" alt="The Rivendell machine, an interactive 3D view"/></a><br>
-      <b>The Rivendell machine (3D).</b> Every component on one bench. Pick an evidence type and watch its route through Elrond; switch Ollama off to see Eru fall back to fixed answers. Interactive, so open it with <code>rivendell map machine</code> or under About.
+      <a href="./src/web/frontend/public/architecture/rivendell-journey.html"><img src="./src/web/frontend/public/architecture/journey.jpg" alt="The evidence's journey through Rivendell, an interactive 3D map of Middle-earth"/></a><br>
+      <b>There and back again (3D).</b> The evidence's journey across Middle-earth: Gandalf walks his archives from the Shire, eagles carry images and datasets, through Bree, Amon Sûl and Rivendell to the beacons and the palantír. Pick an evidence type to change the road; switch Ollama off to see Eru fall back to fixed answers. Open it with <code>rivendell map journey</code> or under About.
     </td>
   </tr>
 </table>

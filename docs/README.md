@@ -23,7 +23,7 @@
 
 ### 📐 Architecture
 
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, components, data flow; the realm map, Elrond's roads, Gandalf's acquisition flow and the 3D machine (`rivendell map`)
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, components, data flow; the realm map, Elrond's roads, Gandalf's acquisition flow and the 3D journey (`rivendell map`)
 - **[REQUIREMENTS.md](REQUIREMENTS.md)** - System requirements and dependencies
 - **[FUNCTIONALITY.md](FUNCTIONALITY.md)** - File-descriptor handling, retries and other operational behaviour
 - **[PROGRESS_TRACKING.md](PROGRESS_TRACKING.md)** - How a job's progress percentage is worked out

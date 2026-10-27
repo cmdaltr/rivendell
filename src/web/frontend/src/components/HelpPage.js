@@ -11,9 +11,9 @@ const architecturePages = [
     title: "Gandalf's acquisition flow",
   },
   {
-    href: `${process.env.PUBLIC_URL}/architecture/rivendell-machine.html`,
-    preview: 'machine.jpg',
-    title: 'The Rivendell machine (interactive 3D)',
+    href: `${process.env.PUBLIC_URL}/architecture/rivendell-journey.html`,
+    preview: 'journey.jpg',
+    title: "The evidence's journey (interactive 3D)",
   },
 ];
 
@@ -34,21 +34,29 @@ const HelpPage = () => {
           <h4>Architecture</h4>
           <p>
             The whole platform drawn as a map of Middle-earth, Elrond's directed graph as it branches by evidence
-            type and operating system, and how Gandalf acquires from a live host. Open any of them full size.
+            type and operating system, how Gandalf acquires from a live host, and the whole platform as an
+            interactive 3D journey across Middle-earth. Open any of them full size.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', margin: '1rem 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1.5rem 1rem', margin: '1rem 0' }}>
             {architecturePages.map((page) => (
               <a
                 key={page.preview}
                 href={page.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ flex: '1 1 320px', color: '#a7db6c', textDecoration: 'none' }}
+                style={{ color: '#a7db6c', textDecoration: 'none' }}
               >
                 <img
                   src={`${process.env.PUBLIC_URL}/architecture/${page.preview}`}
                   alt={page.title}
-                  style={{ width: '100%', borderRadius: '6px', border: '1px solid #3f4b2a' }}
+                  style={{
+                    width: '100%',
+                    aspectRatio: '16 / 9',
+                    objectFit: 'cover',
+                    objectPosition: 'top',
+                    borderRadius: '6px',
+                    border: '1px solid #3f4b2a',
+                  }}
                 />
                 <div style={{ fontFamily: 'Cinzel, Times New Roman, serif', marginTop: '0.4rem' }}>{page.title}</div>
               </a>
@@ -140,7 +148,7 @@ rivendell anduril <command>                # container administration
 rivendell lab <command>                    # the test lab
 rivendell scripts                          # every script under scripts/
 rivendell jobs status                      # or any <group> <name>: siem splunk-restart, docker clean, ...
-rivendell map [realm|elrond|gandalf|machine] # open an architecture page`}
+rivendell map [realm|elrond|gandalf|journey] # open an architecture page`}
           </pre>
           <p>
             Forensic commands keep the directory you run them from, so relative evidence and output paths work as

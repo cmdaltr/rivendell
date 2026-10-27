@@ -37,7 +37,7 @@ The lab and the scripts:
 Set-up:
   install [dir]                     Link this command into dir (default ~/.local/bin) to run it from anywhere
   uninstall [dir]                   Remove that link
-  map [realm|elrond|gandalf|machine] Open an architecture page (machine is the 3D one)
+  map [realm|elrond|gandalf|journey] Open an architecture page (journey is the 3D one)
   help                              This list
 
 The Windows collector is PowerShell: run Invoke-Gandalf.ps1 from src/acquisition/windows
@@ -243,13 +243,13 @@ open_map() {
     case "${1:-realm}" in
         realm|elrond) page="rivendell-architecture.html#${1:-realm}" ;;
         gandalf)      page="gandalf-acquisition.html" ;;
-        machine)
+        journey|machine)
             # ES modules don't load from file://, so the 3D page is served on loopback
             local port="${RIVENDELL_MAP_PORT:-5690}"
-            echo "The Rivendell machine: http://127.0.0.1:$port/rivendell-machine.html (Ctrl-C to stop)"
-            (sleep 1; open_url "http://127.0.0.1:$port/rivendell-machine.html") &
+            echo "The Rivendell journey: http://127.0.0.1:$port/rivendell-journey.html (Ctrl-C to stop)"
+            (sleep 1; open_url "http://127.0.0.1:$port/rivendell-journey.html") &
             exec "${RIVENDELL_PYTHON:-python3}" -m http.server "$port" --bind 127.0.0.1 -d "$dir" ;;
-        *) echo "Unknown map '$1': realm, elrond, gandalf or machine" >&2; return 1 ;;
+        *) echo "Unknown map '$1': realm, elrond, gandalf or journey" >&2; return 1 ;;
     esac
     open_url "file://$dir/$page"
 }
