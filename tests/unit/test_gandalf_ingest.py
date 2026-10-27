@@ -99,6 +99,37 @@ class GandalfIngestTests(unittest.TestCase):
         self.assertFalse((raw / "crontab").exists(), "a user's crontab isn't the system crontab")
         self.assertTrue((self.out / "lab-macos" / "artefacts" / "lsof.info").is_file())
 
+    def test_manifest_checked_on_arrival(self):
+        import csv
+        import hashlib
+
+        files = dict(UNIX_LAYOUT)
+        files["artefacts/user/gandalf/.bash_history"] = "tampered after hashing"
+        rows = [["hostname", "file_path", "sha256_hash"]]
+        for name, body in UNIX_LAYOUT.items():
+            rows.append(["lab-rocky", name, hashlib.sha256(body.encode()).hexdigest()])
+        rows.append(["lab-rocky", "artefacts/gone,with a comma", "0" * 64])
+        manifest = io.StringIO()
+        csv.writer(manifest).writerows(rows)
+        files["log.meta"] = manifest.getvalue()
+        (self.acq / "lab-rocky").mkdir(parents=True)
+        write_tarball(self.acq / "lab-rocky" / "lab-rocky.tar.gz", files)
+        self.assess()
+
+        with open(self.out / "lab-rocky" / "gandalf_integrity.csv", newline="") as f:
+            status = {row["file_path"]: row["status"] for row in csv.DictReader(f)}
+        self.assertEqual(status["artefacts/etc+passwd"], "verified")
+        self.assertEqual(status["artefacts/user/gandalf/.bash_history"], "MISMATCH")
+        self.assertEqual(status["artefacts/gone,with a comma"], "missing")
+        self.assertEqual(list(status.values()).count("verified"), len(UNIX_LAYOUT) - 1)
+
+    def test_manifest_with_source_paths_is_not_checked(self):
+        files = dict(UNIX_LAYOUT, **{"log.meta": "hostname,file_path,sha256_hash\nlab-rocky,/etc/passwd," + "a" * 64 + "\n"})
+        (self.acq / "lab-rocky").mkdir(parents=True)
+        write_tarball(self.acq / "lab-rocky" / "lab-rocky.tar.gz", files)
+        self.assess()
+        self.assertFalse((self.out / "lab-rocky" / "gandalf_integrity.csv").exists())
+
     def test_zsh_extended_history(self):
         from rivendell.process.nix import parse_zsh_history
 

@@ -20,18 +20,47 @@ def audit_log(gandalf_host, artefact):
         )
 
 
-def audit_meta(gandalf_host, artefact):
-    sha256 = hashlib.sha256()
-    with open(artefact, "rb") as metafile:
-        buffer = metafile.read(262144)
-        while len(buffer) > 0:
-            sha256.update(buffer)
-            buffer = metafile.read(262144)
-    artefact_hash = sha256.hexdigest()
-    with open(os.path.join(gandalf_host, "log.meta"), "a") as gandalf_meta:
-        gandalf_meta.write(
-            "{},{},{}\n".format(gandalf_host.split("/")[-1], artefact, artefact_hash)
-        )
+def write_manifest(gandalf_host):
+    """SHA-256 of every collected file, by its path in the archive, into log.meta. Run
+    once everything is copied, so hashing doesn't widen the window in which the live
+    system changes under the collection; Elrond checks the hashes on arrival."""
+    manifest = os.path.join(gandalf_host, "log.meta")
+    count = 0
+    with open(manifest, "w", newline="") as gandalf_meta:
+        writer = csv.writer(gandalf_meta)
+        writer.writerow(["hostname", "file_path", "sha256_hash"])
+        for root, _, files in os.walk(gandalf_host):
+            for name in sorted(files):
+                path = os.path.join(root, name)
+                # log.audit is still being written (this pass adds to it), so it isn't hashed
+                if path in (manifest, os.path.join(gandalf_host, "log.audit")):
+                    continue
+                try:
+                    digest = _sha256_file(path)
+                except OSError:
+                    digest = "unreadable"
+                writer.writerow([gandalf_host.split("/")[-1], os.path.relpath(path, gandalf_host), digest])
+                count += 1
+    audit_log(gandalf_host, "log.meta ({} files hashed)".format(count))
+
+
+# Order of volatility (RFC 3227) for the system_artefacts walk: temp directories and
+# live kernel state, memory-backed files, logs that roll over, then the rest as listed,
+# then home directories (the largest and least volatile)
+VOLATILITY_RANKS = (
+    (("/tmp/", "/private/tmp/", "/var/tmp/", "/dev/shm/", "/proc/"), 0),
+    (("/swapfile", "/var/vm/"), 1),
+    (("/var/log/", "/private/var/db/diagnostics/", "/private/var/db/uuidtext/", "/.fseventsd/",
+      "/Library/Logs/"), 2),
+    (("/home/", "/root/", "/Users/"), 4),
+)
+
+
+def volatility_rank(item):
+    for prefixes, rank in VOLATILITY_RANKS:
+        if item[0].startswith(prefixes):
+            return rank
+    return 3
 
 
 def make_artefact_dir(gandalf_artefact_destination, artefact_output_dir):
@@ -204,6 +233,7 @@ def acquire_memory(mem_tool, command_params, gandalf_host):
 
 
 def collect_volatile_data(gandalf_artefact_destination):
+    # Order of volatility (RFC 3227): connections change by the second, then processes
     os_platform = str(platform.uname())
     # First line is what Elrond reads: <host>::<Linux|macOS>
     elrond_platform = "macOS" if platform.system() == "Darwin" else platform.system()
@@ -211,17 +241,6 @@ def collect_volatile_data(gandalf_artefact_destination):
         os.path.join(gandalf_artefact_destination, "host.info"), "w"
     ) as platform_info:
         platform_info.write("{}::{}\n{}\n".format(platform.node(), elrond_platform, os_platform))
-    processes = str(
-        subprocess.Popen(
-            ["ps", "aux"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        ).communicate()[0]
-    )[2:-3]
-    with open(
-        os.path.join(gandalf_artefact_destination, "process.info"), "w"
-    ) as process_info:
-        process_info.write(processes)
     try:
         netstat = str(
             subprocess.Popen(
@@ -250,6 +269,17 @@ def collect_volatile_data(gandalf_artefact_destination):
             ss_info.write(ss)
     except:
         pass
+    processes = str(
+        subprocess.Popen(
+            ["ps", "aux"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).communicate()[0]
+    )[2:-3]
+    with open(
+        os.path.join(gandalf_artefact_destination, "process.info"), "w"
+    ) as process_info:
+        process_info.write(processes)
     print(
         "      \033[1;32mAcquired volatile data from '{}'\033[1;m".format(
             gandalf_artefact_destination.split("/")[-2]
@@ -336,7 +366,6 @@ def _collect_one(source, destination, gandalf_host):
     except (PermissionError, OSError):
         return False
     audit_log(gandalf_host, source)
-    audit_meta(gandalf_host, destination)
     return True
 
 
@@ -500,7 +529,7 @@ def collect_macos_more(gandalf_artefact_destination, gandalf_host):
         except OSError:
             pass
         if os.path.isfile(export) and os.path.getsize(export) > 0:
-            audit_meta(gandalf_host, export)
+            audit_log(gandalf_host, "unified log export")
     print(
         "      \033[1;32mAcquired macOS background items, policy databases and unified-log export from '{}'\033[1;m".format(
             gandalf_host.split("/")[-1]
@@ -586,7 +615,7 @@ def _write_listing(path, rows, gandalf_host):
         writer = csv.DictWriter(out, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
-    audit_meta(gandalf_host, path)
+    audit_log(gandalf_host, os.path.basename(path))
 
 
 def kernel_module_listing():
@@ -618,12 +647,36 @@ def kernel_module_listing():
     return rows
 
 
+def collect_linux_volatile_files(gandalf_artefact_destination, gandalf_host):
+    """Listings of what changes fastest: loaded kernel modules and the executables in
+    the temp directories, into linux/ as Elrond reads them."""
+    linux = os.path.join(gandalf_artefact_destination, "linux")
+    _write_listing(os.path.join(linux, "gandalf+kernel_modules.csv"), kernel_module_listing(), gandalf_host)
+    rows = []
+    for top in LINUX_TMP_DIRS:
+        if not os.path.isdir(top):
+            continue
+        for source in _walk_files(top, 3):
+            if source.startswith("/tmp/gandalf/"):
+                continue
+            kind = _executable_kind(source)
+            if not kind:
+                continue
+            try:
+                info = os.lstat(source)
+                digest = _sha256_file(source) if info.st_size <= LINUX_HASH_MAX_BYTES else ""
+            except OSError:
+                continue
+            rows.append({"Path": source, "Size": info.st_size, "Mode": oct(info.st_mode & 0o7777), "UID": info.st_uid,
+                         "Kind": kind, "SHA256": digest, "MTime": int(info.st_mtime)})
+    _write_listing(os.path.join(linux, "gandalf+tmp_executables.csv"), rows, gandalf_host)
+
+
 def collect_linux_extras(gandalf_artefact_destination, gandalf_host):
     """
     Linux persistence, login-record and history artefacts the system_artefacts walk
     misses (preload, PAM, sudoers.d, udev, generators, autostart, utmp/wtmp/btmp,
-    lastlog, web roots, extra shell histories), plus listings of loaded kernel
-    modules and of executables in the temp directories.
+    lastlog, web roots, extra shell histories).
     """
     linux = os.path.join(gandalf_artefact_destination, "linux")
     seen = set()
@@ -672,25 +725,6 @@ def collect_linux_extras(gandalf_artefact_destination, gandalf_host):
                 for source in _walk_files(os.path.join(home, sub), 1):
                     if source.endswith(suffixes):
                         take(source, flat(source), 1 << 20)
-    _write_listing(os.path.join(linux, "gandalf+kernel_modules.csv"), kernel_module_listing(), gandalf_host)
-    rows = []
-    for top in LINUX_TMP_DIRS:
-        if not os.path.isdir(top):
-            continue
-        for source in _walk_files(top, 3):
-            if source.startswith("/tmp/gandalf/"):
-                continue
-            kind = _executable_kind(source)
-            if not kind:
-                continue
-            try:
-                info = os.lstat(source)
-                digest = _sha256_file(source) if info.st_size <= LINUX_HASH_MAX_BYTES else ""
-            except OSError:
-                continue
-            rows.append({"Path": source, "Size": info.st_size, "Mode": oct(info.st_mode & 0o7777), "UID": info.st_uid,
-                         "Kind": kind, "SHA256": digest, "MTime": int(info.st_mtime)})
-    _write_listing(os.path.join(linux, "gandalf+tmp_executables.csv"), rows, gandalf_host)
     print(
         "      \033[1;32mAcquired Linux persistence, login-record and history artefacts from '{}'\033[1;m".format(
             gandalf_host.split("/")[-1]
@@ -762,6 +796,10 @@ def acquire_artefacts(
     gandalf_artefact_destination = os.path.join(gandalf_host, "artefacts")
     os.mkdir(gandalf_artefact_destination)
     os_platform = str(platform.uname())
+    # Live state takes seconds and the memory dump minutes, so live state goes first
+    collect_volatile_data(gandalf_artefact_destination)
+    if platform.system() == "Linux":
+        collect_linux_volatile_files(gandalf_artefact_destination, gandalf_host)
     if memory != "None":
         print(
             "      Acquiring memory dump from '{}'".format(
@@ -799,8 +837,7 @@ def acquire_artefacts(
         print()
     else:
         pass
-    collect_volatile_data(gandalf_artefact_destination)
-    for artefact, artefact_output_dir in system_artefacts.items():
+    for artefact, artefact_output_dir in sorted(system_artefacts.items(), key=volatility_rank):
         if os.path.exists(artefact):
             if not artefact.endswith("/") and artefact_output_dir == "":  # file
                 copy_file(artefact, gandalf_artefact_destination)
@@ -1418,6 +1455,7 @@ def acquire_artefacts(
                     pass
     else:
         pass
+    write_manifest(gandalf_host)
     for collected_root, collected_dirs, collected_files in os.walk(gandalf_directory):
         for collected_dir in collected_dirs:
             os.chmod(os.path.join(collected_root, collected_dir), 0o755)

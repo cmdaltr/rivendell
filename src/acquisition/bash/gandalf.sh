@@ -219,7 +219,8 @@ log_audit() {
     echo "${timestamp},${hostname},${artefact},collected" >> "$log_file"
 }
 
-# Collect file with hash
+# Copy a file into the acquisition directory. Hashing waits for write_manifest, once
+# everything is copied, so it doesn't widen the window in which the system changes.
 collect_file() {
     local source="$1"
     local dest="$2"
@@ -232,13 +233,6 @@ collect_file() {
 
         # Copy file preserving timestamps
         cp -p "$source" "$dest" 2>/dev/null || return 1
-
-        # Calculate hash
-        local hash=$(sha256_of "$dest")
-
-        # Log to metadata
-        echo "${hostname},${source},${hash}" >> "$meta_log"
-
         return 0
     fi
     return 1
@@ -252,38 +246,36 @@ collect_volatile() {
 
     echo -e "${BLUE}[*]${NC} Collecting volatile data..."
 
-    # Platform information
-    # First line is what Elrond reads: <host>::<Linux|macOS>
-    local platform="Linux"
-    [ "$(uname -s)" = "Darwin" ] && platform="macOS"
-    { echo "${hostname}::${platform}"; uname -a; } > "${acq_dir}/artefacts/host.info" 2>/dev/null || true
-    log_audit "$audit_log" "$hostname" "host.info"
+    # Order of volatility (RFC 3227): connections change by the second, then processes
+    if is_macos; then
+        netstat -anv > "${acq_dir}/artefacts/netstat.info" 2>/dev/null && log_audit "$audit_log" "$hostname" "netstat.info" || true
+        lsof -nP -i > "${acq_dir}/artefacts/lsof.info" 2>/dev/null && log_audit "$audit_log" "$hostname" "lsof.info" || true
+    else
+        if command -v ss &> /dev/null; then
+            ss -tunap > "${acq_dir}/artefacts/ss.info" 2>/dev/null || true
+            log_audit "$audit_log" "$hostname" "ss.info"
+        fi
+        if command -v netstat &> /dev/null; then
+            netstat -tunap > "${acq_dir}/artefacts/netstat.info" 2>/dev/null || true
+            log_audit "$audit_log" "$hostname" "netstat.info"
+        fi
+    fi
 
-    # Process list
     ps aux > "${acq_dir}/artefacts/process.info" 2>/dev/null || true
     log_audit "$audit_log" "$hostname" "process.info"
 
     if is_macos; then
         collect_volatile_macos "$acq_dir" "$hostname" "$audit_log"
-        return 0
+    else
+        lsmod > "${acq_dir}/artefacts/lsmod.info" 2>/dev/null || true
+        env > "${acq_dir}/artefacts/env.info" 2>/dev/null || true
     fi
 
-    # Network connections
-    if command -v ss &> /dev/null; then
-        ss -tunap > "${acq_dir}/artefacts/ss.info" 2>/dev/null || true
-        log_audit "$audit_log" "$hostname" "ss.info"
-    fi
-
-    if command -v netstat &> /dev/null; then
-        netstat -tunap > "${acq_dir}/artefacts/netstat.info" 2>/dev/null || true
-        log_audit "$audit_log" "$hostname" "netstat.info"
-    fi
-
-    # Loaded modules
-    lsmod > "${acq_dir}/artefacts/lsmod.info" 2>/dev/null || true
-
-    # Environment variables
-    env > "${acq_dir}/artefacts/env.info" 2>/dev/null || true
+    # First line is what Elrond reads: <host>::<Linux|macOS>
+    local platform="Linux"
+    is_macos && platform="macOS"
+    { echo "${hostname}::${platform}"; uname -a; } > "${acq_dir}/artefacts/host.info" 2>/dev/null || true
+    log_audit "$audit_log" "$hostname" "host.info"
 }
 
 # Collect memory dump
@@ -325,6 +317,11 @@ collect_artifacts() {
         return 0
     fi
 
+    # Order of volatility: temp directories (cleaned by tmpfiles and reboots) and the
+    # loaded modules, then logs (rotated), then configuration and user files
+    collect_linux_volatile_files "$acq_dir" "$hostname" "$audit_log"
+    collect_directory "/var/log" "${acq_dir}/artefacts/logs" "$hostname" "$audit_log" "$meta_log" || true
+
     # Artefact mappings: source|destination under artefacts/ (a plain list, as
     # bash 3.2 has no associative arrays)
     local mapping source dest_name dest
@@ -348,8 +345,6 @@ collect_artifacts() {
 /etc/os-release|etc+os-release
 MAP
 
-    # Collect directories
-    collect_directory "/var/log" "${acq_dir}/artefacts/logs" "$hostname" "$audit_log" "$meta_log" || true
     collect_directory "/etc/cron.d" "${acq_dir}/artefacts/cron" "$hostname" "$audit_log" "$meta_log" || true
     collect_directory "/etc/systemd" "${acq_dir}/artefacts/conf" "$hostname" "$audit_log" "$meta_log" || true
 
@@ -440,6 +435,15 @@ DIRS
             \( -name '*.desktop' -o -name '*.service' -o -name '*.timer' \) -print0 2>/dev/null)
     done
 
+}
+
+# Listings of what changes fastest: loaded kernel modules and the executables in the
+# temp directories, into artefacts/linux/ as Elrond reads them
+collect_linux_volatile_files() {
+    local acq_dir="$1"
+    local hostname="$2"
+    local audit_log="$3"
+    local linux="${acq_dir}/artefacts/linux" hash
     mkdir -p "$linux"
     # Loaded kernel modules, the file each came from and its hash ('?': no modinfo)
     if [ -r /proc/modules ]; then
@@ -454,7 +458,7 @@ DIRS
                 echo "${name},${size},${instances},${state},${taint},${path},${hash}"
             done < /proc/modules
         } > "${linux}/gandalf+kernel_modules.csv"
-        echo "${hostname},/proc/modules,$(sha256_of "${linux}/gandalf+kernel_modules.csv")" >> "$meta_log"
+        log_audit "$audit_log" "$hostname" "/proc/modules"
     fi
     # Executables in the temp directories: ELF, scripts, anything with an exec bit
     local listing="${linux}/gandalf+tmp_executables.csv" rows="" kind head mode uid mtime fsize
@@ -472,8 +476,28 @@ DIRS
     done < <(find /tmp /var/tmp /dev/shm -maxdepth 3 -type f -print0 2>/dev/null)
     if [ -n "$rows" ]; then
         printf 'Path,Size,Mode,UID,Kind,SHA256,MTime\n%s' "$rows" > "$listing"
-        echo "${hostname},temp-directory executables,$(sha256_of "$listing")" >> "$meta_log"
+        log_audit "$audit_log" "$hostname" "temp-directory executables"
     fi
+}
+
+# SHA-256 of every collected file, by its path in the archive, once everything is
+# copied (Elrond checks them on arrival)
+write_manifest() {
+    local acq_dir="$1"
+    local hostname="$2"
+    local audit_log="$3"
+    local meta_log="$4"
+    local file rel count=0
+
+    echo -e "${BLUE}[*]${NC} Hashing collected files..."
+    while IFS= read -r -d '' file; do
+        # log.audit is still being written (this pass adds to it), so it isn't hashed
+        [ "$file" = "$meta_log" ] || [ "$file" = "$audit_log" ] && continue
+        rel="${file#"${acq_dir}"/}"
+        printf '%s,"%s",%s\n' "$hostname" "${rel//\"/\"\"}" "$(sha256_of "$file")" >> "$meta_log"
+        count=$((count + 1))
+    done < <(find "$acq_dir" -type f -print0 2>/dev/null)
+    log_audit "$audit_log" "$hostname" "log.meta (${count} files hashed)"
 }
 
 # Collect directory with depth limit
@@ -611,8 +635,6 @@ collect_volatile_macos() {
     local audit_log="$3"
     local out="${acq_dir}/artefacts"
 
-    netstat -anv > "${out}/netstat.info" 2>/dev/null && log_audit "$audit_log" "$hostname" "netstat.info" || true
-    lsof -nP -i > "${out}/lsof.info" 2>/dev/null && log_audit "$audit_log" "$hostname" "lsof.info" || true
     kmutil showloaded > "${out}/kexts.info" 2>/dev/null || kextstat > "${out}/kexts.info" 2>/dev/null || true
     launchctl list > "${out}/launchctl.info" 2>/dev/null || true
     sw_vers > "${out}/sw_vers.info" 2>/dev/null || true
@@ -714,7 +736,7 @@ DIRS
             'process IN {"sudo","su","sshd","sshd-session","loginwindow","screensharingd","syspolicyd","XprotectService","backgroundtaskmanagementd","authd"} OR subsystem IN {"com.apple.TCC","com.apple.xprotect","com.apple.syspolicy.exec","com.apple.backgroundtaskmanagement"}' \
             2>/dev/null | head -n 500000 > "${macos}/gandalf+unifiedlog.ndjson" || true
         if [ -s "${macos}/gandalf+unifiedlog.ndjson" ]; then
-            echo "${hostname},unified log export,$(sha256_of "${macos}/gandalf+unifiedlog.ndjson")" >> "$meta_log"
+            log_audit "$audit_log" "$hostname" "unified log export"
         fi
     fi
 }
@@ -725,6 +747,18 @@ collect_macos_artifacts() {
     local audit_log="$3"
     local meta_log="$4"
     local a="${acq_dir}/artefacts"
+
+    # Order of volatility: temp folders first (cleaned at reboot and by periodic jobs),
+    # then logs (rotated), then configuration and persistence
+    # Staging locations: world-writable shared and temporary folders (hidden
+    # files included), capped per file so large caches don't swamp the archive
+    collect_directory "/Users/Shared" "${a}/shared" "$hostname" "$audit_log" "$meta_log" 3 10M || true
+    collect_directory "/private/tmp" "${a}/tmp" "$hostname" "$audit_log" "$meta_log" 2 10M || true
+
+    # Logs: /var/log, /Library/Logs and the BSM audit config
+    collect_directory "/private/var/log" "${a}/logs" "$hostname" "$audit_log" "$meta_log" 2 || true
+    collect_directory "/Library/Logs" "${a}/logs_library" "$hostname" "$audit_log" "$meta_log" 2 50M || true
+    collect_directory "/etc/security" "${a}/logs_security" "$hostname" "$audit_log" "$meta_log" 1 || true
 
     local source dest_name
     while IFS='|' read -r source dest_name; do
@@ -755,10 +789,6 @@ MAP
     collect_plists "/System/Library/LaunchAgents" "system+launchagents-" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
     collect_plists "/System/Library/LaunchDaemons" "system+launchdaemons-" "$acq_dir" "$hostname" "$audit_log" "$meta_log"
 
-    # Logs: /var/log, /Library/Logs and the BSM audit config
-    collect_directory "/private/var/log" "${a}/logs" "$hostname" "$audit_log" "$meta_log" 2 || true
-    collect_directory "/Library/Logs" "${a}/logs_library" "$hostname" "$audit_log" "$meta_log" 2 50M || true
-    collect_directory "/etc/security" "${a}/logs_security" "$hostname" "$audit_log" "$meta_log" 1 || true
 
     # cron/at: per-user crontabs are files named after the user
     local tab
@@ -767,10 +797,6 @@ MAP
         collect_file "$tab" "${a}/cron/$(basename "$tab")+crontab" "$hostname" "$meta_log" && log_audit "$audit_log" "$hostname" "$tab"
     done
 
-    # Staging locations: world-writable shared and temporary folders (hidden
-    # files included), capped per file so large caches don't swamp the archive
-    collect_directory "/Users/Shared" "${a}/shared" "$hostname" "$audit_log" "$meta_log" 3 10M || true
-    collect_directory "/private/tmp" "${a}/tmp" "$hostname" "$audit_log" "$meta_log" 2 10M || true
 
     local user_home username
     for user_home in /Users/* /var/root; do
@@ -905,6 +931,7 @@ acquire_local() {
     collect_volatile "$acq_dir" "$hostname" "$audit_log"
     collect_memory "$acq_dir" "$hostname" "$audit_log"
     collect_artifacts "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    write_manifest "$acq_dir" "$hostname" "$audit_log" "$meta_log"
 
     # Archive
     local archive_file=$(create_archive "$acq_dir" "$hostname")

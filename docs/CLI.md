@@ -2,23 +2,54 @@
 
 **Version:** 2.1.0
 
-Every command below runs from the repository root. The Python modules are run with `python3 -m src.analysis.…`. Don't run them from inside `src/analysis`: Elrond's `platform/` package shadows the standard library `platform` module there, so anything that imports numpy or pandas loads `elrond.py` and fails on its arguments.
+Every command below can be run through the `rivendell` command from any directory (see [The `rivendell` command](#the-rivendell-command)); called directly, they run from the repository root. The Python modules are run with `python3 -m src.analysis.…`. Don't run them from inside `src/analysis`: Elrond's `platform/` package shadows the standard library `platform` module there, so anything that imports numpy or pandas loads `elrond.py` and fails on its arguments.
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Gandalf - Acquisition](#gandalf---acquisition)
-3. [Elrond - Analysis](#elrond---analysis)
-4. [MITRE ATT&CK Tools](#mitre-attck-tools)
-5. [Cloud Forensics](#cloud-forensics)
-6. [AI Agent](#ai-agent)
-7. [SIEM Integration](#siem-integration)
-8. [Docker Administration (Anduril)](#docker-administration-anduril)
-9. [Utility Commands](#utility-commands)
-10. [Configuration](#configuration)
-11. [Common Workflows](#common-workflows)
+1. [The `rivendell` command](#the-rivendell-command)
+2. [Overview](#overview)
+3. [Gandalf - Acquisition](#gandalf---acquisition)
+4. [Elrond - Analysis](#elrond---analysis)
+5. [MITRE ATT&CK Tools](#mitre-attck-tools)
+6. [Cloud Forensics](#cloud-forensics)
+7. [AI Agent](#ai-agent)
+8. [SIEM Integration](#siem-integration)
+9. [Docker Administration (Anduril)](#docker-administration-anduril)
+10. [Utility Commands](#utility-commands)
+11. [Configuration](#configuration)
+12. [Common Workflows](#common-workflows)
+
+---
+
+## The `rivendell` command
+
+`rivendell` at the repository root runs everything: the Docker stack, Gandalf, Elrond, Mordor, Anduril, the lab, and every script under `scripts/`. Link it into a directory on your `PATH` once and it runs from anywhere:
+
+```bash
+./rivendell install            # links ~/.local/bin/rivendell; or: ./rivendell install /usr/local/bin
+rivendell help
+```
+
+It follows its own link back to the repository, so moving the clone means running `install` again. `rivendell uninstall` removes the link.
+
+| Command | Runs |
+|---|---|
+| `rivendell start \| stop \| restart \| status [--testing] [--logs]` | The Docker stack (`--testing` leaves out Splunk and Elastic) |
+| `rivendell gandalf [bash\|python] <args>` | `gandalf.sh` (the default) or `gandalf.py` |
+| `rivendell acquire <args>` | Gandalf through the Python CLI |
+| `rivendell analyse <args>` | Elrond (`analyze` works too) |
+| `rivendell mordor <command>` | Security datasets: `list`, `download`, `info`, `local`, `verify`, `refresh`, `stats` |
+| `rivendell anduril <command>` | Container administration (also `aragorn`) |
+| `rivendell web` | The web UI and API without Docker |
+| `rivendell lab <command>` | The test lab, `lab/lab.sh` |
+| `rivendell scripts` | Lists every script under `scripts/` |
+| `rivendell <group> <name> [args]` | One of them, e.g. `rivendell jobs status`, `rivendell siem splunk-restart`, `rivendell docker clean` |
+| `rivendell map` | Opens the architecture map |
+| `rivendell where` | Prints the repository path |
+
+Forensic commands keep the directory you call them from, so relative evidence and output paths work as typed. Scripts under `scripts/` and the stack commands run from the repository root. Scripts are found when they're run (`scripts/<group>/<group>-<name>.sh`, `scripts/<group>/<name>.sh` or `.py`, or `scripts/<name>.sh`), so a new script needs no wiring. Python commands use `python3`; set `RIVENDELL_PYTHON` to use a virtualenv with Rivendell's requirements installed instead. The Windows collector is PowerShell and runs on Windows: `Invoke-Gandalf.ps1` in `src/acquisition/windows`.
 
 ---
 
@@ -113,6 +144,25 @@ sudo ./src/acquisition/bash/gandalf.sh Key Remote -h 192.168.1.100 -u analyst
 ```
 
 `-EncryptionObject` takes `Key`, `Password` or `None`; `-Acquisition` takes `Local` or `Remote`. With no arguments it runs `-EncryptionObject None -Acquisition Local -OutputDirectory C:\TEMP\gandalf\gandalf`.
+
+#### Collection order and integrity
+
+All three collectors copy everything into their local working directory first, in order of volatility (RFC 3227), and hash it only afterwards:
+
+| Order | Windows | Linux | macOS |
+|---|---|---|---|
+| 1. Live state | network connections, processes | `ss`/`netstat`, `ps` | `netstat`, `lsof`, `ps` |
+| 2. Memory (`-M`) | DumpIt | AVML | osxpmem |
+| 3. Rest of the live state | services, drivers, tasks, system info | `lsmod`, `env`, loaded modules, executables in `/tmp` and `/dev/shm` | kexts, `launchctl`, sessions |
+| 4. Journals and memory-backed files | `$LogFile`, `$UsnJrnl:$J`, `pagefile.sys`, `swapfile.sys`, then `$MFT` | | `/private/tmp`, `/Users/Shared` |
+| 5. Logs that roll over | event logs, prefetch, PowerShell history | `/var/log` and the journal | `/var/log`, `/Library/Logs` |
+| 6. Everything else | registry, locked files (Amcache, SRUM, setupapi, hiberfil), WMI, system and user artefacts | configuration, persistence, users | configuration, persistence, users, unified-log export |
+
+Connections and processes take seconds to list and the memory dump takes minutes, so they go first. `$LogFile` is a circular log that wraps in minutes on a busy host. Prefetch is rewritten whenever a program runs, Gandalf's own PowerShell included.
+
+Hashing waits until everything is copied, so it doesn't widen the window in which the system changes under the collection. Each collector then writes `log.meta` (`hostname,file_path,sha256_hash`, the path being where the file sits in the archive) and archives it with `log.audit`, which records when each artefact was taken. When Elrond extracts the archive it hashes every file again and writes `<host>/gandalf_integrity.csv` with a status per file: `verified`, `MISMATCH`, `missing` or `unhashed`. The summary also goes to Elrond's audit log. Archives from collectors older than this recorded source paths instead, which can't be checked; Elrond says so and carries on.
+
+The collection still writes to the disk it's collecting from (`C:\TEMP\gandalf` on Windows, `/tmp/gandalf` on Linux and macOS), which itself changes `$MFT`, `$LogFile` and the journals. Writing to other media with `-O` avoids that.
 
 #### Locked files and `disk_tools.zip`
 

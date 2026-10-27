@@ -209,16 +209,17 @@ function Get-Artefacts {
             }
         }
         
+        # Order of volatility (RFC 3227): connections and processes change by the second
+        # and take seconds to list, the memory dump takes minutes, so they go first
+        Get-Network $ShowProgress $OutputDirectory $Hostnames
+        Get-Processes $ShowProgress $OutputDirectory $Hostnames
         if ($Memory -And $Memory -ne "False") { 
             Get-Memory $ShowProgress $OutputDirectory $Hostnames
         }
-        
-        Get-SystemInfo $ShowProgress $OutputDirectory $Hostnames
-        Get-Processes $ShowProgress $OutputDirectory $Hostnames
-        Get-Drivers $ShowProgress $OutputDirectory $Hostnames
         Get-Services $ShowProgress $OutputDirectory $Hostnames
-        Get-Network $ShowProgress $OutputDirectory $Hostnames
+        Get-Drivers $ShowProgress $OutputDirectory $Hostnames
         Get-Tasks $ShowProgress $OutputDirectory $Hostnames
+        Get-SystemInfo $ShowProgress $OutputDirectory $Hostnames
     }
     function Get-RawVolume {
         Param ($Volume)
@@ -724,65 +725,38 @@ public class GandalfNtfs : IDisposable
         }
         return ,$Copied
     }
-    function Get-Core { 
-        Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
-        
-        $global:ProgressPreference = "SilentlyContinue"
-        # disk_tools.zip only adds RawCopy, a fallback for the raw volume reader
-        if (Test-Path -LiteralPath "$GandalfHome\tools\disk_tools.zip") {
-            Expand-Archive -LiteralPath "$GandalfHome\tools\disk_tools.zip" -DestinationPath "$GandalfHome\tools"
+    function Copy-Metafile {
+        Param ($ShowProgress, $OutputDirectory, $Hostnames, $Metafile)
+        # Off the raw volume: by record number, or $UsnJrnl's $J stream with its sparse
+        # ranges left out (they run to gigabytes)
+        $Name = $Metafile.Name
+        try {
+            Write-Progress "Acquiring $Name from '$Hostnames'..."
+            $Out = Join-Path (Resolve-Path -LiteralPath "$OutputDirectory\$Hostnames\artefacts\artefacts\raw").ProviderPath $Name
+            if ($Metafile.ContainsKey("Path")) { $Bytes = (Get-RawVolume "C:").CopyFile($Metafile.Path, $Out) }
+            else { $Bytes = (Get-RawVolume "C:").CopyRecord($Metafile.Record, $Metafile.Stream, $Out, $false) }
+            Write-Host "       Acquired $Name from '$Hostnames' ($([Math]::Round($Bytes / 1MB)) MB)" -ForegroundColor Green
+            Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "$Name (raw volume read)" "acquired '$Name' from '$Hostnames'"
         }
-        $global:ProgressPreference = "Continue"
-
-        $RawOutput = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw"
-        $RawOutputPath = (Resolve-Path -LiteralPath $RawOutput).ProviderPath
-
-        # NTFS metafiles, off the raw volume: $MFT (record 0), $LogFile (record 2) and the
-        # USN journal's $J stream, sparse ranges left out (they run to gigabytes)
-        $Metafiles = @(
-            @{ Name = '$MFT'; Record = 0; Stream = "" },
-            @{ Name = '$LogFile'; Record = 2; Stream = "" },
-            @{ Name = '$UsnJrnl'; Path = 'C:\$Extend\$UsnJrnl:$J' }
-        )
-        ForEach ($Metafile in $Metafiles) {
-            $Name = $Metafile.Name
-            try {
-                Write-Progress "Acquiring $Name from '$Hostnames'..."
-                $Out = Join-Path $RawOutputPath $Name
-                if ($Metafile.ContainsKey("Path")) { $Bytes = (Get-RawVolume "C:").CopyFile($Metafile.Path, $Out) }
-                else { $Bytes = (Get-RawVolume "C:").CopyRecord($Metafile.Record, $Metafile.Stream, $Out, $false) }
-                Write-Host "       Acquired $Name from '$Hostnames' ($([Math]::Round($Bytes / 1MB)) MB)" -ForegroundColor Green
-                Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "$Name (raw volume read)" "acquired '$Name' from '$Hostnames'"
-            }
-            catch {
-                Write-Host "      FAILURE: '$Name' could not be collected: $($_.Exception.Message)" -ForegroundColor Red
-            }
+        catch {
+            Write-Host "      FAILURE: '$Name' could not be collected: $($_.Exception.Message)" -ForegroundColor Red
         }
         Write-Progress -Activity "_" -Completed
-
-        $global:ProgressPreference = "SilentlyContinue"
-        $Architecture = Get-ComputerInfo | Select-Object OsArchitecture
-        $Architecture = Out-String -InputObject $Architecture
-        $Architecture = $Architecture -Replace '[\S\s]+(\d{2})-bit[\S\s]+', '$1'
-        $global:ProgressPreference = "Continue"
-        if ($Architecture -eq "64") { $RawCopyExe = "$GandalfHome\tools\RawCopy64.exe" } else { $RawCopyExe = "$GandalfHome\tools\RawCopy.exe" }
-        $HaveRawCopy = Test-Path -LiteralPath $RawCopyExe
-
-        # User Access Logs (Server), locked by the UAL service
-        if (Test-Path -LiteralPath "C:\Windows\System32\LogFiles\Sum") {
-            Write-Progress "Acquiring User Access Logs from '$Hostnames'..."
-            $Ual = Copy-ArtefactTree $ShowProgress $OutputDirectory $Hostnames "User Access Log" "C:\Windows\System32\LogFiles\Sum" "." "" "*.mdb" $false $false
-            if ($Ual -gt 0) { Write-Host "       Acquired User Access Logs from '$Hostnames'" -ForegroundColor Green }
-            Write-Progress -Activity "_" -Completed
-        }
-
+    }
+    function Copy-LockedFiles {
+        Param ($ShowProgress, $OutputDirectory, $Hostnames, $Artefacts)
         # Locked or in-use files: raw volume read, then RawCopy (tools\disk_tools.zip) if
         # it's there, then a temporary shadow copy
-        $Artefacts = @("hiberfil.sys", "pagefile.sys", "swapfile.sys", "Windows\AppCompat\Programs\Amcache.hve", "Windows\INF\setupapi.dev.log", "Windows\System32\sru\SRUDB.dat")
+        $RawOutput = "$OutputDirectory\$Hostnames\artefacts\artefacts\raw"
+        $RawOutputPath = (Resolve-Path -LiteralPath $RawOutput).ProviderPath
+        if ([Environment]::Is64BitOperatingSystem) { $RawCopyExe = "$GandalfHome\tools\RawCopy64.exe" } else { $RawCopyExe = "$GandalfHome\tools\RawCopy.exe" }
+        $HaveRawCopy = Test-Path -LiteralPath $RawCopyExe
         $FromShadow = @()
         ForEach ($Artefact in $Artefacts) {
             $ArtefactFile = $Artefact.Split("\\")[-1]
-            if (-Not (Test-Path -LiteralPath C:\$Artefact)) { continue }
+            # Not Test-Path: Windows PowerShell reports the in-use page, swap and hibernation
+            # files as missing
+            if (-Not [IO.File]::Exists("C:\$Artefact")) { continue }
             Write-Progress "Acquiring '$ArtefactFile' from '$Hostnames'..."
             $How = Copy-Artefact "C:\$Artefact" (Join-Path $RawOutputPath $ArtefactFile)
             if (-Not $How -and $HaveRawCopy) {
@@ -812,6 +786,37 @@ public class GandalfNtfs : IDisposable
                 }
             }
         }
+    }
+    function Get-Core { 
+        Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
+        
+        $global:ProgressPreference = "SilentlyContinue"
+        # disk_tools.zip only adds RawCopy, a fallback for the raw volume reader
+        if (Test-Path -LiteralPath "$GandalfHome\tools\disk_tools.zip") {
+            Expand-Archive -LiteralPath "$GandalfHome\tools\disk_tools.zip" -DestinationPath "$GandalfHome\tools" -Force
+        }
+        $global:ProgressPreference = "Continue"
+
+        # The file system's own records change fastest, so they come straight after the
+        # live state: $LogFile wraps in minutes on a busy host, then the USN journal, the
+        # memory-backed page and swap files, then $MFT
+        Copy-Metafile $ShowProgress $OutputDirectory $Hostnames @{ Name = '$LogFile'; Record = 2; Stream = "" }
+        Copy-Metafile $ShowProgress $OutputDirectory $Hostnames @{ Name = '$UsnJrnl'; Path = 'C:\$Extend\$UsnJrnl:$J' }
+        Copy-LockedFiles $ShowProgress $OutputDirectory $Hostnames @("pagefile.sys", "swapfile.sys")
+        Copy-Metafile $ShowProgress $OutputDirectory $Hostnames @{ Name = '$MFT'; Record = 0; Stream = "" }
+    }
+    function Get-LockedFiles {
+        Param ($ShowProgress, $OutputDirectory, $Hostnames)
+
+        # User Access Logs (Server), locked by the UAL service
+        if (Test-Path -LiteralPath "C:\Windows\System32\LogFiles\Sum") {
+            Write-Progress "Acquiring User Access Logs from '$Hostnames'..."
+            $Ual = Copy-ArtefactTree $ShowProgress $OutputDirectory $Hostnames "User Access Log" "C:\Windows\System32\LogFiles\Sum" "." "" "*.mdb" $false $false
+            if ($Ual -gt 0) { Write-Host "       Acquired User Access Logs from '$Hostnames'" -ForegroundColor Green }
+            Write-Progress -Activity "_" -Completed
+        }
+
+        Copy-LockedFiles $ShowProgress $OutputDirectory $Hostnames @("Windows\AppCompat\Programs\Amcache.hve", "Windows\INF\setupapi.dev.log", "Windows\System32\sru\SRUDB.dat", "hiberfil.sys")
     }
     function Get-Wmi { 
         Param ($ShowProgress, $DriveLetter, $OutputDirectory, $Hostnames)
@@ -1218,15 +1223,20 @@ public class GandalfNtfs : IDisposable
         Get-UserFiles $ShowProgress $OutputDirectory $Hostnames
     }
 
+    # Order of volatility: live state and memory, the file system's journals, then logs
+    # that roll over, prefetch (rewritten whenever a program runs, this PowerShell
+    # included), the registry, and the files that change least. Everything is copied
+    # into the output directory first; Write-Manifest hashes it all afterwards.
     Get-Volatile $ShowProgress $Memory $OutputDirectory $Hostnames
     Get-Core $ShowProgress $DriveLetter $OutputDirectory $Hostnames
-    Get-Wmi $ShowProgress $DriveLetter $OutputDirectory $Hostnames
+    Get-Winevt $ShowProgress $DriveLetter $OutputDirectory $Hostnames
+    Get-Prefetch $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-PowerShellHistory $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-Registry $ShowProgress $OutputDirectory $Hostnames
     Get-RegistryFiles $ShowProgress $OutputDirectory $Hostnames
+    Get-LockedFiles $ShowProgress $OutputDirectory $Hostnames
+    Get-Wmi $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-SystemArtefacts $ShowProgress $OutputDirectory $Hostnames
-    Get-Winevt $ShowProgress $DriveLetter $OutputDirectory $Hostnames
-    Get-Prefetch $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Get-UserArtefacts $ShowProgress $DriveLetter $OutputDirectory $Hostnames
     Write-Progress -Activity "_" -Completed
 }
@@ -1275,6 +1285,33 @@ function Get-Files {
     }
 }
 
+function Write-Manifest {
+    Param ($ShowProgress, $OutputDirectory, $Hostnames)
+    # Hashed once everything is copied, not file by file, so hashing doesn't widen the
+    # window in which the live system changes under the collection. log.meta and a copy
+    # of log.audit go inside the archive, where Elrond looks for them.
+    $Root = (Resolve-Path -LiteralPath "$OutputDirectory\$Hostnames\artefacts").ProviderPath
+    $Meta = Join-Path $Root "log.meta"
+    Write-Progress "Hashing the artefacts collected from '$Hostnames'..."
+    $Lines = New-Object System.Collections.Generic.List[string]
+    $Lines.Add("hostname,file_path,sha256_hash")
+    ForEach ($File in Get-ChildItem -LiteralPath $Root -Recurse -File -Force -ErrorAction SilentlyContinue) {
+        if ($File.FullName -eq $Meta) { continue }
+        try {
+            $Stream = [IO.File]::OpenRead($File.FullName)
+            try { $Hash = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($Stream)) -replace '-', '').ToLower() }
+            finally { $Stream.Dispose() }
+            $Lines.Add("$Hostnames,$($File.FullName.Substring($Root.Length + 1)),$Hash")
+        }
+        catch { $Lines.Add("$Hostnames,$($File.FullName.Substring($Root.Length + 1)),unreadable") }
+    }
+    [IO.File]::WriteAllLines($Meta, $Lines)
+    Write-Progress -Activity "_" -Completed
+    Write-Host "       Hashed $($Lines.Count - 1) files from '$Hostnames' (SHA-256, log.meta)" -ForegroundColor Green
+    Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "log.meta" "hashed $($Lines.Count - 1) collected files from '$Hostnames'"
+    Copy-Item -LiteralPath "$OutputDirectory\$Hostnames\log.audit" -Destination (Join-Path $Root "log.audit") -Force
+}
+
 function New-Archive {
     Param ($EncryptionObject, $OutputDirectory, $ShowProgress, $Hostnames, $Message, $ArchiveObject)
 
@@ -1317,19 +1354,20 @@ function Optimize-Archive {
     Param ($OutputDirectory, $Hostnames)
     function Remove-Directories {
         Param ($OutputDirectory, $Hostnames)
+        # Counted with -Force: a folder holding only hidden files (a Startup folder's
+        # desktop.ini) isn't empty, and Remove-Item on it would stop at a confirmation
+        # prompt that nobody answers on an unattended or remote run
         $EmptyDirectories = @()
-        ForEach ($SubDirectory in Get-ChildItem -Force -Literal $OutputDirectory\$Hostnames\artefacts\artefacts\raw -Directory) {
-            $SubFiles = (Get-ChildItem $OutputDirectory\$Hostnames\artefacts\artefacts\raw\$SubDirectory | Measure-Object).Count
-            $SubFiles = [convert]::ToInt32($SubFiles)
+        ForEach ($SubDirectory in Get-ChildItem -Force -LiteralPath $OutputDirectory\$Hostnames\artefacts\artefacts\raw -Directory) {
+            $SubFiles = @(Get-ChildItem -Force -LiteralPath $SubDirectory.FullName -ErrorAction SilentlyContinue).Count
             if ($SubFiles -eq 0) {
                 if (-Not ($SubDirectory.FullName.Endswith("browsers"))) {
                     $EmptyDirectories += , $SubDirectory.FullName
                 }
             }
             if ($SubDirectory.FullName.Endswith("browsers")) {
-                ForEach ($BrowserDirectory in Get-ChildItem -Force -Literal $OutputDirectory\$Hostnames\artefacts\artefacts\raw\$SubDirectory -Directory) {
-                    $BrowserFiles = (Get-ChildItem $OutputDirectory\$Hostnames\artefacts\artefacts\raw\$SubDirectory\$BrowserDirectory | Measure-Object).Count
-                    $BrowserFiles = [convert]::ToInt32($BrowserFiles)
+                ForEach ($BrowserDirectory in Get-ChildItem -Force -LiteralPath $SubDirectory.FullName -Directory) {
+                    $BrowserFiles = @(Get-ChildItem -Force -LiteralPath $BrowserDirectory.FullName -ErrorAction SilentlyContinue).Count
                     if ($BrowserFiles -eq 0) {
                         $EmptyDirectories += , $BrowserDirectory.FullName
                     }
@@ -1337,7 +1375,7 @@ function Optimize-Archive {
             }
         }
         ForEach ($EachDirectory in $EmptyDirectories) {
-            Remove-Item -Path $EachDirectory > $null
+            Remove-Item -LiteralPath $EachDirectory -Force -Confirm:$false > $null
         }
     }
     Remove-Directories $OutputDirectory $Hostnames # remove empty artefact directories
@@ -1372,6 +1410,7 @@ function Invoke-LocalSession {
         Add-LogEntry $ShowProgress $OutputDirectory $Hostnames "file_collection_completed" $Message
     }
     $Result = Optimize-Archive $OutputDirectory $Hostnames
+    if ($Result -gt 0) { Write-Manifest $ShowProgress $OutputDirectory $Hostnames }
 
     if ($Result -gt 0) {
         New-Archive $EncryptionObject $OutputDirectory $ShowProgress $Hostnames $Message $ArchiveObject

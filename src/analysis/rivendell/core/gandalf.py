@@ -1,4 +1,6 @@
+import csv
 import getpass
+import hashlib
 import os
 import shutil
 import subprocess
@@ -178,6 +180,53 @@ def normalise_gandalf_artefacts(anchor, artefacts_dir):
     return raw
 
 
+def _sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def verify_manifest(staging):
+    """
+    Check every file Gandalf's log.meta lists against the extracted archive: path in
+    the archive (relative to log.meta, either separator), SHA-256. Returns
+    (rows, counts) with a status per file (verified, MISMATCH, missing, unhashed), or
+    None when there's no manifest, or one from a Gandalf that recorded source paths
+    instead of archive paths, which can't be checked.
+    """
+    manifest = None
+    for f in _files_under(staging):
+        if os.path.basename(f) == "log.meta":
+            manifest = f
+            break
+    if manifest is None:
+        return None
+    base = os.path.dirname(manifest)
+    rows, counts = [], {"verified": 0, "MISMATCH": 0, "missing": 0, "unhashed": 0}
+    with open(manifest, newline="", errors="replace") as f:
+        for record in csv.reader(f):
+            if len(record) < 3 or record[:3] == ["hostname", "file_path", "sha256_hash"]:
+                continue
+            relative, expected = ",".join(record[1:-1]), record[-1].strip().lower()
+            if os.path.isabs(relative):
+                return None
+            path = os.path.join(base, *relative.replace("\\", "/").split("/"))
+            if not _inside(base, path) or not os.path.isfile(path):
+                status, actual = "missing", ""
+            elif len(expected) != 64:
+                status, actual = "unhashed", ""
+            else:
+                actual = _sha256(path)
+                status = "verified" if actual == expected else "MISMATCH"
+            counts[status] += 1
+            rows.append({"file_path": relative, "expected_sha256": expected, "actual_sha256": actual, "status": status})
+    if rows and counts["verified"] == 0 and counts["missing"] == len(rows):
+        return None
+    return rows, counts
+
+
 def _find_host_info(root):
     for dirpath, _, files in os.walk(root):
         if "host.info" in files:
@@ -236,6 +285,24 @@ def ingest_gandalf_archive(archive, output_directory, verbosity, allimgs):
     if os.path.isdir(os.path.join(artefacts_dir, "raw")):
         print("   '{}' was already extracted to {}; reusing it".format(gandalf_host, artefacts_dir))
     else:
+        integrity = verify_manifest(staging)
+        if integrity is not None:
+            rows, counts = integrity
+            os.makedirs(host_dir, exist_ok=True)
+            with open(os.path.join(host_dir, "gandalf_integrity.csv"), "w", newline="") as out:
+                writer = csv.DictWriter(out, fieldnames=["file_path", "expected_sha256", "actual_sha256", "status"])
+                writer.writeheader()
+                writer.writerows(rows)
+            summary = ", ".join("{} {}".format(n, s) for s, n in counts.items() if n)
+            print("   Checked '{}' against Gandalf's hashes: {}".format(gandalf_host, summary))
+            entry, prnt = (
+                "{},{},gandalf integrity,{}\n".format(datetime.now().isoformat(), gandalf_host, summary.replace(",", ";")),
+                " -> {} -> checked '{}' against Gandalf's hashes: {}".format(
+                    datetime.now().isoformat().replace("T", " "), gandalf_host, summary),
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        else:
+            print("   No archive-path hashes from Gandalf for '{}' (older collector); integrity not checked".format(gandalf_host))
         for audit in ("log.audit", "log.meta"):
             for f in list(_files_under(staging)):
                 if os.path.basename(f) == audit:
