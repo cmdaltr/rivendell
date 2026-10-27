@@ -3,7 +3,7 @@
 # Usage: ./scripts/cleanup-orbstack-handles.sh [--force]
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RIVENDELL_ROOT="$(dirname "$SCRIPT_DIR")"
+RIVENDELL_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 cd "$RIVENDELL_ROOT"
 
 FORCE=false

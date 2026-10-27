@@ -7,7 +7,7 @@
 #   ./status.sh --full -w    # Watch mode with full IDs
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
+REPO_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 TEST_DIR="$REPO_DIR/tests"
 cd "$TEST_DIR"
 

@@ -1,45 +1,68 @@
 #!/usr/bin/env bash
-# rivendell - Manage the Rivendell forensics platform
+# rivendell - one command for the whole platform: the Docker stack, Gandalf, Elrond,
+# Mordor, Anduril, the lab and every script under scripts/. `rivendell install` links
+# it into a directory on your PATH so it runs from anywhere.
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-# ── Detect docker compose ─────────────────────────────────────────────────────
-if docker compose version &>/dev/null 2>&1; then
-    DC="docker compose"
-elif command -v docker-compose &>/dev/null; then
-    DC="docker-compose"
-else
-    echo "Error: docker compose is not available." >&2
-    exit 1
-fi
+# Follow symlinks to the real file, so a link in ~/.local/bin still finds the repo
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+PYTHON="${RIVENDELL_PYTHON:-python3}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 usage() {
     cat <<EOF
-Usage: $(basename "$0") <command> [options]
+Usage: rivendell <command> [options]
 
-Commands:
-  start     Start all services
-  stop      Stop all services
-  restart   Restart all services
-  status    Show service status and health
+The platform (Docker):
+  start | stop | restart | status   Run the stack (--testing: no Splunk/Elastic; --logs: follow logs)
+  anduril <command>                 Administer Rivendell's containers (status, logs, restart, ...)
 
-Options:
-  --testing   Testing mode: skips Splunk/Elastic (optimised for 16GB RAM)
-  --logs      Tail logs after start/restart
+Forensics (run from the directory you're working in; relative paths stay relative):
+  gandalf [bash|python] <args>      Collect from a Linux or macOS host (gandalf.sh by default)
+  acquire <args>                    Gandalf through the Python CLI (rivendell acquire --help)
+  analyse <args>                    Elrond (rivendell analyse --help); 'analyze' works too
+  mordor <command>                  Security datasets: list, download, info, local, verify, ...
+  web                               The web UI and API without Docker
 
-Examples:
-  ./rivendell start
-  ./rivendell start --testing --logs
-  ./rivendell restart
-  ./rivendell status
-  ./rivendell stop
+The lab and the scripts:
+  lab <command>                     The test lab (lab/lab.sh: linux-targets, windows-vm, gandalf-collect, ...)
+  scripts                           List every script under scripts/
+  <group> <name> [args]             Run one, e.g. 'rivendell jobs status', 'rivendell siem splunk-restart'
+
+Set-up:
+  install [dir]                     Link this command into dir (default ~/.local/bin) to run it from anywhere
+  uninstall [dir]                   Remove that link
+  map                               Open the architecture map
+  help                              This list
+
+The Windows collector is PowerShell: run Invoke-Gandalf.ps1 from src/acquisition/windows
+on Windows ('rivendell where' prints the path).
 EOF
 }
 
+compose_cmd() {
+    # cd for the compose files only; every other command keeps the caller's directory
+    (cd "$ROOT" && $DC $COMPOSE_FILES "$@")
+}
+
+detect_compose() {
+    if docker compose version &>/dev/null; then
+        DC="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        DC="docker-compose"
+    else
+        echo "Error: docker compose is not available." >&2
+        exit 1
+    fi
+}
+
 ensure_docker() {
-    if docker info &>/dev/null 2>&1; then
+    if docker info &>/dev/null; then
         return 0
     fi
     echo "Docker is not running."
@@ -48,7 +71,7 @@ ensure_docker() {
         if command -v orb &>/dev/null; then
             echo "Starting OrbStack..."
             open -a OrbStack
-        elif open -a OrbStack &>/dev/null 2>&1; then
+        elif open -a OrbStack &>/dev/null; then
             echo "Starting OrbStack..."
         else
             echo "Starting Docker Desktop..."
@@ -56,7 +79,7 @@ ensure_docker() {
         fi
         for i in $(seq 1 60); do
             sleep 1
-            if docker info &>/dev/null 2>&1; then
+            if docker info &>/dev/null; then
                 echo "Docker started."
                 return 0
             fi
@@ -67,10 +90,6 @@ ensure_docker() {
         echo "Error: Docker is not running. Start it and retry." >&2
         exit 1
     fi
-}
-
-compose_cmd() {
-    $DC $COMPOSE_FILES "$@"
 }
 
 print_urls() {
@@ -93,73 +112,175 @@ print_urls() {
     echo ""
 }
 
-# ── Commands ──────────────────────────────────────────────────────────────────
-do_start() {
+# ── The stack ─────────────────────────────────────────────────────────────────
+stack() {
+    local command="$1" arg
+    shift
+    TESTING=false
+    FOLLOW_LOGS=false
+    for arg in "$@"; do
+        case "$arg" in
+            --testing) TESTING=true ;;
+            --logs)    FOLLOW_LOGS=true ;;
+            *)
+                echo "Error: unknown argument: $arg" >&2
+                exit 1
+                ;;
+        esac
+    done
+    detect_compose
+    COMPOSE_FILES="-f docker-compose.yml"
+    if $TESTING; then
+        COMPOSE_FILES="$COMPOSE_FILES -f tests/docker-compose.testing.yml"
+    fi
     ensure_docker
-    echo "Starting Rivendell..."
-    compose_cmd up -d
-    print_urls
-    if $FOLLOW_LOGS; then
-        compose_cmd logs -f
+    case "$command" in
+        start)
+            echo "Starting Rivendell..."
+            compose_cmd up -d
+            print_urls
+            $FOLLOW_LOGS && compose_cmd logs -f
+            ;;
+        stop)
+            echo "Stopping Rivendell..."
+            compose_cmd down --remove-orphans 2>/dev/null || true
+            echo "Stopped."
+            ;;
+        restart)
+            stack stop
+            stack start "$@"
+            ;;
+        status)
+            echo "Rivendell service status:"
+            echo ""
+            compose_cmd ps
+            ;;
+    esac
+}
+
+# ── Scripts under scripts/ ────────────────────────────────────────────────────
+# scripts/<group>/<group>-<name>.sh or scripts/<group>/<name>.{sh,py}, and the
+# top-level scripts/<name>.{sh,py}: found at run time, so new scripts need no wiring
+find_script() {
+    local group="$1" name="${2:-}" candidate
+    if [ -d "$ROOT/scripts/$group" ] && [ -n "$name" ]; then
+        for candidate in "$ROOT/scripts/$group/$group-$name.sh" "$ROOT/scripts/$group/$name.sh" \
+                         "$ROOT/scripts/$group/$name.py" "$ROOT/scripts/$group/$name"; do
+            [ -f "$candidate" ] && { echo "$candidate"; return 0; }
+        done
+    fi
+    for candidate in "$ROOT/scripts/$group.sh" "$ROOT/scripts/$group.py"; do
+        [ -f "$candidate" ] && { echo "$candidate"; return 0; }
+    done
+    return 1
+}
+
+script_summary() {
+    # The first comment line after the shebang, or the first docstring line
+    sed -n '2,8p' "$1" | grep -m1 -E '^# *[A-Za-z]|^[A-Za-z].*' | sed -E 's/^# *//; s/^"""//' | cut -c1-70
+}
+
+list_scripts() {
+    local file rel group name
+    echo "Scripts (run from the repository root, wherever you are):"
+    echo ""
+    for file in "$ROOT"/scripts/*.sh "$ROOT"/scripts/*.py "$ROOT"/scripts/*/*.sh "$ROOT"/scripts/*/*.py; do
+        [ -f "$file" ] || continue
+        rel="${file#"$ROOT"/scripts/}"
+        name="$(basename "$rel")"; name="${name%.*}"
+        if [[ "$rel" == */* ]]; then
+            group="${rel%%/*}"
+            name="${name#"$group"-}"
+            printf '  rivendell %-34s %s\n' "$group $name" "$(script_summary "$file")"
+        else
+            printf '  rivendell %-34s %s\n' "$name" "$(script_summary "$file")"
+        fi
+    done
+}
+
+run_script() {
+    local script="$1"
+    shift
+    cd "$ROOT" || exit 1
+    case "$script" in
+        *.py) exec "$PYTHON" "$script" "$@" ;;
+        *)    exec bash "$script" "$@" ;;
+    esac
+}
+
+# ── Install ───────────────────────────────────────────────────────────────────
+install_link() {
+    local dir="${1:-$HOME/.local/bin}"
+    mkdir -p "$dir" || exit 1
+    if [ -e "$dir/rivendell" ] && [ ! -L "$dir/rivendell" ]; then
+        echo "Error: $dir/rivendell exists and isn't a link; not replacing it." >&2
+        exit 1
+    fi
+    ln -sfn "$ROOT/rivendell" "$dir/rivendell"
+    echo "Linked $dir/rivendell -> $ROOT/rivendell"
+    case ":$PATH:" in
+        *":$dir:"*) echo "Run 'rivendell help' from anywhere." ;;
+        *)
+            echo ""
+            echo "$dir isn't on your PATH. Add it to your shell profile:"
+            echo "  echo 'export PATH=\"$dir:\$PATH\"' >> ~/.zshrc   # or ~/.bashrc"
+            ;;
+    esac
+}
+
+uninstall_link() {
+    local dir="${1:-$HOME/.local/bin}"
+    if [ -L "$dir/rivendell" ]; then
+        rm "$dir/rivendell"
+        echo "Removed $dir/rivendell"
+    else
+        echo "No rivendell link in $dir"
     fi
 }
 
-do_stop() {
-    ensure_docker
-    echo "Stopping Rivendell..."
-    compose_cmd down --remove-orphans 2>/dev/null || true
-    echo "Stopped."
+open_map() {
+    local map="$ROOT/src/web/frontend/public/architecture/rivendell-architecture.html"
+    if command -v open &>/dev/null; then open "$map"
+    elif command -v xdg-open &>/dev/null; then xdg-open "$map"
+    else echo "$map"
+    fi
 }
-
-do_restart() {
-    do_stop
-    do_start
-}
-
-do_status() {
-    ensure_docker
-    echo "Rivendell service status:"
-    echo ""
-    compose_cmd ps
-}
-
-# ── Argument parsing ──────────────────────────────────────────────────────────
-COMMAND=""
-TESTING=false
-FOLLOW_LOGS=false
-
-for arg in "$@"; do
-    case "$arg" in
-        start|stop|restart|status) COMMAND="$arg" ;;
-        --testing) TESTING=true ;;
-        --logs)    FOLLOW_LOGS=true ;;
-        --help|-h) usage; exit 0 ;;
-        *)
-            echo "Error: unknown argument: $arg" >&2
-            echo "" >&2
-            usage >&2
-            exit 1
-            ;;
-    esac
-done
-
-if [[ -z "$COMMAND" ]]; then
-    echo "Error: no command specified." >&2
-    echo "" >&2
-    usage >&2
-    exit 1
-fi
-
-# Build compose file list
-COMPOSE_FILES="-f docker-compose.yml"
-if $TESTING; then
-    COMPOSE_FILES="$COMPOSE_FILES -f tests/docker-compose.testing.yml"
-fi
 
 # ── Dispatch ──────────────────────────────────────────────────────────────────
+COMMAND="${1:-}"
+[ -n "$COMMAND" ] && shift
+
 case "$COMMAND" in
-    start)   do_start ;;
-    stop)    do_stop ;;
-    restart) do_restart ;;
-    status)  do_status ;;
+    ""|help|-h|--help) usage ;;
+    start|stop|restart|status) stack "$COMMAND" "$@" ;;
+    install) install_link "$@" ;;
+    uninstall) uninstall_link "$@" ;;
+    map) open_map ;;
+    where) echo "$ROOT" ;;
+    lab) exec "$ROOT/lab/lab.sh" "$@" ;;
+    gandalf)
+        case "${1:-bash}" in
+            python) shift; exec "$PYTHON" "$ROOT/src/acquisition/python/gandalf.py" "$@" ;;
+            bash) [ "${1:-}" = bash ] && shift; exec bash "$ROOT/src/acquisition/bash/gandalf.sh" "$@" ;;
+            *) exec bash "$ROOT/src/acquisition/bash/gandalf.sh" "$@" ;;
+        esac
+        ;;
+    acquire|web) exec "$PYTHON" "$ROOT/src/cli/rivendell.py" "$COMMAND" "$@" ;;
+    analyse|analyze) exec "$PYTHON" "$ROOT/src/cli/rivendell.py" analyze "$@" ;;
+    anduril|aragorn) exec "$PYTHON" "$ROOT/src/cli/rivendell.py" anduril "$@" ;;
+    mordor) exec "$PYTHON" "$ROOT/src/cli/mordor.py" "$@" ;;
+    scripts) list_scripts ;;
+    *)
+        if [ -d "$ROOT/scripts/$COMMAND" ] && [ -z "${1:-}" ]; then
+            list_scripts | grep -E "^  rivendell $COMMAND " || true
+            exit 0
+        fi
+        if SCRIPT="$(find_script "$COMMAND" "${1:-}")"; then
+            [ -d "$ROOT/scripts/$COMMAND" ] && shift
+            run_script "$SCRIPT" "$@"
+        fi
+        echo "Error: unknown command: $COMMAND" >&2
+        echo "Run 'rivendell help' for the commands, 'rivendell scripts' for the scripts." >&2
+        exit 1
+        ;;
 esac
