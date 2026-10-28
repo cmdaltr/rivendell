@@ -136,7 +136,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--Navigator",
-    help="Map identified artefacts to MITRE ATT&CK® navigator (requires --Splunk flag)",
+    help="Map identified artefacts to MITRE ATT&CK® navigator (a layer from mitre_techniques.txt)",
     action="store_const",
     const=True,
     default=False,
@@ -448,6 +448,10 @@ asciitext = [
 
 
 if __name__ == "__main__":
+    # Gandalf archives and Mordor datasets are collected already: the presets below only
+    # switch on collection options (user profiles, the disk timeline) when there's a disk
+    # to collect from. Asked for by name, they still fail the check in main().
+    precollected = gandalf or mordor
     if exhaustive:
         brisk = True
         delete = True
@@ -455,7 +459,7 @@ if __name__ == "__main__":
         volatility = True
         nsrl = True
         splunk = True
-        timeline = True
+        timeline = timeline or not precollected
         memorytimeline = True
         archive = True
     if brisk:
@@ -465,9 +469,9 @@ if __name__ == "__main__":
         # extractiocs = True  # Don't override extractIocs - respect command line flag
         magicbytes = True  # File signature mismatch detection
         metacollected = True
-        # navigator = True  # Removed: Navigator requires Splunk, which slows down brisk mode
+        # navigator stays off in brisk mode: it needs the siem profile's Navigator running
         process = True
-        userprofiles = True
+        userprofiles = userprofiles or not precollected
     if threathunt:
         # Threat Hunt Mode: Aggressive threat-hunting analysis
         analysis = True
@@ -479,7 +483,7 @@ if __name__ == "__main__":
         process = True
         splunk = True
         elastic = True
-        userprofiles = True
+        userprofiles = userprofiles or not precollected
     if mordor:
         # Mordor input type: Treat like Gandalf (pre-collected artefacts)
         # Mordor datasets are pre-collected attack simulation data from OTRF

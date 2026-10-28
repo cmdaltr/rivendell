@@ -364,7 +364,7 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 |---|---|
 | `--Splunk` | Index output into the local Splunk instance |
 | `--Elastic` | Index output into the local Elasticsearch instance |
-| `--Navigator` | Build an ATT&CK Navigator layer (requires `--Splunk`) |
+| `--Navigator` | Build an ATT&CK Navigator layer from the case's `mitre_techniques.txt` |
 | `--Ziparchive` | Zip raw data after processing |
 | `--Delete` | Delete raw data after processing |
 
