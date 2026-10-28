@@ -17,6 +17,8 @@ built at when the real one is too long, and says only that it can't find phontab
 its case and most recent job are the ones Eru and the Job page show. Scenes are kept in
 --out/scenes/<section>/, and a scene whose narration and visual haven't changed isn't
 rendered again; --only renders just the named sections or scenes (then joins everything).
+The cache can't see a change to the web UI itself (a new nav icon): --refilm films the web
+UI's scenes again.
 Each section is joined into --out/scenes/<section>.mp4, fading in from black and out to
 black, so adding or reordering sections re-encodes the sections but films nothing again.
 """
@@ -408,6 +410,8 @@ def main() -> None:
                         help="a Python with piper-tts installed")
     parser.add_argument("--only", nargs="*", help="render just these scenes")
     parser.add_argument("--preview", action="store_true", help="silent, to check the filming without Piper")
+    parser.add_argument("--refilm", action="store_true",
+                        help="film the web UI's scenes again (of --only, if given): the cache can't see the UI change")
     args = parser.parse_args()
 
     from playwright.sync_api import sync_playwright
@@ -442,7 +446,8 @@ def main() -> None:
                                           "offered": OFFERED if scene["visual"]["kind"] == "page" else None})
                 wanted = not args.only or scene["id"] in args.only or section["id"] in args.only
                 known = json.loads(stamp_file.read_text()) if stamp_file.exists() else {}
-                if mp4.exists() and (known.get("key") == key or not wanted):
+                refilm = args.refilm and wanted and scene["visual"]["kind"] == "page"
+                if mp4.exists() and not refilm and (known.get("key") == key or not wanted):
                     rendered.append((scene, mp4, known["spoken"], known["key"]))
                     continue
                 if not wanted:
@@ -487,7 +492,9 @@ def join_section(section: dict, rendered: list, scenes_dir: Path) -> tuple:
     start in the section, spoken seconds)])."""
     mp4 = scenes_dir / f"{section['id']}.mp4"
     stamp_file = mp4.with_suffix(".json")
-    key = hashlib.sha256(json.dumps([[k for *_, k in rendered], FADE]).encode()).hexdigest()[:16]
+    # The scenes' files as well as their keys: --refilm films a scene again under the same key
+    files = [[k, f.stat().st_size, f.stat().st_mtime_ns] for _, f, _, k in rendered]
+    key = hashlib.sha256(json.dumps([files, FADE]).encode()).hexdigest()[:16]
     lengths = [duration(scene_mp4) for _, scene_mp4, _, _ in rendered]
     starts = [sum(lengths[:i]) for i in range(len(lengths))]
     parts = [(scene, start, spoken) for (scene, _, spoken, _), start in zip(rendered, starts)]
