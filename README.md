@@ -548,9 +548,10 @@ And 25+ additional tools. See [REQUIREMENTS.md](docs/REQUIREMENTS.md) for the co
 - Automated reporting enhancements
 - Additional SIEM integrations
 
-**v2.3 (Future):**
+**v2.3 (Future):** plans in [docs/ROADMAP.md](docs/ROADMAP.md)
 - Collaborative investigation features
 - Lab VM consoles in the browser for team servers (docs/SERVER.md)
+- Desktop app RPM for Rocky Linux 9 / RHEL 9 (app/README.md)
 - Advanced ML-based anomaly detection
 - Container forensics (Docker, Kubernetes)
 - Threat intelligence integration

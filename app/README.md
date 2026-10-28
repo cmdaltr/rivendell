@@ -20,6 +20,15 @@ Setup covers the same three things everywhere.
 
 **Rivendell's files.** By default they go into a `Rivendell` folder in the home directory (`%USERPROFILE%\Rivendell` on Windows), or another folder you choose. On macOS and Linux you can point setup at a checkout you already have instead. A copy the app unpacked carries `.rivendell-version`: when a newer app version launches, it offers to update the files in place (`.env`, evidence mounts and cases stay), and the next `rivendell start` rebuilds the images once. A git checkout is never overwritten, so keep it current with `git pull`. On its first start, an unpacked copy gets a `.env` with a random `SECRET_KEY`.
 
+### Planned: an RPM for Rocky Linux 9
+
+A feature request, not built yet: `rivendell-<version>.noarch.rpm` for Rocky Linux 9 (and so RHEL 9 and AlmaLinux 9), next to the `.deb`. The launcher and setup (`rivendell-app.sh`) are already distribution-neutral, so the package is the smaller part:
+
+- `app/linux/package-rpm.sh`, mirroring `package-deb.sh`: the same `/opt/rivendell` layout, menu entry and icon, `Requires: zenity` (in AppStream), `Recommends: docker-ce docker-compose-plugin`. Built with `rpmbuild` in a `rockylinux:9` container as a fourth job in `desktop-release.yml`, checked with `rpm -qpl` and `rpmlint`.
+- SELinux, which is the real work. Rocky enforces it, and a bind-mounted evidence folder without a label is unreadable inside the containers. The `docker-compose.local.yml` that setup writes would need `bind: {selinux: z}` on each folder on SELinux hosts (shared label: backend and worker both mount it), and the stack's own mounts in `docker-compose.yml` need the same check.
+- Docker on Rocky comes from Docker's own RHEL repository; the distribution ships Podman. Setup's runtime check should say that rather than "docker missing". Podman's Docker-compatible socket is untested with Andúril and the worker, so it stays unsupported until it's tried.
+- Testing: the lab's `lab-rocky` target is a container, with no desktop session, so it covers the package install and `rivendell start` but not the zenity setup. That needs a Rocky 9 desktop VM.
+
 **Evidence folders** (optional). Setup writes `docker-compose.local.yml`, which the launcher adds to the stack when it exists. The file is gitignored, so pulls never touch it. Each folder is mounted read-only in the backend and read-write in the worker. On macOS and Linux it appears at the same path inside the containers. On Windows, `D:\Cases` appears as `/mnt/d/Cases`. A `docker-compose.local.yml` you wrote by hand is left alone. To change the folders later: **Rivendell › Set Up Rivendell…** (macOS), the **Set Up Rivendell** action on the menu entry (Linux), or run the installer again (Windows).
 
 ### Signing
