@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Home from './components/Home';
@@ -22,7 +22,7 @@ import CaseBrowser from './components/CaseBrowser';
 import StartOffer from './components/StartOffer';
 import './App.css';
 
-function Navigation({ onGuide }) {
+function Navigation({ onGuide, onWelcome }) {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
 
@@ -60,6 +60,13 @@ function Navigation({ onGuide }) {
           </svg>
           <span>Log out</span>
         </button>
+        <button type="button" className="nav-welcome" onClick={onWelcome} title="Welcome, guide and a tip" aria-label="Show the welcome, guide and a tip">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 18h6" />
+            <path d="M10 22h4" />
+            <path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z" />
+          </svg>
+        </button>
       </div>
     </nav>
   );
@@ -68,6 +75,8 @@ function Navigation({ onGuide }) {
 function AppContent() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [guideRequested, setGuideRequested] = useState(false);
+  const [offerRequested, setOfferRequested] = useState(false);
+  const closeOfferRequest = useCallback(() => setOfferRequested(false), []);
   const mapBackground = `${process.env.PUBLIC_URL}/images/middle_earth.png`;
 
   return (
@@ -84,10 +93,11 @@ function AppContent() {
       }}
     >
       <header className="App-header">
-        <Navigation onGuide={() => setGuideRequested(true)} />
+        <Navigation onGuide={() => setGuideRequested(true)} onWelcome={() => setOfferRequested(true)} />
       </header>
 
-        <StartOffer guideRequested={guideRequested} onGuideClosed={() => setGuideRequested(false)} />
+        <StartOffer guideRequested={guideRequested} onGuideClosed={() => setGuideRequested(false)}
+          offerRequested={offerRequested} onOfferClosed={closeOfferRequest} />
 
         <main className="App-main">
           <Routes>

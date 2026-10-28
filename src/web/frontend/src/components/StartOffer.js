@@ -5,14 +5,22 @@ import { markOffered, nextTip, offeredThisStart, setStartPref, startPrefs } from
 import Guide from './Guide';
 import { randomQuote } from '../guide/quotes';
 
+// The welcome's colours: A (parchment) unless ?tone=b or ?tone=c asks for one of the alternatives,
+// kept while they're being tried; drop the switch and the other tones once settled
+const TONES = ['a', 'b', 'c'];
+const toneFromUrl = () => {
+  const asked = new URLSearchParams(window.location.search).get('tone');
+  return TONES.includes(asked) ? asked : 'a';
+};
+
 // Pages where nobody's settled in yet: the offer waits until they're past them
 const NOT_YET = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 /**
  * At start-up: a quote, then the guide on offer and a tip side by side, each with its own "every start" tickbox.
- * The navigation's Guide link opens the guide directly (guideRequested).
+ * The navigation's Guide link opens the guide directly (guideRequested); its lightbulb opens this (offerRequested).
  */
-function StartOffer({ guideRequested, onGuideClosed }) {
+function StartOffer({ guideRequested, onGuideClosed, offerRequested, onOfferClosed }) {
   const { user, loading } = useAuth();
   const { pathname } = useLocation();
   const navigate = useNavigate();
@@ -21,6 +29,7 @@ function StartOffer({ guideRequested, onGuideClosed }) {
   const [tip, setTip] = useState(null);
   const [guide, setGuide] = useState(false);
   const [quote] = useState(randomQuote);
+  const tone = toneFromUrl();
 
   useEffect(() => {
     if (loading || offeredThisStart() || NOT_YET.some((p) => pathname.startsWith(p))) return;
@@ -30,6 +39,15 @@ function StartOffer({ guideRequested, onGuideClosed }) {
     if (wanted.tips) setTip(nextTip(user));
     if (wanted.guide || wanted.tips) setOffer(true);
   }, [loading, pathname, user]);
+
+  // The lightbulb in the navigation: the welcome, with a fresh tip, whatever the tickboxes say
+  useEffect(() => {
+    if (!offerRequested) return;
+    setPrefs(startPrefs(user));
+    setTip(nextTip(user));
+    setOffer(true);
+    onOfferClosed?.();
+  }, [offerRequested, user, onOfferClosed]);
 
   useEffect(() => {
     if (guideRequested) {
@@ -54,13 +72,15 @@ function StartOffer({ guideRequested, onGuideClosed }) {
   return (
     <div className="guide-backdrop" role="dialog" aria-modal="true" aria-label="Welcome to Rivendell"
          onClick={() => setOffer(false)}>
-      <div className="start-offer" onClick={(e) => e.stopPropagation()}>
+      <div className={`start-offer tone-${tone}`} onClick={(e) => e.stopPropagation()}>
         <button type="button" className="guide-close" onClick={() => setOffer(false)} aria-label="Close">×</button>
-        <h2>Welcome to Rivendell</h2>
-        <blockquote className="start-offer-quote">
-          “{quote.text}”
-          <cite>{quote.who}, {quote.where}</cite>
-        </blockquote>
+        <div className="start-offer-head">
+          <h2>Welcome to Rivendell</h2>
+          <blockquote className="start-offer-quote">
+            “{quote.text}”
+            <cite>{quote.who}, {quote.where}</cite>
+          </blockquote>
+        </div>
 
         <div className="start-offer-columns">
         <section className="start-offer-part">

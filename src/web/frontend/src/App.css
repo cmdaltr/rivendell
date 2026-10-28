@@ -3057,6 +3057,18 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
   transition: all 0.3s ease;
 }
 .App-header nav .nav-guide:hover { background: rgba(167, 219, 108, 0.2); color: #a7db6c; }
+.App-header nav .nav-welcome {
+  background: transparent;
+  border: none;
+  color: #f0dba5;
+  padding: 0.5rem 0.4rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  box-shadow: none;
+  transition: all 0.3s ease;
+}
+.App-header nav .nav-welcome:hover { background: rgba(167, 219, 108, 0.2); color: #a7db6c; transform: none; }
 
 .guide-backdrop {
   position: fixed;
@@ -3161,8 +3173,10 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
 .guide-check { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; color: #a09580; font-size: 0.95rem; cursor: pointer; }
 .guide-check input { width: auto; margin: 0; }
 
-.start-offer-quote { margin: 1rem 0 0; padding: 0.9rem 0 0; border-top: 1px solid #2a2a5a; font-style: italic; color: #cdbb8a; line-height: 1.55; }
-.start-offer-quote cite { display: block; margin-top: 0.35rem; font-style: normal; font-size: 0.9rem; color: #a09580; }
+.start-offer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 2rem; padding-right: 2rem; }
+.start-offer-quote { margin: 0; max-width: 55%; text-align: right; font-style: italic; color: #cdbb8a; line-height: 1.45; font-size: 0.95rem; }
+.start-offer-quote cite { display: block; margin-top: 0.3rem; font-style: normal; font-size: 0.85rem; color: #a09580; }
+@media (max-width: 720px) { .start-offer-head { flex-direction: column; gap: 0.75rem; } .start-offer-quote { max-width: none; text-align: left; } }
 .start-offer-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem; border-top: 1px solid #2a2a5a; }
 .start-offer-part { padding: 1.1rem 0; display: flex; flex-direction: column; }
 .start-offer-part .guide-check { margin-top: auto; padding-top: 1rem; }
@@ -3172,3 +3186,50 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
 .start-offer-tip { border-left: 3px solid #c3e88d; padding-left: 0.9rem; }
 .start-offer-actions { display: flex; align-items: center; gap: 1rem; }
 .start-offer-actions .guide-link { margin-top: 0; }
+
+/* The welcome's tones: A (parchment) is the default; B and C stay selectable with ?tone=b|c while they're tried */
+.start-offer[class*="tone-"] p, .start-offer[class*="tone-"] .start-offer-quote, .start-offer[class*="tone-"] .guide-check {
+  font-family: 'Georgia', 'Garamond', serif; letter-spacing: 0; text-transform: none;
+}
+.start-offer[class*="tone-"] .start-offer-part p { font-size: 1.02rem; line-height: 1.6; }
+.start-offer[class*="tone-"] .start-offer-quote { max-width: 46ch; font-size: 0.98rem; }
+.start-offer[class*="tone-"] .guide-check { font-size: 0.92rem; }
+
+/* A: parchment. Gold display type, warm cream body, one green accent for actions */
+.start-offer.tone-a { background: #1c1b26; border-color: #3a3550; }
+.start-offer.tone-a h2 { color: #f0dba5; }
+.start-offer.tone-a h3 { color: #d9c48f; font-size: 1.05rem; letter-spacing: 0.06em; }
+.start-offer.tone-a p { color: #e6dfcf; }
+.start-offer.tone-a .start-offer-quote { color: #cdbb8a; }
+.start-offer.tone-a .start-offer-quote cite { color: #8f8670; font-family: 'Cinzel', serif; letter-spacing: 0.04em; }
+.start-offer.tone-a .start-offer-tip { border-left-color: #a7db6c; }
+.start-offer.tone-a .guide-check { color: #9d957f; }
+.start-offer.tone-a .guide-check input { accent-color: #a7db6c; }
+.start-offer.tone-a .start-offer-columns, .start-offer.tone-a .start-offer-head + * { border-top-color: #34304a; }
+
+/* B: Rivendell green. The app's green leads; neutral light body; gold only for the quote */
+.start-offer.tone-b { background: #151a12; border-color: #3f4b2a; }
+.start-offer.tone-b h2 { color: #c3e88d; }
+.start-offer.tone-b h3 { color: #a7db6c; font-size: 1.05rem; letter-spacing: 0.06em; }
+.start-offer.tone-b p { color: #e4e2d8; }
+.start-offer.tone-b .start-offer-quote { color: #d6c48f; }
+.start-offer.tone-b .start-offer-quote cite { color: #8a9178; font-family: 'Cinzel', serif; letter-spacing: 0.04em; }
+.start-offer.tone-b .start-offer-tip { border-left-color: #6b8e3f; }
+.start-offer.tone-b .guide-secondary { border-color: #3f4b2a; color: #e4e2d8; }
+.start-offer.tone-b .guide-check { color: #8a9178; }
+.start-offer.tone-b .guide-check input { accent-color: #8abf4d; }
+.start-offer.tone-b .start-offer-columns { border-top-color: #2c3520; }
+
+/* C: quiet. Near-white body on slate, gold reserved for the title, everything else muted */
+.start-offer.tone-c { background: #1a1d24; border-color: #2e333f; }
+.start-offer.tone-c h2 { color: #f0dba5; }
+.start-offer.tone-c h3 { color: #c9ccd3; font-size: 1rem; letter-spacing: 0.08em; }
+.start-offer.tone-c p { color: #eceae4; }
+.start-offer.tone-c .start-offer-quote { color: #b9b4a6; }
+.start-offer.tone-c .start-offer-quote cite { color: #7d808a; font-family: 'Cinzel', serif; letter-spacing: 0.04em; }
+.start-offer.tone-c .start-offer-tip { border-left-color: #f0dba5; }
+.start-offer.tone-c .guide-secondary { border-color: #3b404d; color: #eceae4; }
+.start-offer.tone-c .guide-link, .start-offer.tone-c .start-offer-actions .guide-link { color: #f0dba5; }
+.start-offer.tone-c .guide-check { color: #8a8d96; }
+.start-offer.tone-c .guide-check input { accent-color: #f0dba5; }
+.start-offer.tone-c .start-offer-columns { border-top-color: #2e333f; }

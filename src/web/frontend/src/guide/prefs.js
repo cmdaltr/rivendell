@@ -44,19 +44,17 @@ export function nextTip(user, exclude) {
   return tip;
 }
 
-// Once per start: per tab session, so a reload doesn't offer it again
+// Once per start, where a start is the first visit after a twelve-hour gap. Kept in localStorage,
+// not sessionStorage: a session doesn't survive new tabs or the desktop app's reloads, so the
+// offer kept coming back. The lightbulb in the navigation shows it on demand.
+const OFFERED = 'rivendell.offeredAt';
+const START_GAP_MS = 12 * 60 * 60 * 1000;
+
 export function offeredThisStart() {
-  try {
-    return window.sessionStorage.getItem('rivendell.offered') === '1';
-  } catch {
-    return false;
-  }
+  const at = Number(read(OFFERED, 0));
+  return Date.now() - at < START_GAP_MS;
 }
 
 export function markOffered() {
-  try {
-    window.sessionStorage.setItem('rivendell.offered', '1');
-  } catch {
-    // nothing to remember it in
-  }
+  write(OFFERED, Date.now());
 }
