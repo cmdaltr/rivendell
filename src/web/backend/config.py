@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     rivendell_admin_password: str = ""
     # The URL people open, e.g. https://rivendell.example.org (CORS, cookies, OIDC redirects)
     rivendell_public_url: str = ""
+    # More places evidence may be read from and written to, separated by commas, as the
+    # containers see them (a server's evidence share mounted at /srv/evidence, say)
+    rivendell_evidence_paths: str = ""
+
     # Password sign-in alongside single sign-on; turn off to make the IdP the only way in
     rivendell_local_login: bool = True
 
@@ -112,7 +116,13 @@ class Settings(BaseSettings):
 
     @property
     def allowed_paths(self) -> list:
-        """Get OS-specific allowed directories for file browsing."""
+        """Directories evidence may come from and output go to: this OS's defaults, plus
+        RIVENDELL_EVIDENCE_PATHS."""
+        extra = [path.strip() for path in self.rivendell_evidence_paths.split(",") if path.strip()]
+        return self._default_paths() + [path for path in extra if path.startswith("/") or ":" in path]
+
+    def _default_paths(self) -> list:
+        """This OS's default places for evidence."""
         system = platform.system()
 
         if system == "Windows":

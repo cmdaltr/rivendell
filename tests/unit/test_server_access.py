@@ -20,9 +20,13 @@ os.chdir(TMP)
 os.environ.update({
     "DATABASE_URL": f"sqlite:///{TMP}/jobs.db",
     "USERS_FILE": f"{TMP}/users.json",
+    "OUTPUT_DIR": f"{TMP}/output",
     "SECRET_KEY": "test-secret-key-for-unit-tests-only-0123456789",
     "RIVENDELL_ADMIN_PASSWORD": "correct horse battery staple",
     "RIVENDELL_PUBLIC_URL": "https://rivendell.test",
+    # No Redis here: sign-in lockouts fall back to memory (port 1 refuses at once)
+    "REDIS_HOST": "127.0.0.1",
+    "REDIS_PORT": "1",
 })
 
 try:
@@ -164,11 +168,43 @@ class ServerAccessTest(unittest.TestCase):
         resp = self.client.get("/api/auth/verify", headers=self.bob)
         self.assertEqual(resp.headers["X-Rivendell-User"], "bob")
 
+    def test_navigator_layers_follow_the_case(self):
+        self.create_job(self.alice, "CASE-LAYER-1")
+
+        def layer(headers, uri):
+            return self.client.get("/api/auth/verify?service=navigator",
+                                   headers={**headers, "X-Forwarded-Uri": uri}).status_code
+        self.assertEqual(layer(self.alice, "/assets/CASE-LAYER-1.json"), 200)
+        self.assertEqual(layer(self.admin, "/assets/CASE-LAYER-1.json"), 200)
+        self.assertEqual(layer(self.bob, "/assets/CASE-LAYER-1.json"), 403)
+        self.assertEqual(layer(self.bob, "/assets/CASE%2DLAYER%2D1.json?x=1"), 403)
+        # The Navigator itself, and its ATT&CK data
+        self.assertEqual(layer(self.bob, "/assets/enterprise-attack.json"), 200)
+        self.assertEqual(layer(self.bob, "/"), 200)
+        # A case run from the command line, with no job: admins only
+        (self.settings.output_dir / "CLI-CASE-9").mkdir(parents=True, exist_ok=True)
+        self.assertEqual(layer(self.bob, "/assets/CLI-CASE-9.json"), 403)
+        self.assertEqual(layer(self.admin, "/assets/CLI-CASE-9.json"), 200)
+
     def test_lockout_after_repeated_failures(self):
         for _ in range(self.settings.max_login_attempts):
             self.client.post("/api/auth/login", data={"username": "locktest", "password": "wrong"})
         resp = self.client.post("/api/auth/login", data={"username": "locktest", "password": "wrong"})
         self.assertEqual(resp.status_code, 429)
+
+    def test_lockout_is_per_address_until_it_is_everywhere(self):
+        from auth.throttle import EVERYWHERE, SignInThrottle
+        throttle = SignInThrottle("redis://127.0.0.1:1/0")
+        limit = self.settings.max_login_attempts
+        for _ in range(limit):
+            throttle.failed("Alice", "10.0.0.66")
+        self.assertGreater(throttle.locked_for("alice", "10.0.0.66"), 0)
+        self.assertEqual(throttle.locked_for("alice", "10.0.0.5"), 0)
+        throttle.succeeded("alice", "10.0.0.66")
+        self.assertEqual(throttle.locked_for("alice", "10.0.0.66"), 0)
+        for n in range(limit * EVERYWHERE):
+            throttle.failed("alice", f"10.1.{n}.1")
+        self.assertGreater(throttle.locked_for("alice", "10.0.0.5"), 0)
 
     def test_last_admin_stays_admin(self):
         users = self.client.get("/api/auth/users", headers=self.admin).json()

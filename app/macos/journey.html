@@ -116,6 +116,8 @@ function pointAt(f) {
 }
 
 let shown = 0, target = 0, lastReport = 0, startedAt = Date.now(), failed = false, finished = false;
+// A typical start on this Mac, for walking without reports (expect() from Rivendell.app)
+let typical = 150;
 
 function draw() {
   const [x, y, leg] = pointAt(shown);
@@ -132,10 +134,14 @@ function draw() {
 
 function frame() {
   // Ease towards the reported position; with no reports (no Python for the timings), walk
-  // on by elapsed time against a typical start so the road still moves
+  // on by elapsed time against this Mac's typical start so the road still moves
   if (!lastReport && !failed && !finished) {
     const elapsed = (Date.now() - startedAt) / 1000;
-    if (elapsed > 5) target = Math.min(0.9, elapsed / 150);
+    if (elapsed > 5) {
+      target = Math.min(0.95, elapsed / typical);
+      const left = typical - elapsed;
+      document.getElementById('eta').textContent = left > 0 ? formatEta(left) : 'Nearly there';
+    }
   }
   shown += (target - shown) * 0.06;
   if (Math.abs(target - shown) < 0.0005) shown = target;
@@ -157,6 +163,9 @@ function placeLine(r) {
   const name = STOPS.filter(s => s[0] <= r.fraction).slice(-1)[0][3];
   return name === 'The Shire' ? 'Gandalf sets out from the Shire' : `Gandalf has passed ${name}`;
 }
+
+// From Rivendell.app: the median of this Mac's earlier starts, in seconds
+function expect(seconds) { if (seconds > 0) typical = seconds; }
 
 // From Rivendell.app: one @@progress report from startup_progress.py
 function progress(r) {

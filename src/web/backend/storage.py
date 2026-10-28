@@ -4,10 +4,12 @@ Job Storage
 PostgreSQL-based storage for jobs using SQLAlchemy.
 """
 
+import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Iterable, List, Optional
-from sqlalchemy import create_engine, Column, String, Integer, Text, DateTime, Enum as SQLEnum, JSON
+from sqlalchemy import create_engine, text, Column, String, Integer, Text, DateTime, Enum as SQLEnum, JSON
 from sqlalchemy.orm import sessionmaker, declarative_base, defer
 from sqlalchemy.pool import NullPool
 
@@ -22,6 +24,10 @@ except ImportError:
 
 # SQLAlchemy Base
 Base = declarative_base()
+
+logger = logging.getLogger(__name__)
+# Held while migrating, so the backend and the worker starting together don't both run them
+MIGRATION_LOCK = 5688
 
 
 class JobModel(Base):
@@ -82,8 +88,27 @@ class JobStorage:
         # Create session factory
         self.Session = sessionmaker(bind=self.engine)
 
-        # Create tables if they don't exist
-        Base.metadata.create_all(self.engine)
+        self.migrate()
+
+    def migrate(self) -> None:
+        """Bring the schema to Alembic's head (alembic/versions). Without Alembic installed
+        (a worker image built before it was added, host-side tools), create missing tables
+        instead, as JobStorage always did."""
+        try:
+            from alembic import command
+            from alembic.config import Config
+        except ImportError:
+            Base.metadata.create_all(self.engine)
+            return
+        config = Config()
+        config.set_main_option("script_location", str(Path(__file__).resolve().parent / "alembic"))
+        with self.engine.begin() as connection:
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK})
+            config.attributes["connection"] = connection
+            config.attributes["target_metadata"] = Base.metadata
+            command.upgrade(config, "head")
+        logger.debug("Schema at Alembic head")
 
     def _job_model_to_pydantic(self, job_model: JobModel, include_log: bool = True) -> Job:
         """Convert SQLAlchemy model to Pydantic model."""

@@ -12,10 +12,11 @@
 }
 
 # Splunk, Kibana and the Navigator have no idea who Rivendell's users are, so the
-# backend vouches for each request; anyone not signed in goes to the sign-in page
+# backend vouches for each request; anyone not signed in goes to the sign-in page, and
+# the Navigator's case layers follow job sharing
 (signed_in) {
 	forward_auth backend:5688 {
-		uri /api/auth/verify?login_redirect=1
+		uri /api/auth/verify?login_redirect=1&service={args[0]}
 		copy_headers X-Rivendell-User
 	}
 }
@@ -51,18 +52,18 @@
 
 {$RIVENDELL_HOSTNAME}:7755 {
 	import hardened
-	import signed_in
+	import signed_in splunk
 	reverse_proxy splunk:8000
 }
 
 {$RIVENDELL_HOSTNAME}:5601 {
 	import hardened
-	import signed_in
+	import signed_in kibana
 	reverse_proxy kibana:5601
 }
 
 {$RIVENDELL_HOSTNAME}:5602 {
 	import hardened
-	import signed_in
+	import signed_in navigator
 	reverse_proxy navigator:4200
 }

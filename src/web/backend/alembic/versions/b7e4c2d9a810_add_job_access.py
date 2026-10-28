@@ -1,10 +1,10 @@
 """add_job_access
 
-Who owns each job and who it's shared with, for server mode. JobStorage also creates
-this table through create_all, so the migration skips it when it already exists.
+Who owns each job and who it's shared with, for server mode. Databases that ran this
+branch before migrations did got it through create_all, so it's skipped when it exists.
 
 Revision ID: b7e4c2d9a810
-Revises: a1b2c3d4e5f6
+Revises: 3e5a9c1b7d20
 Create Date: 2026-10-27 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'b7e4c2d9a810'
-down_revision = 'a1b2c3d4e5f6'
+down_revision = '3e5a9c1b7d20'
 branch_labels = None
 depends_on = None
 

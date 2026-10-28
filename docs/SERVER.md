@@ -58,16 +58,22 @@ services:
     volumes:
       - type: bind
         source: /srv/evidence
-        target: /mnt/evidence
+        target: /srv/evidence
         read_only: true
   celery-worker:
     volumes:
       - type: bind
         source: /srv/evidence
-        target: /mnt/evidence
+        target: /srv/evidence
 ```
 
-Mount it under `/mnt` or `/media` inside the containers: those (and `/tmp/rivendell`) are the only places the file browser and job creation accept on Linux. Gandalf archives copied to that share are picked up like any other source.
+Then tell Rivendell it may use it, in `.env`:
+
+```bash
+RIVENDELL_EVIDENCE_PATHS=/srv/evidence
+```
+
+Several are separated by commas. Without it, only `/mnt`, `/media` and `/tmp/rivendell` are accepted. Gandalf archives copied to the share are picked up like any other source.
 
 ## Users
 
@@ -80,7 +86,7 @@ rivendell server users disable bob
 rivendell server users password admin                          # a locked-out admin
 ```
 
-These work inside the backend container, so they work when nobody can sign in. Admins can do the same through the API (`/api/auth/users`). Passwords on a server need at least 12 characters, and five failed sign-ins lock a username for 15 minutes (`max_login_attempts`, `lockout_duration_minutes`).
+These work inside the backend container, so they work when nobody can sign in. Admins can do the same through the API (`/api/auth/users`). Passwords on a server need at least 12 characters, and repeated failures lock the username (`max_login_attempts`, `lockout_duration_minutes`; see below).
 
 ### Single sign-on
 
@@ -120,7 +126,13 @@ People can use the server from the desktop app instead of a browser tab: in setu
 ## Limits worth knowing
 
 - **Andúril holds the Docker socket.** It's opt-in (`rivendell anduril enable`) and admin-only on a server, but whoever administers it administers the host's Docker.
-- **The Navigator's layers** (one per case, named after the case) are readable by any signed-in user who knows the case name. Splunk and Kibana have their own users and indexes; Rivendell's sign-in in front of them doesn't map its job sharing onto them.
-- **One backend process.** Sign-in lockouts are counted in memory, so a restart resets them.
+- **Splunk and Kibana** have their own users and indexes. Rivendell's sign-in in front of them keeps out anyone without a Rivendell account, but doesn't map job sharing onto their data. The Navigator does follow it: a case's layer is served only to people who can see the case, and layers from command-line runs (no job) only to admins.
 - **Sessions are 24-hour tokens** (`access_token_expire_minutes`); disabling a user stops their next request, since every request checks the user store.
-- **The schema.** Ownership lives in a `job_access` table beside `jobs`, created on start like `jobs` itself, with an Alembic migration (`b7e4c2d9a810`) for databases managed through Alembic.
+
+## How sign-in lockouts work
+
+Failed password sign-ins are counted in Redis, so restarts don't reset them. Five failures from one address lock that username for 15 minutes from that address only: someone guessing at a colleague's account locks themselves out, not the colleague. Fifty failures across all addresses lock the username everywhere, to catch guessing spread over many machines. If Redis is down, the counts are held in the backend process until it's back.
+
+## The schema
+
+The backend migrates its database on start with Alembic (`src/web/backend/alembic/`), under a Postgres advisory lock so the backend and the worker starting together don't race. A database from before migrations is recognised and stamped, not recreated. A worker image built before Alembic was added keeps creating any missing tables itself, as it always did.

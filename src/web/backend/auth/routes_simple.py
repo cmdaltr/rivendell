@@ -6,7 +6,6 @@ Lightweight authentication without database dependencies: users live in a JSON f
 in server mode, user administration for admins in place of open sign-up.
 """
 
-import time
 from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote
@@ -22,18 +21,18 @@ try:
     from .users import (AdminPasswordMissing, find_user, init_default_admin, load_users,  # noqa: F401
                         new_user, public, save_users)
     from . import access, oidc
+    from .throttle import throttle
 except ImportError:
     from config import settings
     from auth.security import hash_password, verify_password, create_access_token
     from auth.users import (AdminPasswordMissing, find_user, init_default_admin, load_users,  # noqa: F401
                             new_user, public, save_users)
     from auth import access, oidc
+    from auth.throttle import throttle
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 MIN_PASSWORD = 12
-# Failed password sign-ins per username: (count, locked until)
-_failures: dict = {}
 
 
 # Request/Response Models
@@ -118,29 +117,30 @@ async def auth_config():
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
+    request: Request,
     response: Response,
     form_data: OAuth2PasswordRequestForm = Depends()
 ):
     """Login with username/email and password (OAuth2 form data)."""
     users = _users_or_503()
     name = form_data.username
-    count, locked_until = _failures.get(name, (0, 0.0))
-    if locked_until > time.time():
+    # Behind the server's proxy, uvicorn's --proxy-headers makes this the browser's address
+    address = request.client.host if request.client else "unknown"
+    wait = throttle.locked_for(name, address)
+    if wait:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many failed sign-ins; try again in {int((locked_until - time.time()) // 60) + 1} minutes",
+            detail=f"Too many failed sign-ins; try again in {wait // 60 + 1} minutes",
         )
 
     user = find_user(users, name)
     if not user or not user.get("hashed_password") or not verify_password(form_data.password, user["hashed_password"]):
-        count += 1
-        lock = time.time() + settings.lockout_duration_minutes * 60 if count >= settings.max_login_attempts else 0.0
-        _failures[name] = (0 if lock else count, lock)
+        throttle.failed(name, address)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
-    _failures.pop(name, None)
+    throttle.succeeded(name, address)
 
     if not user.get("is_active", True):
         raise HTTPException(
@@ -251,15 +251,20 @@ async def session_from_cookie(request: Request, response: Response):
 
 
 @router.get("/verify")
-async def verify(request: Request, response: Response, login_redirect: bool = False):
+async def verify(request: Request, response: Response, login_redirect: bool = False,
+                 service: Optional[str] = None):
     """200 for a signed-in user, 401 otherwise: the reverse proxy's check in front of
     Kibana, Splunk and the ATT&CK Navigator on a server. With login_redirect the refusal
-    is a redirect to the sign-in page, which the proxy passes on to the browser."""
+    is a redirect to the sign-in page, which the proxy passes on to the browser. For the
+    Navigator (service=navigator), a case's layer also needs access to the case: the
+    proxy sends the URI it's asking about in X-Forwarded-Uri."""
     user = access.user_from_request(request)
     if not user and login_redirect and settings.rivendell_public_url:
         return RedirectResponse(f"{settings.rivendell_public_url.rstrip('/')}/login", status_code=302)
     if not user:
         raise HTTPException(status_code=401, detail="Sign in required")
+    if service == "navigator" and not access.layer_allowed(user, request.headers.get("X-Forwarded-Uri", "/")):
+        raise HTTPException(status_code=403, detail="Not your case")
     response.headers["X-Rivendell-User"] = user["username"]
     return {"username": user["username"]}
 

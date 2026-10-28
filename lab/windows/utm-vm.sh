@@ -32,8 +32,8 @@ SSH="$LAB_ROOT/lib/ssh.exp"
 COMPUTERNAME="LAB-WIN11"
 
 utm() { osascript -e "tell application \"UTM\"" -e "$1" -e "end tell"; }
-vm_registered() { utmctl list 2>/dev/null | awk '{print $3}' | grep -qx "$VM"; }
-vm_status() { utmctl status "$VM" 2>/dev/null || echo "not registered"; }
+vm_registered() { utm_up; utmctl list --hide 2>/dev/null | awk '{print $3}' | grep -qx "$VM"; }
+vm_status() { utm_up; utmctl status --hide "$VM" 2>/dev/null || echo "not registered"; }
 
 windows_iso() {
   if [ -n "${WINDOWS_ARM_ISO:-}" ]; then echo "$WINDOWS_ARM_ISO"; return; fi
@@ -172,7 +172,7 @@ PY
 }
 
 add_port_forward() {
-  if [ "$(vm_status)" != stopped ]; then utmctl stop "$VM" >/dev/null 2>&1 || true; sleep 3; fi
+  if [ "$(vm_status)" != stopped ]; then utmctl stop --hide "$VM" >/dev/null 2>&1 || true; sleep 3; fi
   write_port_forward
   utm "reload configuration (virtual machine named \"$VM\")" >/dev/null
   ok "$VM: 127.0.0.1:$PORT -> guest port 22"
@@ -253,7 +253,7 @@ adopt_vm() {
     sleep 5
   done
   if [ -z "$touched" ]; then
-    utmctl stop "$VM" >/dev/null 2>&1 || true
+    utmctl stop --hide "$VM" >/dev/null 2>&1 || true
     die "UTM is running a different copy of $VM (one imported into UTM's own storage), not $BUNDLE. In UTM, remove $VM (right-click > Remove, which deletes UTM's copy), then run adopt again: it opens $BUNDLE in place."
   fi
 
@@ -298,7 +298,7 @@ start_vm() {
   register_vm
   if [ "$(vm_status)" != started ]; then
     info "Starting $VM"
-    utmctl start "$VM" >/dev/null 2>&1 || true
+    utmctl start --hide "$VM" >/dev/null 2>&1 || true
     local _
     for _ in $(seq 1 30); do [ "$(vm_status)" = started ] && break; sleep 2; done
     [ "$(vm_status)" = started ] || die "UTM didn't start $VM (status: $(vm_status)). UTM may be showing a dialog: check its window, or quit and reopen UTM."
@@ -459,9 +459,9 @@ case "$action" in
     # Detach the install media; the config ISO holds the lab password.
     if plutil -p "$BUNDLE/config.plist" | grep -q '"ImageName" => "lab-'; then
       info "Detaching the install media"
-      utmctl stop --request "$VM" >/dev/null 2>&1 || true  # a clean Windows shutdown
+      utmctl stop --hide --request "$VM" >/dev/null 2>&1 || true  # a clean Windows shutdown
       for _ in $(seq 1 60); do [ "$(vm_status)" = stopped ] && break; sleep 2; done
-      [ "$(vm_status)" = stopped ] || utmctl stop --force "$VM" >/dev/null 2>&1 || true
+      [ "$(vm_status)" = stopped ] || utmctl stop --hide --force "$VM" >/dev/null 2>&1 || true
       set_install_media
       rm -f "$CFG_ISO"
       utm "reload configuration (virtual machine named \"$VM\")" >/dev/null
@@ -472,7 +472,7 @@ case "$action" in
     ;;
   adopt) require_password; mkdir -p "$UTM_DIR"; adopt_vm "${2:-}" ;;
   start) start_vm; wait_ready "${WINDOWS_BOOT_WAIT:-30}" "boot" ;;
-  stop) vm_registered && utmctl stop "$VM" || true; ok "$VM stopped" ;;
+  stop) vm_registered && utmctl stop --hide "$VM" || true; ok "$VM stopped" ;;
   delete)
     # Only ever delete a VM the lab built. An adopted VM is the user's own:
     # UTM's delete removes its files for good, so leave that to them.
@@ -483,7 +483,7 @@ case "$action" in
          exit 0 ;;
     esac
     confirm "Delete $VM and its disk?" n || exit 0
-    if vm_registered; then utmctl stop "$VM" 2>/dev/null || true; utm "delete (virtual machine named \"$VM\")"; fi
+    if vm_registered; then utmctl stop --hide "$VM" 2>/dev/null || true; utm "delete (virtual machine named \"$VM\")"; fi
     rm -f "$CFG_ISO"
     ok "$VM deleted" ;;
   status)

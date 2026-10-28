@@ -16,7 +16,7 @@ owner, so only admins see it until one shares it.
 import logging
 import re
 from typing import Iterable, Optional
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -180,6 +180,27 @@ def visible_cases(user: dict) -> Optional[set]:
     if visible is None:
         return None
     return {job.case_number for job in _storage.list_jobs(limit=100000, job_ids=visible)}
+
+
+# The ATT&CK Navigator serves each case's layer as /assets/<case>.json (post/mitre/nav_config.py)
+LAYER_PATH = re.compile(r"^/assets/([^/]+)\.json$")
+
+
+def layer_allowed(user: dict, uri: str) -> bool:
+    """Whether `user` may fetch this Navigator URI. A case's layer follows the case; the
+    Navigator's own assets (ATT&CK itself, its config) are for anyone signed in."""
+    match = LAYER_PATH.match(unquote(urlsplit(uri or "/").path))
+    if not match:
+        return True
+    cases = visible_cases(user)
+    if cases is None or match.group(1) in cases:
+        return True
+    # Not one of theirs: refuse it if it's anyone's case, and admins-only if it's a layer
+    # with no job behind it (an Elrond run from the command line)
+    case = match.group(1)
+    if any(job.case_number == case for job in _storage.list_jobs(limit=100000)):
+        return False
+    return not (settings.output_dir / case).is_dir()
 
 
 def case_allowed(user: dict, case_id: str) -> bool:

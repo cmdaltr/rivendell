@@ -20,6 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     var pageQueue: [String] = []
     let setup = SetupState()
     var runtimeTimer: Timer?
+    /// When a start began with no progress reports (no python3 for startup_progress.py):
+    /// the journey then walks against this Mac's earlier starts, and this one is recorded
+    var unreportedStart: Date?
     var orbObservation: NSKeyValueObservation?
 
     static func main() {
@@ -150,7 +153,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func startStack() {
         splashStatus("Starting the Docker stack…")
-        runLauncher(["start", "--progress"], output: splashLine) { status in
+        if let typical = typicalStart() { js("expect", [typical]) }
+        unreportedStart = Date()
+        runLauncher(["start", "--progress"], output: { line in
+            if line.hasPrefix("@@progress ") { self.unreportedStart = nil }
+            self.splashLine(line)
+        }) { status in
             guard status == 0 else {
                 self.splashError("'rivendell start' exited with status \(status). The output is above.")
                 return
@@ -163,6 +171,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func waitForUI(deadline: Date) {
         probe { up in
             if up {
+                if let started = self.unreportedStart {
+                    recordStart(seconds: Date().timeIntervalSince(started))
+                    self.unreportedStart = nil
+                }
                 self.showUI()
             } else if Date() > deadline {
                 self.splashError("The stack started but nothing answered on \(localURL) after \(Int(startTimeout / 60)) minutes. Try 'rivendell status'.")
@@ -498,5 +510,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         } else {
             splashError("Lost the web UI: \(error.localizedDescription)")
         }
+    }
+}
+
+// MARK: Start-up history (startup_progress.py keeps the same file)
+
+let startHistory: URL = {
+    let env = ProcessInfo.processInfo.environment
+    let base = env["XDG_STATE_HOME"].map { URL(fileURLWithPath: $0) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".local/state")
+    return base.appendingPathComponent("rivendell/start-history.jsonl")
+}()
+
+/// The median of this Mac's last 20 local starts, in seconds: startup_progress.py's
+/// (warm, cold) and the app's own when it had no progress reports (app)
+func typicalStart() -> Double? {
+    guard let text = try? String(contentsOf: startHistory, encoding: .utf8) else { return nil }
+    let totals = text.split(whereSeparator: \.isNewline).compactMap { line -> Double? in
+        guard let data = line.data(using: .utf8),
+              let record = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let kind = record["kind"] as? String, ["warm", "cold", "app"].contains(kind) else { return nil }
+        return (record["total"] as? NSNumber)?.doubleValue
+    }.suffix(20).sorted()
+    guard !totals.isEmpty else { return nil }
+    let mid = totals.count / 2
+    return totals.count % 2 == 1 ? totals[mid] : (totals[mid - 1] + totals[mid]) / 2
+}
+
+/// Appends a start the app timed itself; startup_progress.py ignores kind "app"
+func recordStart(seconds: Double) {
+    let record: [String: Any] = ["kind": "app", "at": Int(Date().timeIntervalSince1970),
+                                 "total": (seconds * 10).rounded() / 10]
+    guard let data = try? JSONSerialization.data(withJSONObject: record),
+          let line = String(data: data, encoding: .utf8).map({ $0 + "\n" }) else { return }
+    try? FileManager.default.createDirectory(at: startHistory.deletingLastPathComponent(),
+                                             withIntermediateDirectories: true)
+    if let handle = try? FileHandle(forWritingTo: startHistory) {
+        handle.seekToEndOfFile()
+        handle.write(Data(line.utf8))
+        handle.closeFile()
+    } else {
+        try? line.write(to: startHistory, atomically: true, encoding: .utf8)
     }
 }

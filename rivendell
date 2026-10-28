@@ -65,23 +65,44 @@ detect_compose() {
     fi
 }
 
+# Starts the engine the current Docker context points at (OrbStack or Docker Desktop),
+# headless: no window, nothing new in the Dock. One that's already starting is waited
+# for, not joined by the other.
+start_docker_engine() {
+    local context engine=""
+    context="$(docker context show 2>/dev/null)"
+    case "$context" in
+        orbstack) engine=orbstack ;;
+        desktop-linux) engine=desktop ;;
+    esac
+    if [ -z "$engine" ]; then
+        if pgrep -q com.docker.backend; then engine=desktop
+        elif [ -d /Applications/OrbStack.app ] || command -v orb &>/dev/null; then engine=orbstack
+        else engine=desktop
+        fi
+    fi
+    if [ "$engine" = orbstack ]; then
+        echo "Starting OrbStack..."
+        # orb start runs the engine without the app's window
+        orb start &>/dev/null || open -g -j -a OrbStack
+    else
+        echo "Starting Docker Desktop..."
+        if pgrep -q com.docker.backend; then
+            echo "(already starting; waiting for it)"
+        else
+            docker desktop start --detach &>/dev/null || open -g -j -a Docker
+        fi
+    fi
+}
+
 ensure_docker() {
     if docker info &>/dev/null; then
         return 0
     fi
     echo "Docker is not running."
     if [[ "$(uname)" == "Darwin" ]]; then
-        # Prefer OrbStack, fall back to Docker Desktop
-        if command -v orb &>/dev/null; then
-            echo "Starting OrbStack..."
-            open -a OrbStack
-        elif open -a OrbStack &>/dev/null; then
-            echo "Starting OrbStack..."
-        else
-            echo "Starting Docker Desktop..."
-            open -a Docker
-        fi
-        for i in $(seq 1 60); do
+        start_docker_engine
+        for i in $(seq 1 180); do
             sleep 1
             if docker info &>/dev/null; then
                 echo "Docker started."
@@ -174,7 +195,8 @@ stack() {
             compose_cmd up -d $BUILD_FLAG || exit 1
             [ -n "$BUILD_FLAG" ] && cat "$ROOT/.rivendell-version" > "$ROOT/.rivendell-built"
             print_urls
-            $FOLLOW_LOGS && compose_cmd logs -f
+            # Not `$FOLLOW_LOGS && ...`: without --logs that leaves start's exit status at 1
+            if $FOLLOW_LOGS; then compose_cmd logs -f; fi
             ;;
         stop)
             echo "Stopping Rivendell..."

@@ -56,6 +56,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DATABASE_URL=postgresql://rivendell:${POSTGRES_PASSWORD:-rivendell}@postgres:5432/rivendell
+      - RIVENDELL_EVIDENCE_PATHS=${RIVENDELL_EVIDENCE_PATHS:-}
       # JWT signing key. Docker administration stays disabled until this is changed.
       - SECRET_KEY=${SECRET_KEY:-your-secret-key-change-in-production}
       - ANDURIL_URL=http://anduril:5690
@@ -137,6 +138,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - DATABASE_URL=postgresql://rivendell:${POSTGRES_PASSWORD:-rivendell}@postgres:5432/rivendell
+      - RIVENDELL_EVIDENCE_PATHS=${RIVENDELL_EVIDENCE_PATHS:-}
       - SPLUNK_HOST=splunk
       - SPLUNK_PORT=8089
       - SPLUNK_USERNAME=admin

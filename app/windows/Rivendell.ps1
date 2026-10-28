@@ -61,7 +61,11 @@ function Wait-Docker {
         throw "Docker isn't running and Docker Desktop isn't installed at $desktop. Start Docker and retry."
     }
     Write-Host 'Starting Docker Desktop...'
-    Start-Process $desktop
+    # Its own CLI starts the engine without the dashboard; older versions don't have it
+    $ErrorActionPreference = 'Continue'
+    docker desktop start --detach *> $null
+    if ($LASTEXITCODE -ne 0) { Start-Process $desktop -WindowStyle Hidden }
+    $ErrorActionPreference = 'Stop'
     for ($i = 0; $i -lt 120; $i++) {
         Start-Sleep -Seconds 2
         if ($script:Journey) { Show-Journey $script:Journey }
@@ -119,6 +123,8 @@ $Messages = @{ docker = 'Waking Docker'; images = 'Forging the images'; containe
 $Places = @(@(0.0, 'the Shire'), @(0.18, 'Bree'), @(0.38, 'Weathertop'), @(0.55, 'the Last Bridge'),
             @(0.7, 'the Trollshaws'), @(0.86, 'the Ford of Bruinen'))
 $HistoryFile = Join-Path $State 'start-history.jsonl'
+# BuildKit's step lines with --progress plain: '#12 [worker 5/31] RUN ...' (startup_progress.py's STEP)
+$StepLine = '^#\d+ \[([\w.-]+)(?:\s+[\w.-]+)?\s+(\d+)/(\d+)\]'
 $script:Journey = $null
 
 function Get-Median([double[]]$Values) {
@@ -142,7 +148,8 @@ function New-Journey([string]$Kind) {
     }
     $now = Get-Date
     return [pscustomobject]@{ Kind = $Kind; Learning = ($history.Count -eq 0); Expected = $expected
-                              Started = $now; Phase = 'docker'; PhaseStarted = $now; Done = @{} }
+                              Started = $now; Phase = 'docker'; PhaseStarted = $now; Done = @{}
+                              BuildFraction = 0.0; Detail = '' }
 }
 
 function Enter-Phase($J, [string]$Phase) {
@@ -150,11 +157,16 @@ function Enter-Phase($J, [string]$Phase) {
     $J.Done[$J.Phase] = ($now - $J.PhaseStarted).TotalSeconds
     $J.Phase = $Phase
     $J.PhaseStarted = $now
+    $J.Detail = ''
 }
 
 function Show-Journey($J) {
     $inPhase = ((Get-Date) - $J.PhaseStarted).TotalSeconds
     $expected = $J.Expected[$J.Phase]
+    if ($J.Phase -eq 'images' -and $J.BuildFraction -gt 0.05 -and $inPhase -gt 20) {
+        # The build's own pace beats history once it's under way
+        $expected = $inPhase / $J.BuildFraction
+    }
     $current = if ($inPhase -lt $expected) { $expected - $inPhase } else { [math]::Max(3, $expected * 0.1) }
     $index = [array]::IndexOf($Phases, $J.Phase)
     $later = 0
@@ -167,7 +179,7 @@ function Show-Journey($J) {
     $eta = if ($remaining -lt 45) { 'less than a minute' } elseif ($remaining -lt 90) { 'about a minute' } else { "about $([math]::Round($remaining / 60)) minutes" }
     $guess = if ($J.Learning) { ' (a first guess: no timings on this PC yet)' } else { '' }
     Write-Progress -Activity 'The road to Rivendell' -Status "$where - $eta to Rivendell$guess" `
-        -CurrentOperation $Messages[$J.Phase] -PercentComplete ([int]($fraction * 100))
+        -CurrentOperation ($Messages[$J.Phase] + $(if ($J.Detail) { " ($($J.Detail))" } else { '' })) -PercentComplete ([int]($fraction * 100))
 }
 
 function Complete-Journey($J) {
@@ -194,14 +206,27 @@ function Get-MissingImages {
     })
 }
 
-function Invoke-ComposeUp($J, [string[]]$Extra) {
+function Invoke-ComposeUp($J, [string[]]$Extra, [int]$Builds) {
     # Native output through the pipeline: 'Continue', or Windows PowerShell stops on stderr
     $ErrorActionPreference = 'Continue'
     $files = Get-ComposeFiles
+    $steps = @{}
     Push-Location $Root
     try {
-        docker compose @files up -d @Extra 2>&1 | ForEach-Object {
+        # --progress plain: BuildKit's step counts, to pace a build by
+        docker compose --progress plain @files up -d @Extra 2>&1 | ForEach-Object {
             $line = "$_"
+            if ($line -match $StepLine -and [int]$Matches[3] -gt 0) {
+                $service = $Matches[1]; $n = [int]$Matches[2]; $m = [int]$Matches[3]
+                $before = if ($steps.ContainsKey($service)) { $steps[$service][0] } else { 0 }
+                $steps[$service] = @([math]::Max($n, $before), $m)
+                $done = 0.0
+                foreach ($s in $steps.Values) { $done += $s[0] / $s[1] }
+                $of = [math]::Max(1, [math]::Max($Builds, $steps.Count))
+                $J.BuildFraction = [math]::Min(1.0, $done / $of)
+                $J.Detail = "$($steps.Count) of $of images under way"
+            }
+            if ($line.StartsWith('#')) { Show-Journey $J; return }  # BuildKit chatter stays out of the console
             if ($J.Phase -eq 'images' -and $line -match '\b(Creating|Created|Starting|Started|Recreate|Running)\b') {
                 Enter-Phase $J 'containers'
             }
@@ -267,7 +292,7 @@ try {
         if ($missing.Count) { Write-Host "$($missing.Count) image(s) to fetch or build: the first start takes a while." }
         Write-Host 'Starting Rivendell...'
         Enter-Phase $script:Journey 'images'
-        Invoke-ComposeUp $script:Journey $extra
+        Invoke-ComposeUp $script:Journey $extra $missing.Count
         if ($script:Journey.Phase -eq 'images') { Enter-Phase $script:Journey 'containers' }
         if ($extra -contains '--build') {
             Copy-Item (Join-Path $Root '.rivendell-version') (Join-Path $Root '.rivendell-built') -Force

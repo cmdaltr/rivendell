@@ -112,6 +112,25 @@ forward_ip() {
   else docker network inspect bridge -f '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || echo 172.17.0.1; fi
 }
 
+# UTM, opened in the background and kept out of the Dock when the lab is what launches
+# it. UTM reads HideDockIcon as it starts, so the setting is put back once it's running and
+# opening UTM yourself later shows its icon as usual. utmctl then drives it, with --hide.
+utm_up() {
+  pgrep -xq UTM && return 0
+  local previous
+  previous="$(defaults read com.utmapp.UTM HideDockIcon 2>/dev/null || echo unset)"
+  defaults write com.utmapp.UTM HideDockIcon -bool true
+  open -g -j -a UTM
+  local _
+  for _ in $(seq 1 30); do pgrep -xq UTM && break; sleep 1; done
+  sleep 3  # past its launch, where the setting is read
+  if [ "$previous" = unset ]; then
+    defaults delete com.utmapp.UTM HideDockIcon 2>/dev/null || true
+  else
+    defaults write com.utmapp.UTM HideDockIcon -bool "$previous"
+  fi
+}
+
 tart_bin() {
   if need tart; then command -v tart; elif [ -x /Applications/tart.app/Contents/MacOS/tart ]; then echo /Applications/tart.app/Contents/MacOS/tart; fi
 }
