@@ -116,7 +116,6 @@ def run_siem_export(job, output_dir: Path, logger):
 
             try:
                 # Check if elrond app already exists
-                import subprocess
                 check_result = subprocess.run(
                     ['docker', 'exec', 'rivendell-splunk', 'test', '-d', '/opt/splunk/etc/apps/elrond'],
                     capture_output=True
@@ -144,7 +143,6 @@ def run_siem_export(job, output_dir: Path, logger):
 
             # Create Splunk index for this case if it doesn't exist
             try:
-                import subprocess
                 job.log.append(f"[{datetime.now().isoformat()}] -> creating Splunk index '{job.case_number}'...")
                 job_storage.save_job(job)
 
@@ -185,7 +183,6 @@ def run_siem_export(job, output_dir: Path, logger):
                     # Configure Splunk inputs using docker exec to write to the container's filesystem
                     # This creates monitor stanzas in inputs.conf for each artifact directory
                     try:
-                        import subprocess
 
                         # Path inside Splunk container
                         inputs_conf = '/opt/splunk/etc/apps/elrond/default/inputs.conf'
@@ -647,7 +644,6 @@ def start_analysis(self, job_id: str):
                     logger.error(f"SIEM export failed: {e}")
 
                     # Write full traceback to error.log
-                    import traceback
                     error_log_path = dest_dir / "error.log"
                     with open(error_log_path, "a") as error_log:
                         error_log.write(f"\n{'='*80}\n")

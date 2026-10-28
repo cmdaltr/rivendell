@@ -639,8 +639,6 @@ def start_analysis(self, job_id: str):
                 # Use rm -rf with progress monitoring for large directories
                 start_time = datetime.now()
                 try:
-                    import time
-
                     # Start rm -rf in background
                     rm_process = subprocess.Popen(
                         ["rm", "-rf", dest_dir_str],
