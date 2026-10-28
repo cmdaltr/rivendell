@@ -411,7 +411,10 @@ def main() -> None:
 
     token, user = sign_in(args.api, args.username, os.environ.get("RIVENDELL_PASSWORD", ""))
     session = {"token": token, "user": user}
-    fills = {"repo": str(REPO), "case": args.case or args.case_dir.name, "job": latest_job(args.api, token)}
+    case = args.case or args.case_dir.name
+    fills = {"repo": str(REPO), "case": case, "job": latest_job(args.api, token, case)}
+    if not fills["job"]:
+        sys.exit(f"No job for case {case}: pass --case with the case ID the web UI shows")
     fills.update({name: make(args.case_dir) for name, make in TERMINALS.items()})
     checked = args.integrity or next(args.case_dir.rglob("gandalf_integrity.csv"), None)
     if not checked:
