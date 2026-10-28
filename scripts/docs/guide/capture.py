@@ -100,7 +100,7 @@ def capture(args: argparse.Namespace) -> None:
         context = browser.new_context(viewport={"width": WIDTH, "height": HEIGHT})
         # No start-up offer over the pages, and the token where the app keeps it
         context.add_init_script(
-            "sessionStorage.setItem('rivendell.offered', '1');"
+            "localStorage.setItem('rivendell.offeredAt', String(Date.now()));"
             + (f"localStorage.setItem('access_token', {json.dumps(token)});" if token else "")
             + (f"localStorage.setItem('user', {json.dumps(json.dumps(user))});" if user else ""))
         page = context.new_page()

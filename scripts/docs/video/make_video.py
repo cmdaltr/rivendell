@@ -41,6 +41,9 @@ WIDTH, HEIGHT, FPS = 1920, 1080, 30
 PAGE_VIEW = (1440, 810)
 GAP = 0.6  # seconds of quiet after each scene's narration
 FADE = 0.8  # seconds from black at a section's start, and to black after its last frame
+# Marks the welcome as already offered, so it doesn't cover the page (a scene with "fresh" shows it).
+# Part of a page scene's key: when the app's storage changes, every page scene is filmed again.
+OFFERED = "localStorage.setItem('rivendell.offeredAt', String(Date.now()));"
 # What the lab's Windows machine was seeded with, and the IOCs it planted
 SEEDED = ["T1070.006", "T1564.004", "T1546.003"]
 PLANTED = "rivendell-lab.test"
@@ -286,7 +289,7 @@ def film(scene: dict, seconds: float, webm: Path, args: argparse.Namespace, sess
     view = PAGE_VIEW if visual["kind"] == "page" else (WIDTH, HEIGHT)
     context = browser.new_context(viewport={"width": view[0], "height": view[1]}, device_scale_factor=1,
                                   record_video_dir=str(record), record_video_size={"width": view[0], "height": view[1]})
-    offered = "" if visual.get("fresh") else "sessionStorage.setItem('rivendell.offered', '1');"
+    offered = "" if visual.get("fresh") else OFFERED
     context.add_init_script(
         offered
         + f"localStorage.setItem('access_token', {json.dumps(session['token'])});"
@@ -435,7 +438,8 @@ def main() -> None:
                 mp4 = section_dir / f"{scene['id']}.mp4"
                 stamp_file = mp4.with_suffix(".json")
                 key = fingerprint(scene, {"pace": args.pace, "voice": args.voice, "preview": args.preview,
-                                          "view": PAGE_VIEW if scene["visual"]["kind"] == "page" else None})
+                                          "view": PAGE_VIEW if scene["visual"]["kind"] == "page" else None,
+                                          "offered": OFFERED if scene["visual"]["kind"] == "page" else None})
                 wanted = not args.only or scene["id"] in args.only or section["id"] in args.only
                 known = json.loads(stamp_file.read_text()) if stamp_file.exists() else {}
                 if mp4.exists() and (known.get("key") == key or not wanted):
