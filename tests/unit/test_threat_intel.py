@@ -177,6 +177,28 @@ def test_case_match(tmp_path):
     assert groups[1]["Techniques In Case"] == "T1003.001, T1059.001"
 
 
+def test_gandalf_script_blocks_left_out(tmp_path):
+    case = tmp_path / "case"
+    evt = case / "HOST" / "artefacts" / "cooked" / "evt"
+    evt.mkdir(parents=True)
+
+    def block(number, text, block_id, path=""):
+        return {"data": {"Event": {"EventData": {"MessageNumber": number, "ScriptBlockText": text,
+                                                 "ScriptBlockId": block_id, "Path": path}}}}
+    # Part 2 of Gandalf's block has no Path, but shares its id; the attacker's block mentions the
+    # same command, after more than a snippet's worth of other script
+    (evt / "Microsoft-Windows-PowerShell%4Operational.json").write_text(json.dumps([
+        block(1, "function Get-Mft {}", "g1", "C:\\TEMP\\gandalf\\gandalf\\tools\\Invoke-ArtefactAcquisition.ps1"),
+        block(2, "reg save HKLM\\SAM C:\\TEMP\\gandalf\\sam", "g1"),
+        block(1, "# padding\n" * 60 + "reg save HKLM\\SAM C:\\Users\\Public\\s.hiv", "a1"),
+    ]))
+    totals = match_case(str(case), procedures(("reg save", "APT29", "T1003.002", "cmd")))
+    assert totals["collector"] == 2 and totals["elements"] == 1
+    with open(case / "HOST" / "analysis" / "threat_intel_matches.csv") as fh:
+        rows = list(csv.DictReader(fh))
+    assert [r["Record"] for r in rows] == ["#2"] and "reg save HKLM\\SAM C:\\Users\\Public" in rows[0]["Value"]
+
+
 def test_backend_store(tmp_path):
     sqlalchemy = pytest.importorskip("sqlalchemy")
     # First on the path: src/analysis has its own config module, which would win

@@ -35,6 +35,10 @@ MAX_FIELD = 20000
 NOT_TEXT = re.compile(r"^[\d\s:.,+\-TZ/]*$")
 OVERLAP_ONLY_GROUPS = 10
 ATOMIC = ("ip", "domain", "hash", "url")
+# Gandalf's own PowerShell, logged as script blocks while it collected: its reg save, net use and the
+# rest are the acquisition, not the intrusion
+COLLECTOR_SCRIPTS = re.compile(r"(?:^|[\\/])(?:Invoke-Gandalf|Invoke-ArtefactAcquisition)\.ps1$", re.IGNORECASE)
+SNIPPET = 300
 
 
 def _records(path: str) -> Iterator[Tuple[str, Dict[str, str]]]:
@@ -69,6 +73,25 @@ def _flatten(value, prefix: str, out: Dict[str, str]) -> None:
         out[prefix] = value
 
 
+def _collector_blocks(records: List[Tuple[str, Dict[str, str]]]) -> set:
+    """ScriptBlockIds of the script blocks Gandalf's collector logged (every part of a block shares
+    its id, though only some parts carry the Path)."""
+    blocks = set()
+    for _, fields in records:
+        block = next((v for k, v in fields.items() if k.endswith("ScriptBlockId")), "")
+        path = next((v for k, v in fields.items() if k.endswith("EventData.Path")), "")
+        if block and COLLECTOR_SCRIPTS.search(path.strip()):
+            blocks.add(block)
+    return blocks
+
+
+def _snippet(value: str, element: str) -> str:
+    """SNIPPET characters of value around the element, so the row shows what matched."""
+    at = value.lower().find(element.lower())
+    start = max(0, min(at - SNIPPET // 3, len(value) - SNIPPET)) if at > 0 else 0
+    return value[start:start + SNIPPET]
+
+
 def _artefacts(host_dir: str) -> Iterable[str]:
     cooked = os.path.join(host_dir, "artefacts", "cooked")
     for root, _, files in os.walk(cooked):
@@ -85,14 +108,23 @@ def hosts(output_directory: str) -> List[str]:
                   if os.path.isdir(os.path.join(output_directory, d, "artefacts")))
 
 
-def match_host(host_dir: str, index: ThreatIntelIndex) -> Tuple[List[Dict[str, str]], Dict[str, Dict]]:
-    """(match rows, {element: summary}) for one host."""
+def match_host(host_dir: str, index: ThreatIntelIndex) -> Tuple[List[Dict[str, str]], Dict[str, Dict], int]:
+    """(match rows, {element: summary}, records left out as Gandalf's own) for one host."""
     rows: List[Dict[str, str]] = []
+    collector = 0
     listed: Dict[str, int] = defaultdict(int)
     elements: Dict[str, Dict] = {}
     for path in _artefacts(host_dir):
         relative = os.path.relpath(path, host_dir)
-        for record, fields in _records(path):
+        records: Iterable[Tuple[str, Dict[str, str]]] = _records(path)
+        blocks: set = set()
+        if path.endswith(".json") and "powershell" in os.path.basename(path).lower():
+            records = list(records)
+            blocks = _collector_blocks(records)
+        for record, fields in records:
+            if blocks and next((v for k, v in fields.items() if k.endswith("ScriptBlockId")), "") in blocks:
+                collector += 1
+                continue
             for field, value in fields.items():
                 if len(value) < 3 or NOT_TEXT.match(value):
                     continue
@@ -104,7 +136,7 @@ def match_host(host_dir: str, index: ThreatIntelIndex) -> Tuple[List[Dict[str, s
                     if listed[key] > MAX_ROWS_PER_ELEMENT:
                         continue
                     rows.append({
-                        "Artefact": relative, "Record": record, "Field": field, "Value": value[:300],
+                        "Artefact": relative, "Record": record, "Field": field, "Value": _snippet(value, str(entry["element"])),
                         "Element": entry["element"], "Kind": entry["kind"], "Groups Using": str(entry["breadth"]),
                         "Common": "yes" if entry["breadth"] > COMMON_BREADTH else "",
                         "Groups": "; ".join(entry["groups"][:10]) + (" ..." if len(entry["groups"]) > 10 else ""),
@@ -112,7 +144,7 @@ def match_host(host_dir: str, index: ThreatIntelIndex) -> Tuple[List[Dict[str, s
                         "Sources": "; ".join(entry["sources"]),
                         "Reference URL": next((i.reference_url for i in entry["indicators"] if i.reference_url), ""),
                     })
-    return rows, elements
+    return rows, elements, collector
 
 
 def _fill_watchlist(host_dir: str, elements: Dict[str, Dict]) -> int:
@@ -192,10 +224,12 @@ def rank_groups(indicators: List[Indicator], elements: Dict[str, Dict], case_tec
 def match_case(output_directory: str, indicators: List[Indicator], log=None) -> Dict[str, int]:
     """Match every host in the case; returns counts for the audit log. log(message) reports progress."""
     index = ThreatIntelIndex(indicators, scope="case")
-    totals = {"indicators": len(index), "hosts": 0, "matches": 0, "elements": 0, "iocs": 0, "groups": 0}
+    totals = {"indicators": len(index), "hosts": 0, "matches": 0, "elements": 0, "iocs": 0, "groups": 0,
+              "collector": 0}
     case_elements: Dict[str, Dict] = {}
     for host_dir in hosts(output_directory):
-        rows, elements = match_host(host_dir, index)
+        rows, elements, collector = match_host(host_dir, index)
+        totals["collector"] += collector
         os.makedirs(os.path.join(host_dir, "analysis"), exist_ok=True)
         with open(os.path.join(host_dir, "analysis", "threat_intel_matches.csv"), "w", newline="", encoding="utf-8") as out:
             writer = csv.DictWriter(out, fieldnames=MATCH_HEADER)

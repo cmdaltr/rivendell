@@ -909,8 +909,9 @@ if __name__ == "__main__":
             indicators = load_all(threatintel)
             print(f"     Loaded {len(indicators)} indicators from {len(threatintel)} file(s)", flush=True)
             totals = match_case(output_directory, indicators, log=lambda m: print(f"     {m}", flush=True))
-            entry, prnt = "{},{},threat intelligence,{} indicators; {} elements matched; {} iocs; {} groups\n".format(
-                datetime.now().isoformat(), case, totals["indicators"], totals["elements"], totals["iocs"], totals["groups"]
+            entry, prnt = "{},{},threat intelligence,{} indicators; {} elements matched; {} iocs; {} groups; {} of Gandalf's own records left out\n".format(
+                datetime.now().isoformat(), case, totals["indicators"], totals["elements"], totals["iocs"], totals["groups"],
+                totals["collector"],
             ), " -> {} -> matched the case against {} threat intelligence indicators: {} elements found".format(
                 datetime.now().isoformat().replace("T", " "), totals["indicators"], totals["elements"]
             )
