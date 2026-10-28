@@ -591,7 +591,7 @@ function JobList() {
 
       <div className="card">
         <div className="list-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div className="filter-controls">
+          <div data-guide="jobs.filters" className="filter-controls">
             <label>Filter by status:</label>
             <select
               value={statusFilter || ''}
@@ -722,7 +722,7 @@ function JobList() {
             </Link>
           </div>
         ) : (
-          <div className="table-container">
+          <div data-guide="jobs.table" className="table-container">
             <table>
               <thead>
                 <tr>

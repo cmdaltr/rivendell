@@ -911,7 +911,7 @@ function NewAnalysis() {
 
         <form onSubmit={handleSubmit}>
           <div className="form-row">
-            <div className="form-group">
+            <div data-guide="elrond.case" className="form-group">
               <label htmlFor="caseNumber">
                 Case Number / Investigation ID *
               </label>
@@ -936,7 +936,7 @@ function NewAnalysis() {
               )}
             </div>
 
-            <div className="form-group">
+            <div data-guide="elrond.source" className="form-group">
               <label>Evidence Source *</label>
               {!isCaseNumberValid && (
                 <div className="info-message">
@@ -1040,7 +1040,7 @@ function NewAnalysis() {
 
           {/* Evidence Source Selector - Only show when a source is selected */}
           {analysisMode && analysisMode !== 'json' && (
-            <div className="form-group">
+            <div data-guide="elrond.browse" className="form-group">
               <label>
                 {analysisMode === 'gandalf' && 'Select Gandalf Acquisitions *'}
                 {analysisMode === 'local' && 'Select Disk/Memory Images *'}
@@ -1199,7 +1199,7 @@ function NewAnalysis() {
             </div>
           )}
 
-          <div className="form-group">
+          <div data-guide="elrond.options" className="form-group">
             <label>Processing Options</label>
             {!isCaseNumberValid && (
               <div className="info-message">

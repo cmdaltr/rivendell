@@ -43,7 +43,7 @@ function JobSharing({ jobId }) {
   );
 
   return (
-    <div className="card" style={{ marginBottom: '1.5rem' }}>
+    <div data-guide="job.sharing" className="card" style={{ marginBottom: '1.5rem' }}>
       <h3>Access</h3>
       <p style={{ margin: '0.25rem 0 0.75rem' }}>
         Owner: <strong>{sharing.owner || 'none (created before sharing; admins only)'}</strong>

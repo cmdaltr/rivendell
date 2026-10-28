@@ -751,7 +751,7 @@ python3 -m rivendell.analysis.engine`}
         </p>
       </header>
 
-      <div className="card">
+      <div data-guide="about.docs" className="card">
         {/* Tab Navigation */}
         <div style={{
           display: 'flex',

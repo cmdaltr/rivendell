@@ -105,7 +105,7 @@ const Home = ({ onScrollProgress }) => {
 
   return (
     <div className="home">
-      <section className="hero-section">
+      <section data-guide="home.hero" className="hero-section">
         <img
           src={heroImage}
           alt="Rivendell - The Last Homely House"
@@ -117,7 +117,7 @@ const Home = ({ onScrollProgress }) => {
         />
       </section>
 
-      <section
+      <section data-guide="home.journeys"
         className="journey-grid"
         style={{ transform: `translateY(${cardOffset}px)` }}
       >
@@ -138,7 +138,7 @@ const Home = ({ onScrollProgress }) => {
         </Link>
       </section>
 
-      <section
+      <section data-guide="home.mordor"
         className="mordor-section"
         style={{ transform: `translateY(${cardOffset}px)` }}
       >

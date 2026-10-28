@@ -1,0 +1,284 @@
+{
+ "home": {
+  "image": "home.jpg",
+  "width": 1440,
+  "height": 1500,
+  "boxes": {
+   "home.hero": [
+    30,
+    0,
+    1379,
+    552
+   ],
+   "home.journeys": [
+    30,
+    536,
+    1379,
+    573
+   ],
+   "home.mordor": [
+    30,
+    1162,
+    1379,
+    623
+   ]
+  }
+ },
+ "gandalf": {
+  "image": "gandalf.jpg",
+  "width": 1440,
+  "height": 597,
+  "boxes": {
+   "gandalf.case": [
+    54,
+    24,
+    1332,
+    97
+   ],
+   "gandalf.config": [
+    54,
+    121,
+    1332,
+    79
+   ],
+   "gandalf.hosts": [
+    54,
+    223,
+    1332,
+    97
+   ],
+   "gandalf.options": [
+    54,
+    321,
+    1332,
+    64
+   ],
+   "gandalf.command": [
+    54,
+    415,
+    1332,
+    159
+   ]
+  }
+ },
+ "elrond": {
+  "image": "elrond.jpg",
+  "width": 1440,
+  "height": 1139,
+  "boxes": {
+   "elrond.case": [
+    54,
+    24,
+    654,
+    74
+   ],
+   "elrond.source": [
+    731,
+    24,
+    654,
+    74
+   ],
+   "elrond.browse": [
+    54,
+    121,
+    1332,
+    365
+   ],
+   "elrond.options": [
+    54,
+    509,
+    1332,
+    605
+   ]
+  }
+ },
+ "jobs": {
+  "image": "jobs.jpg",
+  "width": 1440,
+  "height": 238,
+  "boxes": {
+   "jobs.filters": [
+    54,
+    24,
+    285,
+    46
+   ],
+   "jobs.table": [
+    54,
+    85,
+    1332,
+    129
+   ]
+  }
+ },
+ "job": {
+  "image": "job.jpg",
+  "width": 1440,
+  "height": 730,
+  "boxes": {
+   "job.actions": [
+    933,
+    24,
+    453,
+    46
+   ],
+   "job.info": [
+    54,
+    99,
+    1332,
+    47
+   ],
+   "job.progress": [
+    54,
+    162,
+    1332,
+    52
+   ],
+   "job.sources": [
+    54,
+    400,
+    654,
+    89
+   ],
+   "job.options": [
+    731,
+    400,
+    654,
+    89
+   ],
+   "job.log": [
+    54,
+    520,
+    1332,
+    186
+   ]
+  }
+ },
+ "eru": {
+  "image": "eru.jpg",
+  "width": 1440,
+  "height": 737,
+  "boxes": {
+   "eru.help": [
+    54,
+    24,
+    1332,
+    202
+   ],
+   "eru.case": [
+    54,
+    241,
+    1332,
+    71
+   ],
+   "eru.chat": [
+    54,
+    335,
+    1332,
+    57
+   ],
+   "eru.quick": [
+    54,
+    407,
+    1332,
+    237
+   ],
+   "eru.ask": [
+    54,
+    667,
+    1332,
+    46
+   ]
+  }
+ },
+ "mordor": {
+  "image": "mordor.jpg",
+  "width": 1440,
+  "height": 1500,
+  "boxes": {
+   "mordor.tiles": [
+    30,
+    24,
+    1379,
+    91
+   ],
+   "mordor.generate": [
+    30,
+    150,
+    1379,
+    1051
+   ],
+   "mordor.recorded": [
+    30,
+    1246,
+    1379,
+    2992
+   ]
+  }
+ },
+ "archive": {
+  "image": "archive.jpg",
+  "width": 1440,
+  "height": 332,
+  "boxes": {
+   "archive.list": [
+    30,
+    24,
+    1379,
+    284
+   ]
+  }
+ },
+ "account": {
+  "image": "account.jpg",
+  "width": 1440,
+  "height": 543,
+  "boxes": {
+   "account.settings": [
+    30,
+    24,
+    1379,
+    495
+   ]
+  }
+ },
+ "aragorn": {
+  "image": "aragorn.jpg",
+  "width": 1440,
+  "height": 98,
+  "boxes": {
+   "aragorn.tabs": [
+    30,
+    24,
+    1379,
+    50
+   ]
+  }
+ },
+ "aragorn-settings": {
+  "image": "aragorn-settings.jpg",
+  "width": 1440,
+  "height": 297,
+  "boxes": {
+   "aragorn.anduril": [
+    30,
+    24,
+    1379,
+    249
+   ]
+  }
+ },
+ "about": {
+  "image": "about.jpg",
+  "width": 1440,
+  "height": 1500,
+  "boxes": {
+   "about.docs": [
+    30,
+    24,
+    1379,
+    1589
+   ]
+  }
+ }
+}

@@ -17,9 +17,10 @@ import JobDetails from './components/JobDetails';
 import Archive from './components/Archive';
 import AccountPage from './components/AccountPage';
 import Aragorn from './components/Aragorn';
+import StartOffer from './components/StartOffer';
 import './App.css';
 
-function Navigation() {
+function Navigation({ onGuide }) {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
 
@@ -41,6 +42,7 @@ function Navigation() {
         <Link to="/ai">Ask Eru</Link>
         <Link to="/jobs">Jobs</Link>
         <Link to="/help">About</Link>
+        <button type="button" className="nav-guide" onClick={onGuide}>Guide</button>
         <Link to={isAuthenticated ? "/account" : "/login"}>Account</Link>
         <button
           onClick={isAuthenticated ? handleLogout : undefined}
@@ -61,6 +63,7 @@ function Navigation() {
 
 function AppContent() {
   const [scrollProgress, setScrollProgress] = useState(0);
+  const [guideRequested, setGuideRequested] = useState(false);
   const mapBackground = `${process.env.PUBLIC_URL}/images/middle_earth.png`;
 
   return (
@@ -77,8 +80,10 @@ function AppContent() {
       }}
     >
       <header className="App-header">
-        <Navigation />
+        <Navigation onGuide={() => setGuideRequested(true)} />
       </header>
+
+        <StartOffer guideRequested={guideRequested} onGuideClosed={() => setGuideRequested(false)} />
 
         <main className="App-main">
           <Routes>

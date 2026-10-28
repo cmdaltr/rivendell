@@ -713,7 +713,7 @@ function JobDetails() {
             </h2>
             <div className="job-id">ID: {job.id}</div>
           </div>
-          <div className="job-actions">
+          <div data-guide="job.actions" className="job-actions">
             {(job.status === 'running' || job.status === 'paused') && (
               <button
                 className="secondary"
@@ -764,7 +764,7 @@ function JobDetails() {
         {error && <div className="error">{error}</div>}
 
         {/* Row 1: Case # | Duration | Destination */}
-        <div className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.5fr 0.5fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
+        <div data-guide="job.info" className="job-info-grid" style={{ display: 'grid', gridTemplateColumns: '0.5fr 0.5fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
           <div className="info-item">
             <strong>Case #:</strong>
             <span>{job.case_number}</span>
@@ -779,7 +779,7 @@ function JobDetails() {
           </div>
         </div>
         {/* Row 3: Progress bar */}
-        <div className="job-info-grid" style={{ marginBottom: '0.5rem' }}>
+        <div data-guide="job.progress" className="job-info-grid" style={{ marginBottom: '0.5rem' }}>
           <div className="progress-bar" style={{ width: '100%' }}>
             <div
               className="progress-fill"
@@ -800,7 +800,7 @@ function JobDetails() {
         <JobSharing jobId={job.id} />
 
         <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '2rem' }}>
-          <div className="source-paths-section" style={{ flex: '1', minWidth: '0' }}>
+          <div data-guide="job.sources" className="source-paths-section" style={{ flex: '1', minWidth: '0' }}>
             <h3>Source Images ({job.source_paths.length})</h3>
             <ul>
               {job.source_paths.map((path, index) => (
@@ -809,7 +809,7 @@ function JobDetails() {
             </ul>
           </div>
 
-          <div className="options-section" style={{ flex: '1', minWidth: '0' }}>
+          <div data-guide="job.options" className="options-section" style={{ flex: '1', minWidth: '0' }}>
             <h3>Enabled Options</h3>
             {getEnabledOptions().length > 0 ? (
               <div className="options-tags">
@@ -852,7 +852,7 @@ function JobDetails() {
           </div>
         </div>
 
-        <div className="log-section">
+        <div data-guide="job.log" className="log-section">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <button

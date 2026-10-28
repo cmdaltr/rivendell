@@ -295,7 +295,7 @@ function AIAssistant() {
 
       <div className="card ai-chat-container">
         {/* Collapsible Help Section */}
-        <div style={{ marginBottom: '1rem' }}>
+        <div data-guide="eru.help" style={{ marginBottom: '1rem' }}>
           <button
             onClick={() => setShowHelp(!showHelp)}
             style={{
@@ -363,7 +363,7 @@ function AIAssistant() {
         </div>
 
         {/* Case Selection and Status */}
-        <div style={{
+        <div data-guide="eru.case" style={{
           display: 'flex',
           gap: '1rem',
           marginBottom: '1.5rem',
@@ -446,7 +446,7 @@ function AIAssistant() {
         </div>
 
         {/* Chat Messages */}
-        <div className="chat-messages" style={{ minHeight: messages.length > 0 ? '200px' : '60px', maxHeight: '500px', overflowY: 'auto' }}>
+        <div data-guide="eru.chat" className="chat-messages" style={{ minHeight: messages.length > 0 ? '200px' : '60px', maxHeight: '500px', overflowY: 'auto' }}>
           {messages.length === 0 && (
             <div style={{
               textAlign: 'center',
@@ -550,7 +550,7 @@ function AIAssistant() {
           <div ref={messagesEndRef} />
         </div>
 
-        <div className="quick-actions" style={{
+        <div data-guide="eru.quick" className="quick-actions" style={{
           marginTop: '1rem',
           position: 'relative'
         }}>
@@ -643,7 +643,7 @@ function AIAssistant() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} style={{
+        <form data-guide="eru.ask" onSubmit={handleSubmit} style={{
           marginTop: '1.5rem',
           display: 'flex',
           gap: '0.75rem'

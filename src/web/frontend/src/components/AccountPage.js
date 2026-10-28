@@ -227,7 +227,7 @@ const AccountPage = () => {
       </header>
 
       {/* Tab Navigation */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div data-guide="account.settings" className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{
           display: 'flex',
           borderBottom: '1px solid #3f4b2a',
