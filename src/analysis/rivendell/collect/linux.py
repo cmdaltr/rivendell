@@ -34,7 +34,13 @@ LINUX_EXTRA_DIRS = (
     ("/etc/nginx", 3, 1 << 20, ()),
     ("/etc/apache2", 3, 1 << 20, ()),
     ("/etc/httpd", 3, 1 << 20, ()),
+    ("/var/lib/docker/containers", 2, 10 << 20, ("config.v2.json", "hostconfig.json")),
+    ("/var/lib/docker/containers", 2, 64 << 20, ("-json.log",)),
+    ("/var/log/pods", 3, 64 << 20, (".log",)),
+    ("/etc/kubernetes/manifests", 1, 1 << 20, (".yaml", ".yml", ".json")),
+    ("/var/log/kubernetes", 2, 256 << 20, (".log",)),
 )
+CONTAINER_MAX_FILES = 5000  # per container, in its writable-layer listing
 WEB_ROOTS = ("/var/www", "/srv/www", "/srv/http", "/usr/share/nginx/html")
 WEB_SCRIPTS = (".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".phar", ".inc", ".jsp", ".jspx",
                ".asp", ".aspx", ".ashx", ".asmx", ".cgi", ".pl", ".py", ".sh", ".cfm")
@@ -82,6 +88,46 @@ def executable_kind(path):
     if head[:2] == b"#!":
         return "script"
     return "executable" if mode & 0o111 else ""
+
+
+def container_change_listing(mnt):
+    """Each Docker container's writable layer: everything changed since its image, with deleted
+    files as overlay whiteouts (character devices 0/0). Listed and hashed, not copied."""
+    docker = mnt + "/var/lib/docker"
+    rows = []
+    try:
+        ids = sorted(os.listdir(docker + "/containers"))
+    except OSError:
+        return rows
+    for cid in ids:
+        try:
+            with open(os.path.join(docker, "image/overlay2/layerdb/mounts", cid, "mount-id")) as fh:
+                upper = os.path.join(docker, "overlay2", fh.read().strip(), "diff")
+        except OSError:
+            continue
+        for count, source in enumerate(_walk(upper, 12)):
+            if count >= CONTAINER_MAX_FILES:
+                break
+            try:
+                info = os.lstat(source)
+            except OSError:
+                continue
+            kind, digest = "", ""
+            if stat.S_ISCHR(info.st_mode):
+                kind = "deleted"
+            elif stat.S_ISREG(info.st_mode):
+                kind = executable_kind(source)
+                if kind and info.st_size <= LISTING_MAX_HASH:
+                    try:
+                        digest = _sha256(source)
+                    except OSError:
+                        pass
+            else:
+                continue
+            rows.append({"Container": cid[:12], "Path": source[len(upper):], "Size": info.st_size,
+                         "Mode": oct(info.st_mode & 0o7777), "Kind": kind, "SHA256": digest,
+                         "MTime": int(info.st_mtime)})
+    return rows
 
 
 def collect_linux_extras(mnt, dest, img, output_directory, stage, verbosity):
@@ -157,6 +203,12 @@ def collect_linux_extras(mnt, dest, img, output_directory, stage, verbosity):
             writer = csv.DictWriter(out, fieldnames=list(rows[0]))
             writer.writeheader()
             writer.writerows(rows)
+    changes = container_change_listing(mnt)
+    if changes:
+        with open(linux + "gandalf+container_changes.csv", "w", newline="") as out:
+            writer = csv.DictWriter(out, fieldnames=list(changes[0]))
+            writer.writeheader()
+            writer.writerows(changes)
     entry, prnt = "{},{},{},linux persistence and history artefacts\n".format(
         datetime.now().isoformat(), img.split("::")[0], stage
     ), " -> {} -> {} {} Linux persistence, login-record and history artefacts from '{}'".format(

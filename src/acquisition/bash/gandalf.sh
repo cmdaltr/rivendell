@@ -411,6 +411,13 @@ collect_linux_extras() {
 /etc/nginx|3|1048576|
 /etc/apache2|3|1048576|
 /etc/httpd|3|1048576|
+/var/lib/docker/containers|2|10485760|config.v2.json
+/var/lib/docker/containers|2|10485760|hostconfig.json
+/var/lib/docker/containers|2|67108864|-json.log
+/var/log/pods|3|67108864|.log
+/etc/kubernetes/manifests|1|1048576|.yaml
+/etc/kubernetes/manifests|1|1048576|.yml
+/var/log/kubernetes|2|268435456|.log
 DIRS
     # Web roots: server-side scripts only, at most 5000
     for top in /var/www /srv/www /srv/http /usr/share/nginx/html; do
@@ -486,6 +493,36 @@ collect_linux_volatile_files() {
         printf 'Path,Size,Mode,UID,Kind,SHA256,MTime\n%s' "$rows" > "$listing"
         log_audit "$audit_log" "$hostname" "temp-directory executables"
     fi
+    # Each Docker container's writable layer: everything changed since its image, deleted
+    # files as overlay whiteouts (character devices 0/0); listed and hashed, not copied
+    local docker=/var/lib/docker cid mount_id upper inside count
+    listing="${linux}/gandalf+container_changes.csv"; rows=""
+    for cid in $(ls "$docker/containers" 2>/dev/null); do
+        mount_id=$(cat "$docker/image/overlay2/layerdb/mounts/$cid/mount-id" 2>/dev/null) || continue
+        upper="$docker/overlay2/$mount_id/diff"
+        [ -d "$upper" ] || continue
+        count=0
+        while IFS= read -r -d '' source; do
+            [ "$count" -lt 5000 ] || break
+            count=$((count + 1))
+            inside="${source#"$upper"}"
+            read -r fsize mode uid mtime < <(stat -c '%s %a %u %Y' "$source" 2>/dev/null) || continue
+            kind=""; hash=""
+            if [ -c "$source" ]; then kind="deleted"
+            elif [ -f "$source" ] && [ ! -L "$source" ]; then
+                head=$(head -c 4 "$source" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+                if [ "$head" = "7f454c46" ]; then kind="elf"
+                elif [ "${head:0:4}" = "2321" ]; then kind="script"
+                elif [ -x "$source" ]; then kind="executable"; fi
+                [ -n "$kind" ] && [ "$fsize" -le 104857600 ] && hash=$(sha256_of "$source")
+            fi
+            rows="${rows}${cid:0:12},\"${inside//\"/\"\"}\",${fsize},0o${mode},${kind},${hash},${mtime}"$'\n'
+        done < <(find "$upper" -mindepth 1 -maxdepth 12 \( -type f -o -type c \) -print0 2>/dev/null)
+    done
+    if [ -n "$rows" ]; then
+        printf 'Container,Path,Size,Mode,Kind,SHA256,MTime\n%s' "$rows" > "$listing"
+        log_audit "$audit_log" "$hostname" "container writable layers"
+    fi
 }
 
 # SHA-256 of every collected file, by its path in the archive, once everything is
@@ -528,6 +565,8 @@ collect_directory() {
     while IFS= read -r -d '' file; do
         # Never collect Gandalf's own working files (it runs from /tmp)
         case "$file" in "$WORK_DIR"/*|/private"$WORK_DIR"/*|*/gandalf_collect.sh) continue ;; esac
+        # Container and Kubernetes logs are taken into linux/ with the other container artefacts
+        case "$file" in /var/log/pods/*|/var/log/containers/*|/var/log/kubernetes/*) continue ;; esac
         local rel_path="${file#$source_dir/}"
         local dest_file="${dest_dir}/$(echo "$rel_path" | tr '/' '+')"
 
