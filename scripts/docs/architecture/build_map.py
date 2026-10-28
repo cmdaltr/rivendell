@@ -180,7 +180,7 @@ box(MX + 20, MY + 440, 330, 286, "Gandalf <span class='sub'>acquisition</span>",
 
 box(MX + 250, MY + 70, 360, 168, "Web UI and API <span class='sub'>:5687 · :5688</span>",
     "React front end and FastAPI back end: start jobs, upload or pick images, watch progress, read results, "
-    "Ask Eru, threat intelligence, a case browser with shared findings. Users and roles; admins also see Aragorn.",
+    "Ask Eru, Pippin (threat intelligence), shared findings. Admins also see Aragorn.",
     TEAL, kicker="The Prancing Pony, Bree")
 
 box(MX + 400, MY + 530, 330, 196, "Elrond worker <span class='sub'>Celery</span>",
