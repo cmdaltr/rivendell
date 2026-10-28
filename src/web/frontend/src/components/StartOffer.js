@@ -18,7 +18,7 @@ const NOT_YET = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 /**
  * At start-up: a quote, then the guide on offer and a tip side by side, each with its own "every start" tickbox.
- * The navigation's Guide link opens the guide directly (guideRequested); its lightbulb opens this (offerRequested).
+ * The navigation's Guide link opens the guide directly (guideRequested); its Doors of Durin open this (offerRequested).
  */
 function StartOffer({ guideRequested, onGuideClosed, offerRequested, onOfferClosed }) {
   const { user, loading } = useAuth();
@@ -40,7 +40,7 @@ function StartOffer({ guideRequested, onGuideClosed, offerRequested, onOfferClos
     if (wanted.guide || wanted.tips) setOffer(true);
   }, [loading, pathname, user]);
 
-  // The lightbulb in the navigation: the welcome, with a fresh tip, whatever the tickboxes say
+  // The Doors of Durin in the navigation: the welcome, with a fresh tip, whatever the tickboxes say
   useEffect(() => {
     if (!offerRequested) return;
     setPrefs(startPrefs(user));

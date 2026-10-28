@@ -60,11 +60,13 @@ function Navigation({ onGuide, onWelcome }) {
           </svg>
           <span>Log out</span>
         </button>
-        <button type="button" className="nav-welcome" onClick={onWelcome} title="Welcome, guide and a tip" aria-label="Show the welcome, guide and a tip">
+        <button type="button" className="nav-welcome" onClick={onWelcome} title="Welcome: the guide and a tip" aria-label="Show the welcome: the guide and a tip">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 18h6" />
-            <path d="M10 22h4" />
-            <path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z" />
+            {/* The Doors of Durin: speak, friend, and enter */}
+            <path d="M5 22V11a7 7 0 0 1 14 0v11" />
+            <path d="M3 22h18" />
+            <path d="M12 14v8" />
+            <path d="M12 6.5v3M10.5 8h3" />
           </svg>
         </button>
       </div>
