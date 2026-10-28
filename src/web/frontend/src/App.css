@@ -1130,7 +1130,7 @@ table input[type="checkbox"] {
    so more of the figure shows and the bottom is trimmed. Mordor's photo fills the width, so it's
    only trimmed: drawn smaller it would leave bars down both sides */
 .journey-card__image {
-  height: 428px;  /* 85% of 504px */
+  height: 432px;
   overflow: hidden;
   flex-shrink: 0;
   display: flex;
@@ -1138,7 +1138,7 @@ table input[type="checkbox"] {
 }
 
 .journey-card--landscape .journey-card__image {
-  height: 459px;  /* 85% of 540px */
+  height: 460px;
 }
 
 .journey-card .journey-card__image img {
