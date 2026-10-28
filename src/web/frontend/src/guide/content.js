@@ -18,9 +18,9 @@ export const GUIDE_PAGES = [
       },
       {
         id: 'home.journeys',
-        title: 'Gandalf and Elrond',
-        what: 'Gandalf collects artefacts from live hosts; Elrond processes disk images, memory images, Gandalf archives and datasets into timelines, CSVs and ATT&CK mappings.',
-        who: 'Incident responders (Gandalf) and forensic analysts (Elrond).',
+        title: 'Gandalf, Elrond, Pippin and Aragorn',
+        what: 'Gandalf collects artefacts from live hosts; Elrond processes disk images, memory images, Gandalf archives and datasets into timelines, CSVs and ATT&CK mappings; Pippin holds the threat intelligence cases are matched against; Aragorn (admins) runs Rivendell itself.',
+        who: 'Incident responders (Gandalf), forensic analysts (Elrond), threat intelligence analysts (Pippin) and administrators (Aragorn).',
         when: 'Gandalf while a host is still up and you need its volatile state; Elrond once you have evidence on disk.',
       },
       {
