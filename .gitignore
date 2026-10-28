@@ -169,5 +169,6 @@ docker-compose.local.yml
 deploy/server/certs/*
 !deploy/server/certs/README
 
-# The YouTube walkthrough: kept locally, not committed (scripts/docs/video/regenerate.sh)
-scripts/docs/video/
+# The YouTube walkthrough: kept locally, not committed, except its README
+scripts/docs/video/*
+!scripts/docs/video/README.md
