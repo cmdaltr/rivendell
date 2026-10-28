@@ -59,7 +59,7 @@ def sign_in(api: str, username: str, password: str) -> tuple:
 
 def latest_job(api: str, token: str, case: str = "") -> str:
     """The most recent job's ID (of that case, when one is named), for the Job page."""
-    request = urllib.request.Request(f"{api}/api/jobs?limit={200 if case else 1}")
+    request = urllib.request.Request(f"{api}/api/jobs?limit={100 if case else 1}")
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(request, timeout=20) as response:
