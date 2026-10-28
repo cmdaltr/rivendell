@@ -17,9 +17,11 @@ from pydantic import BaseModel
 try:
     from . import eru_offline
     from .auth import access
+    from .storage import JobStorage
 except ImportError:  # main.py imports the routes as top-level modules too
     import eru_offline
     from auth import access
+    from storage import JobStorage
 
 # Initialize router
 router = APIRouter(prefix="/api/ai", tags=["AI"])
@@ -212,7 +214,6 @@ async def list_indexed_cases(request: Request):
                     })
 
         # Also check completed jobs for case data
-        from .storage import JobStorage
         job_storage = JobStorage()
 
         for job in job_storage.list_jobs():
@@ -295,7 +296,6 @@ async def get_case_info(case_id: str):
     vector_db_path = os.path.join(case_path, "vector_db")
 
     # Also check job storage
-    from .storage import JobStorage
     job_storage = JobStorage()
 
     job_info = None
@@ -358,7 +358,6 @@ async def query_case(case_id: str, request: QueryRequest):
 
     # Check job storage
     if not case_path:
-        from .storage import JobStorage
         job_storage = JobStorage()
 
         for job in job_storage.list_jobs():
@@ -520,7 +519,6 @@ async def _find_case_path(case_id: str) -> Optional[str]:
 
     # Check job storage
     try:
-        from .storage import JobStorage
         job_storage = JobStorage()
 
         for job in job_storage.list_jobs():

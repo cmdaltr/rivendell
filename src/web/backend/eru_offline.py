@@ -8,6 +8,7 @@ Elrond found, so the answers are exact rather than generated.
 """
 
 import csv
+import json
 import logging
 import os
 import re
@@ -44,6 +45,15 @@ def _rows(path: Path) -> List[Dict[str, str]]:
     except (OSError, csv.Error) as e:
         logger.debug(f"Couldn't read {path}: {e}")
         return []
+
+
+def _json_records(path: Path) -> List[Dict]:
+    try:
+        records = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, ValueError) as e:
+        logger.debug(f"Couldn't read {path}: {e}")
+        return []
+    return [r for r in records if isinstance(r, dict)] if isinstance(records, list) else []
 
 
 def _cooked(host: Path, pattern: str) -> Iterable[Path]:
@@ -111,11 +121,19 @@ def persistence(case_path: str) -> str:
             for path in _cooked(host, name):
                 for row in _rows(path):
                     lines.append(f"{path.stem}: {row.get('Path') or row.get('Source') or row.get('Name') or ''}")
+        # WMI event subscriptions carved from the repository; Elrond notes the ones Windows makes itself
+        for path in _cooked(host, "wbem.json"):
+            for sub in _json_records(path):
+                if not sub.get("note"):
+                    action = "; ".join(str(v) for v in sub.get("consumer_values") or [])
+                    lines.append(f"WMI subscription: {sub.get('filter_name')} -> {sub.get('consumer_class')} "
+                                 f"'{sub.get('consumer_name')}'" + (f": {action}" if action else ""))
         if lines:
             sections.append(f"**{host.name}**\n" + _bullets(lines))
     if not sections:
-        return ("Nothing flagged as persistence. Elrond flags startup items, Run keys, launchd and BTM items, "
-                "PAM, sudoers, udev, autostart, generators and kernel modules when it finds something unusual.")
+        return ("Nothing flagged as persistence. Elrond flags startup items, Run keys, WMI event subscriptions, "
+                "launchd and BTM items, PAM, sudoers, udev, autostart, generators and kernel modules when it "
+                "finds something unusual.")
     return "**Flagged persistence and privilege findings:**\n\n" + "\n\n".join(sections)
 
 

