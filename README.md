@@ -550,6 +550,7 @@ And 25+ additional tools. See [REQUIREMENTS.md](docs/REQUIREMENTS.md) for the co
 
 **v2.3 (Future):**
 - Collaborative investigation features
+- Lab VM consoles in the browser for team servers (docs/SERVER.md)
 - Advanced ML-based anomaly detection
 - Container forensics (Docker, Kubernetes)
 - Threat intelligence integration

@@ -136,3 +136,13 @@ Failed password sign-ins are counted in Redis, so restarts don't reset them. Fiv
 ## The schema
 
 The backend migrates its database on start with Alembic (`src/web/backend/alembic/`), under a Postgres advisory lock so the backend and the worker starting together don't race. A database from before migrations is recognised and stamped, not recreated. A worker image built before Alembic was added keeps creating any missing tables itself, as it always did.
+
+## Planned: lab consoles in the browser
+
+When the lab's VMs run on the server itself, admins never sit at the host, so seeing a VM's screen means a remote-desktop session to the server. The plan is a Console button per lab VM on Aragorn › Lab:
+
+- each VM serves its screen over VNC on the host's loopback (QEMU's `-vnc 127.0.0.1:N` in a UTM bundle's `config.plist`, which the lab agent finds through UTM's registry; Tart's `--vnc-experimental`);
+- the backend relays a WebSocket to that port for signed-in admins only, asking the lab agent which port belongs to which VM;
+- noVNC (vendored, pinned, MPL-2.0) draws it in the page, with keyboard, mouse and Ctrl+Alt+Del.
+
+Not built yet: on a single analyst's Mac the VMs are a click away in UTM, and the lab is driven over SSH. It's worth it once a team shares a server's lab.
