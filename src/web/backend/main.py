@@ -26,6 +26,10 @@ try:
     from .mordor_routes import router as mordor_router  # Mordor dataset management
     from .anduril_routes import router as anduril_router  # Anduril Docker administration
     from .lab_routes import router as lab_router  # Test lab, via the host's lab agent
+    from .threat_intel_routes import router as threat_intel_router  # Threat intelligence indicators
+    from . import threat_intel_store
+    from . import case_routes  # The case browser, findings, notes and assignments
+    from . import eru_offline
     from .models.job import (
         Job,
         JobCreate,
@@ -46,6 +50,10 @@ except ImportError:
     from mordor_routes import router as mordor_router  # Mordor dataset management
     from anduril_routes import router as anduril_router  # Anduril Docker administration
     from lab_routes import router as lab_router  # Test lab, via the host's lab agent
+    from threat_intel_routes import router as threat_intel_router  # Threat intelligence indicators
+    import threat_intel_store
+    import case_routes  # The case browser, findings, notes and assignments
+    import eru_offline
     from models.job import (
         Job,
         JobCreate,
@@ -117,6 +125,9 @@ app.add_middleware(
 # Initialize storage
 job_storage = JobStorage()
 access.configure(job_storage)
+threat_intel_store.configure(job_storage)
+case_routes.configure(job_storage)
+eru_offline.FINDINGS = case_routes.findings_for_case
 
 
 class SharingUpdate(BaseModel):
@@ -158,6 +169,8 @@ app.include_router(ai_router)
 # Include Mordor dataset management routes
 app.include_router(mordor_router)
 app.include_router(lab_router)
+app.include_router(threat_intel_router)
+app.include_router(case_routes.router)
 
 # Include Anduril (Docker administration) routes; /api/aragorn is the name before the rename
 app.include_router(anduril_router, prefix="/api/anduril")

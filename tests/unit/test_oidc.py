@@ -37,7 +37,8 @@ try:
 except ImportError:
     rsa = None
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "web" / "backend"))
+BACKEND = Path(__file__).resolve().parents[2] / "src" / "web" / "backend"
+sys.path.insert(0, str(BACKEND))
 ISSUER = "https://idp.test"
 
 
@@ -49,6 +50,11 @@ def b64url(data: bytes) -> str:
 class OidcTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # Another test file may have imported config first, before this file's OIDC environment
+        # was set: start the backend's modules afresh.
+        for name in [n for n in sys.modules if n == "config" or n == "auth" or n.startswith("auth.")]:
+            del sys.modules[name]
+        sys.path.insert(0, str(BACKEND))  # ahead of src/analysis, which has a config package of its own
         from auth import oidc
         cls.oidc = oidc
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)

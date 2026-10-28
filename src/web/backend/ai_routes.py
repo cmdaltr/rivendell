@@ -535,6 +535,14 @@ async def _gather_case_context(case_path: str, query_hint: str) -> str:
     """Gather relevant context from case artifacts."""
     context_parts = []
 
+    # The analysts' confirmed findings go first: they're what the case is known to hold
+    confirmed = [f for f in (eru_offline.FINDINGS(case_path) if eru_offline.FINDINGS else [])
+                 if f["status"] == "confirmed"]
+    if confirmed:
+        context_parts.append("## Confirmed findings (analysts)\n" + "\n".join(
+            f"- {f['title']} ({f['technique'] or 'no technique'}): {f['host']} {f['artefact']} row {f['row_ref']}: "
+            f"{f['excerpt'][:300]}" for f in confirmed[:30]))
+
     # Look for cooked artifacts
     cooked_path = os.path.join(case_path, "cooked")
     if os.path.exists(cooked_path):

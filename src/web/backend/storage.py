@@ -62,6 +62,80 @@ class JobAccessModel(Base):
     shared_with = Column(JSON, default=list)
 
 
+class ThreatIntelIndicatorModel(Base):
+    """One threat intelligence indicator: the fixed 10-column schema of
+    rivendell/threat_intel/schema.py, with a key. Revision 7c41d2e9a0b3."""
+    __tablename__ = "threat_intel_indicators"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    evidential_element = Column(Text, nullable=False)
+    threat_group = Column(String, nullable=True, index=True)
+    procedure_example = Column(Text, nullable=True)
+    technique_id = Column(String, nullable=True)
+    technique_name = Column(String, nullable=True)
+    tactic = Column(String, nullable=True)
+    contextual_evidence = Column(Text, nullable=True)
+    reference_url = Column(Text, nullable=True)
+    navigation_layer_url = Column(Text, nullable=True)
+    source_type = Column(String, nullable=True, index=True)
+
+
+class CaseFindingModel(Base):
+    """A row of a case's output an analyst flagged: a reference to the evidence, never a copy of it.
+    row_hash pins the row, so a re-run that moves or changes it shows up instead of re-pointing."""
+    __tablename__ = "case_findings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String, nullable=False, index=True)
+    host = Column(String, nullable=False)
+    artefact = Column(Text, nullable=False)
+    row_ref = Column(String, nullable=False)
+    row_hash = Column(String, nullable=False)
+    excerpt = Column(Text, nullable=True)
+    title = Column(Text, nullable=False)
+    technique = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="lead")
+    author = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now)
+
+
+class CaseNoteModel(Base):
+    """Markdown notes on a case, or on one of its findings."""
+    __tablename__ = "case_notes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String, nullable=False, index=True)
+    finding_id = Column(Integer, nullable=True, index=True)
+    author = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+
+class CaseHostModel(Base):
+    """Who is working on a host in a case, and how far they've got."""
+    __tablename__ = "case_hosts"
+
+    job_id = Column(String, primary_key=True)
+    host = Column(String, primary_key=True)
+    assignee = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="to do")
+    updated_by = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.now)
+
+
+class CaseActivityModel(Base):
+    """Who flagged, confirmed, assigned or noted what, in a case: append-only, as the audit log is."""
+    __tablename__ = "case_activity"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String, nullable=False, index=True)
+    actor = Column(String, nullable=False)
+    action = Column(String, nullable=False)
+    detail = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+
 class JobStorage:
     """PostgreSQL-based job storage using SQLAlchemy."""
 

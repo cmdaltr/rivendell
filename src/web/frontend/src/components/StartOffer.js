@@ -3,12 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { markOffered, nextTip, offeredThisStart, setStartPref, startPrefs } from '../guide/prefs';
 import Guide from './Guide';
+import { randomQuote } from '../guide/quotes';
 
 // Pages where nobody's settled in yet: the offer waits until they're past them
 const NOT_YET = ['/login', '/register', '/forgot-password', '/reset-password'];
 
 /**
- * At start-up: the guide on offer and a tip, each with its own "every start" tickbox.
+ * At start-up: a quote, then the guide on offer and a tip side by side, each with its own "every start" tickbox.
  * The navigation's Guide link opens the guide directly (guideRequested).
  */
 function StartOffer({ guideRequested, onGuideClosed }) {
@@ -19,6 +20,7 @@ function StartOffer({ guideRequested, onGuideClosed }) {
   const [prefs, setPrefs] = useState(() => startPrefs(null));
   const [tip, setTip] = useState(null);
   const [guide, setGuide] = useState(false);
+  const [quote] = useState(randomQuote);
 
   useEffect(() => {
     if (loading || offeredThisStart() || NOT_YET.some((p) => pathname.startsWith(p))) return;
@@ -55,7 +57,12 @@ function StartOffer({ guideRequested, onGuideClosed }) {
       <div className="start-offer" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="guide-close" onClick={() => setOffer(false)} aria-label="Close">×</button>
         <h2>Welcome to Rivendell</h2>
+        <blockquote className="start-offer-quote">
+          “{quote.text}”
+          <cite>{quote.who}, {quote.where}</cite>
+        </blockquote>
 
+        <div className="start-offer-columns">
         <section className="start-offer-part">
           <h3>The guide</h3>
           <p>Every page, section by section: what it's for, who uses it and when it helps most.</p>
@@ -90,6 +97,7 @@ function StartOffer({ guideRequested, onGuideClosed }) {
             Show a tip at every start
           </label>
         </section>
+        </div>
       </div>
     </div>
   );

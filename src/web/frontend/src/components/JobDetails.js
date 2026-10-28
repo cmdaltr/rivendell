@@ -205,6 +205,7 @@ function JobDetails() {
       'userprofiles': 'User Profiles',
       'nsrl': 'NSRL',
       'extract_iocs': 'Extract IOCs',
+      'threat_intel': 'Threat Intelligence',
       'splunk': 'Splunk',
       'elastic': 'Elastic',
       'navigator': 'Navigator'
@@ -754,6 +755,11 @@ function JobDetails() {
                   Delete Job
                 </button>
               </>
+            )}
+            {job.status === 'completed' && (
+              <Link to={`/jobs/${job.id}/case`}>
+                <button data-guide="job.case">Browse Case</button>
+              </Link>
             )}
             <Link to="/jobs">
               <button>Back to Jobs</button>

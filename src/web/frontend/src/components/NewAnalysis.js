@@ -346,6 +346,7 @@ function NewAnalysis() {
             collect: opts.local !== false,  // Default to true unless explicitly false
             analysis: opts.analysis || false,
             extractiocs: opts.extract_iocs || opts.extractiocs || false,
+            threat_intel: opts.threat_intel || false,
             timeline: opts.timeline || false,
             memory: opts.memory || false,
             memory_timeline: opts.memory_timeline || false,

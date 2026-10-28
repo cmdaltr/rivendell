@@ -17,6 +17,8 @@ import JobDetails from './components/JobDetails';
 import Archive from './components/Archive';
 import AccountPage from './components/AccountPage';
 import Aragorn from './components/Aragorn';
+import ThreatIntel from './components/ThreatIntel';
+import CaseBrowser from './components/CaseBrowser';
 import StartOffer from './components/StartOffer';
 import './App.css';
 
@@ -36,6 +38,7 @@ function Navigation({ onGuide }) {
         <Link to="/gandalf">Gandalf</Link>
         <Link to="/elrond">Elrond</Link>
         <Link to="/mordor">Mordor</Link>
+        <Link to="/pippin">Pippin</Link>
         {user?.role === 'admin' && <Link to="/aragorn">Aragorn</Link>}
       </div>
       <div className="nav-right">
@@ -55,6 +58,7 @@ function Navigation({ onGuide }) {
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
+          <span>Log out</span>
         </button>
       </div>
     </nav>
@@ -100,8 +104,11 @@ function AppContent() {
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/ai" element={<AIAssistant />} />
+            <Route path="/pippin" element={<ThreatIntel />} />
+            <Route path="/intel" element={<Navigate to="/pippin" replace />} />
             <Route path="/jobs" element={<JobList />} />
             <Route path="/jobs/:jobId" element={<JobDetails />} />
+            <Route path="/jobs/:jobId/case" element={<CaseBrowser />} />
             <Route path="/archive" element={<Archive />} />
             <Route path="/account" element={<AccountPage />} />
             <Route path="/aragorn" element={<Aragorn />} />

@@ -106,7 +106,8 @@ async def middleware(request: Request, call_next):
     if server_mode() and path.startswith("/api") and path not in PUBLIC_PATHS and request.method != "OPTIONS":
         if not user:
             return JSONResponse({"detail": "Sign in required"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
-        admin_only = path.startswith(ADMIN_PREFIXES) or (path.startswith("/api/mordor") and request.method != "GET")
+        admin_only = path.startswith(ADMIN_PREFIXES) or (
+            path.startswith(("/api/mordor", "/api/threat-intel")) and request.method != "GET")
         if admin_only and not is_admin(user):
             return JSONResponse({"detail": "Admin privileges required"}, status_code=403)
         match = JOB_PATH.match(path)

@@ -77,6 +77,7 @@ class AnalysisOptions(BaseModel):
     splunk: bool = False
     elastic: bool = False
     navigator: bool = False
+    threat_intel: bool = False  # match the case against the stored threat intelligence indicators
 
     # Post-processing
     delete: bool = False

@@ -3,7 +3,7 @@ Eru without an LLM: questions answered straight from Elrond's case output.
 
 Free-text questions need Ollama. When it isn't there, Ask Eru offers these
 instead: each reads the case directory (<case>/<host>/artefacts/cooked/*.csv,
-<case>/<host>/analysis/*.csv, <case>/mitre_techniques.txt) and summarises what
+<case>/<host>/analysis/*.csv, <case>/mitre_techniques.txt, <case>/threat_groups.csv) and summarises what
 Elrond found, so the answers are exact rather than generated.
 """
 
@@ -19,6 +19,8 @@ from typing import Callable, Dict, Iterable, List, Optional
 logger = logging.getLogger(__name__)
 
 MAX_ROWS = 15
+# Set by main.py: case path -> the analysts' findings on it (case_routes.findings_for_case)
+FINDINGS: Optional[Callable[[str], List[Dict]]] = None
 SUSPICIOUS_COMMAND = re.compile(
     r"\b(?:wget|curl|nc|ncat|socat|base64|chmod\s+\+x|python[23]?\s+-c|perl\s+-e|bash\s+-i|/dev/tcp|"
     r"powershell|iex|invoke-|certutil|bitsadmin|mshta|rundll32|regsvr32|history\s+-c|unset\s+histfile)\b",
@@ -173,6 +175,52 @@ def iocs(case_path: str) -> str:
     return "**Extracted IOCs** (most frequent network indicators first; check before acting on them):\n\n" + "\n\n".join(sections)
 
 
+def findings(case_path: str) -> str:
+    """What analysts have confirmed in the case browser, then the leads still open."""
+    flagged = FINDINGS(case_path) if FINDINGS else []
+    if not flagged:
+        return ("No findings yet. Open the case from its job (Browse case), and flag rows as leads; "
+                "confirm them once they hold up.")
+    def line(f: Dict) -> str:
+        technique = f" ({f['technique']})" if f.get("technique") else ""
+        return f"{f['title']}{technique}: {f['host']}, {Path(f['artefact']).name} row {f['row_ref']} ({f['author']})"
+    confirmed = [f for f in flagged if f["status"] == "confirmed"]
+    leads = [f for f in flagged if f["status"] == "lead"]
+    parts = [f"**Confirmed** ({len(confirmed)})\n" + (_bullets(map(line, confirmed)) if confirmed else "• none yet")]
+    if leads:
+        parts.append(f"**Open leads** ({len(leads)})\n" + _bullets(map(line, leads)))
+    benign = len(flagged) - len(confirmed) - len(leads)
+    if benign:
+        parts.append(f"{benign} more marked benign.")
+    return "\n\n".join(parts)
+
+
+def threat_intel(case_path: str) -> str:
+    """What Elrond's threat intelligence phase found: the most specific elements per host, and the
+    groups whose evidence turned up, with what each rank rests on."""
+    sections = []
+    for host in _hosts(case_path):
+        rows = _rows(host / "analysis" / "threat_intel_matches.csv")
+        if not rows:
+            continue
+        seen: Dict[str, Dict[str, str]] = {}
+        for row in rows:
+            seen.setdefault(row.get("Element", ""), row)
+        ordered = sorted(seen.values(), key=lambda r: (r.get("Common") == "yes", int(r.get("Groups Using") or 0)))
+        sections.append(f"**{host.name}**\n" + _bullets(
+            f"{r['Element']} in {Path(r.get('Artefact', '')).name}: {r.get('Groups') or r.get('Sources')}"
+            + (" (common: many groups use it)" if r.get("Common") == "yes" else "") for r in ordered))
+    groups = _rows(Path(case_path) / "threat_groups.csv")
+    if groups:
+        sections.append("**Whose tradecraft it resembles** (a lead, not attribution)\n" + _bullets(
+            f"{g['Group']}: {g['Basis']}" + (f", {g['Techniques In Case']}" if g.get("Techniques In Case") else "")
+            for g in groups[:8]))
+    if not sections:
+        return ("No threat intelligence matching was run on this case. Import indicators in Pippin (threat intelligence), "
+                "then tick Threat intelligence on Elrond's page (or run Elrond with --threatIntel).")
+    return "**Threat intelligence matches** (the most specific first):\n\n" + "\n\n".join(sections)
+
+
 def commands(case_path: str) -> str:
     sections = []
     for host in _hosts(case_path):
@@ -290,6 +338,8 @@ CASE_QUESTIONS: Dict[str, Dict[str, object]] = {
     "staging": {"question": "Were executables staged in temp directories?", "answer": staging},
     "detections": {"question": "Any malware detections or web shells?", "answer": detections},
     "analysis": {"question": "What did Elrond's analysis flag?", "answer": analysis},
+    "threat_intel": {"question": "Does anything match known threat intelligence?", "answer": threat_intel},
+    "findings": {"question": "What have analysts confirmed?", "answer": findings},
 }
 GENERAL_QUESTIONS = {
     "enable_llm": "How do I turn on Eru's free-text answers?",

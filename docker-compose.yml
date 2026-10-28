@@ -63,6 +63,7 @@ services:
     volumes:
       - ./src/web/backend:/app
       - ./src/mordor:/opt/rivendell/src/mordor # Mordor: recorded attack telemetry (/api/mordor/telemetry)
+      - ./src/analysis/rivendell/threat_intel:/opt/elrond-src/rivendell/threat_intel:ro # threat intelligence parsing (/api/threat-intel)
       - anduril_token:/run/anduril:ro # Written by anduril
       # Platform-specific mounts - uncomment for your OS:
       # - /mnt:/mnt:ro              # Linux: Mount points (read-only)

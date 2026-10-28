@@ -344,3 +344,71 @@ export const getMordorLabLogs = async (engine, name) =>
   (await api.get('/api/mordor/lab/logs', { params: { engine, name } })).data;
 export const getMordorLabSteps = async (os) => (await api.get('/api/mordor/lab/provision-steps', { params: { os } })).data;
 export const postMordorLab = async (verb, body) => (await api.post(`/api/mordor/lab/${verb}`, body)).data;
+
+// Threat intelligence API
+export const getThreatIntelSummary = async () => {
+  const response = await api.get('/api/threat-intel');
+  return response.data;
+};
+
+export const searchThreatIntel = async (params = {}) => {
+  const response = await api.get('/api/threat-intel/indicators', { params });
+  return response.data;
+};
+
+export const importThreatIntel = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post('/api/threat-intel/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+};
+
+export const importTaxii = async (request) => {
+  const response = await api.post('/api/threat-intel/taxii', request);
+  return response.data;
+};
+
+export const deleteThreatIntelSource = async (source) => {
+  const response = await api.delete(`/api/threat-intel/sources/${encodeURIComponent(source)}`);
+  return response.data;
+};
+
+export const enrichValue = async (value) => {
+  const response = await api.get('/api/threat-intel/enrich', { params: { value } });
+  return response.data;
+};
+
+// Case browser and collaboration API
+const caseBase = (jobId) => `/api/jobs/${jobId}/case`;
+
+export const getCase = async (jobId) => (await api.get(caseBase(jobId))).data;
+
+export const getCaseRows = async (jobId, params) => (await api.get(`${caseBase(jobId)}/rows`, { params })).data;
+
+export const getFindings = async (jobId, verify = false) =>
+  (await api.get(`${caseBase(jobId)}/findings`, { params: { verify } })).data;
+
+export const flagFinding = async (jobId, finding) => (await api.post(`${caseBase(jobId)}/findings`, finding)).data;
+
+export const updateFinding = async (jobId, id, changes) =>
+  (await api.patch(`${caseBase(jobId)}/findings/${id}`, changes)).data;
+
+export const deleteFinding = async (jobId, id) => (await api.delete(`${caseBase(jobId)}/findings/${id}`)).data;
+
+export const getCaseNotes = async (jobId) => (await api.get(`${caseBase(jobId)}/notes`)).data;
+
+export const addCaseNote = async (jobId, body, findingId = null) =>
+  (await api.post(`${caseBase(jobId)}/notes`, { body, finding_id: findingId })).data;
+
+export const assignHost = async (jobId, host, changes) =>
+  (await api.put(`${caseBase(jobId)}/hosts/${encodeURIComponent(host)}`, changes)).data;
+
+export const getCaseActivity = async (jobId, since = 0) =>
+  (await api.get(`${caseBase(jobId)}/activity`, { params: { since } })).data;
+
+export const getCaseReport = async (jobId) =>
+  (await api.get(`${caseBase(jobId)}/report`, { responseType: 'text' })).data;
+
+export const getConfirmedLayer = async (jobId) => (await api.get(`${caseBase(jobId)}/layer`)).data;

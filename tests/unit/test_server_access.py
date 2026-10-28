@@ -39,6 +39,11 @@ BACKEND = Path(__file__).resolve().parents[2] / "src" / "web" / "backend"
 
 def load_app():
     sys.path.insert(0, str(BACKEND))
+    # Another test file may have imported backend modules first (config, storage), with settings
+    # read before this file's environment was set: start them afresh.
+    for name, module in list(sys.modules.items()):
+        if str(getattr(module, "__file__", "") or "").startswith(str(BACKEND)):
+            del sys.modules[name]
     # No Celery or forensic tools here: the job queue is a stand-in. (Not patch.dict, which
     # would unload config with it and leave the test holding a second settings object.)
     fake_tasks = mock.MagicMock()

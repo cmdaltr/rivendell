@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "web" / "ba
 
 import storage  # noqa: E402
 
+HEAD = "4d8b1f6e2c57"  # the newest file in src/web/backend/alembic/versions
+
 
 def heads(url: str) -> list:
     with create_engine(url).connect() as connection:
@@ -32,8 +34,9 @@ class MigrationTest(unittest.TestCase):
         url = self.url("fresh")
         storage.JobStorage(url)
         tables = set(inspect(create_engine(url)).get_table_names())
-        self.assertTrue({"jobs", "job_access", "alembic_version"} <= tables)
-        self.assertEqual(heads(url), ["b7e4c2d9a810"])
+        self.assertTrue({"jobs", "job_access", "threat_intel_indicators", "case_findings", "case_notes", "case_hosts",
+                         "case_activity", "alembic_version"} <= tables)
+        self.assertEqual(heads(url), [HEAD])
 
     def test_database_from_before_migrations_keeps_its_jobs(self):
         url = self.url("legacy")
@@ -44,7 +47,7 @@ class MigrationTest(unittest.TestCase):
                 "INSERT INTO jobs (id, case_number, source_paths, options, status, progress, created_at) "
                 "VALUES ('j1', 'CASE01', '[]', '{}', 'completed', 100, '2026-10-01 10:00:00')"))
         jobs = storage.JobStorage(url)
-        self.assertEqual(heads(url), ["b7e4c2d9a810"])
+        self.assertEqual(heads(url), [HEAD])
         self.assertEqual(jobs.get_job("j1").case_number, "CASE01")
         self.assertIn("job_access", inspect(create_engine(url)).get_table_names())
 
@@ -52,7 +55,7 @@ class MigrationTest(unittest.TestCase):
         url = self.url("twice")
         storage.JobStorage(url)
         storage.JobStorage(url)
-        self.assertEqual(heads(url), ["b7e4c2d9a810"])
+        self.assertEqual(heads(url), [HEAD])
 
     def test_models_match_the_migrations(self):
         from alembic.autogenerate import compare_metadata

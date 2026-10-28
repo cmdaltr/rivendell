@@ -56,6 +56,24 @@ def test_wmi_subscriptions(tmp_path):
     assert "SCM Event Log" not in persistence
 
 
+def test_threat_intel(tmp_path):
+    root = tmp_path / "CASE03"
+    analysis = root / "LAB-WIN11" / "analysis"
+    (root / "LAB-WIN11" / "artefacts").mkdir(parents=True)
+    analysis.mkdir()
+    assert "--threatIntel" in eru_offline.answer("threat_intel", str(root))
+    header = "Artefact,Record,Field,Value,Element,Kind,Groups Using,Common,Groups,Techniques,Sources,Reference URL\n"
+    (analysis / "threat_intel_matches.csv").write_text(header
+        + "analysis/iocs.csv,2,ioc,update-check.example,update-check.example,domain,1,,APT33,T1071,Iran APT workbook,\n"
+        + "artefacts/cooked/ps.csv,9,cmd,-w hidden,-w hidden,cmd,40,yes,APT28; APT29,T1059.001,MITRESaw,\n")
+    (root / "threat_groups.csv").write_text("Rank,Group,Basis,Atomic Elements,Specific Elements,Common Elements,"
+        "Elements,Techniques In Case,Group Techniques,Overlap\n1,APT33,atomic indicators,1,1,0,update-check.example,T1071,40,3%\n")
+    answer = eru_offline.answer("threat_intel", str(root))
+    assert answer.index("update-check.example in iocs.csv: APT33") < answer.index("-w hidden")
+    assert "(common: many groups use it)" in answer
+    assert "APT33: atomic indicators, T1071" in answer
+
+
 def test_general_and_missing_case():
     assert "ollama pull" in eru_offline.answer("enable_llm", None)
     assert "Select a processed case" in eru_offline.answer("persistence", None)

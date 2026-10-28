@@ -8,6 +8,7 @@ This version runs Elrond directly in the same container environment.
 import subprocess
 import sys
 import os
+import tempfile
 import re
 import json
 import time
@@ -1201,6 +1202,24 @@ def start_analysis(self, job_id: str):
             time.sleep(10 * (attempt + 1))
 
 
+def export_threat_intel(job_id: str) -> str:
+    """The stored threat intelligence as the CSV Elrond's --threatIntel reads, in the worker's
+    temp directory; '' when there's none or the package isn't in this image."""
+    from threat_intel_store import ThreatIntelStore, ThreatIntelUnavailable, threat_intel
+    path = os.path.join(tempfile.gettempdir(), f"rivendell-threat-intel-{job_id}.csv")
+    try:
+        threat_intel()
+        count = ThreatIntelStore(job_storage.Session).export_csv(path)
+    except (ThreatIntelUnavailable, OSError) as e:
+        logger.warning(f"Threat intelligence not exported for job {job_id}: {e}")
+        return ""
+    if not count:
+        logger.info(f"Threat intelligence asked for on job {job_id}, but none is stored")
+        return ""
+    logger.info(f"Exported {count} threat intelligence indicators for job {job_id}")
+    return path
+
+
 def build_elrond_command(job):
     """
     Build elrond command from job options.
@@ -1254,6 +1273,10 @@ def build_elrond_command(job):
         cmd.append("--extractIocs")
     if opts.iocs_file:
         cmd.extend(["--iocsFile", opts.iocs_file])
+    if getattr(opts, "threat_intel", False):
+        exported = export_threat_intel(job.id)
+        if exported:
+            cmd.extend(["--threatIntel", exported])
     if opts.misplaced_binaries:
         cmd.append("--misplacedBinaries")
     if opts.masquerading:

@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import os
 import sys
+from datetime import datetime
 
 # Set TERM environment variable to prevent warnings from subprocess commands
 if 'TERM' not in os.environ:
@@ -11,6 +12,7 @@ if 'TERM' not in os.environ:
 from rivendell.main import main
 from rivendell.core.identify import process_deferred_memory, load_memory_profiles
 from rivendell.mount import unmount_images, cleanup_stale_mounts
+from rivendell.audit import write_audit_log_entry
 from rivendell.post.clean import archive_artefacts
 from rivendell.post.siem import SIEMUnavailableError, ensure_remote_siem_reachable
 
@@ -105,6 +107,21 @@ parser.add_argument(
     "--iocsFile",
     nargs=1,
     help="IOC watchlist file to match against extracted IOCs; Example syntax: --iocsFile /path/to/iocs.txt",
+)
+parser.add_argument(
+    "--threatIntel",
+    nargs="+",
+    metavar="FILE",
+    help="Match the case against threat intelligence: the Iran APT workbook (XLSX), STIX 2.1 bundles "
+    "(JSON), MITRESaw's mitre_procedures.csv, Rivendell's indicator CSV or a text watchlist; writes "
+    "<host>/analysis/threat_intel_matches.csv and threat_groups.csv. Example: --threatIntel iran_apt.xlsx feed.json",
+)
+parser.add_argument(
+    "--stackBaseline",
+    nargs=1,
+    metavar="FILE",
+    help="A baseline of clean hosts for stacking (Analysis on a case of two or more hosts writes stacking.csv); "
+    "values absent from it score higher. Build one with python3 -m rivendell.analysis.stacking --baseline OUT CASE...",
 )
 parser.add_argument(
     "--misplacedBinaries",
@@ -247,6 +264,8 @@ gandalf = args.Gandalf
 collectfiles = args.collectFiles
 extractiocs = args.extractIocs
 iocsfile = args.iocsFile
+threatintel = args.threatIntel or []
+stackbaseline = args.stackBaseline[0] if args.stackBaseline else ""
 misplaced_binaries = args.misplacedBinaries
 masquerading = args.masquerading
 keywords = args.Keywords
@@ -879,6 +898,44 @@ if __name__ == "__main__":
             print(f"  -> Continuing to next source...", flush=True)
 
     print("\n  ----------------------------------------\n  -> Completed Analysis Phase.\n", flush=True)
+
+    # ========== PHASE 4b: THREAT INTELLIGENCE (the whole case at once) ==========
+    if threatintel and mounted_data:
+        print("\n  -> \033[1;36mCommencing Threat Intelligence Phase...\033[1;m\n  ----------------------------------------", flush=True)
+        try:
+            from rivendell.threat_intel import load_all
+            from rivendell.threat_intel.match import match_case
+
+            indicators = load_all(threatintel)
+            print(f"     Loaded {len(indicators)} indicators from {len(threatintel)} file(s)", flush=True)
+            totals = match_case(output_directory, indicators, log=lambda m: print(f"     {m}", flush=True))
+            entry, prnt = "{},{},threat intelligence,{} indicators; {} elements matched; {} iocs; {} groups\n".format(
+                datetime.now().isoformat(), case, totals["indicators"], totals["elements"], totals["iocs"], totals["groups"]
+            ), " -> {} -> matched the case against {} threat intelligence indicators: {} elements found".format(
+                datetime.now().isoformat().replace("T", " "), totals["indicators"], totals["elements"]
+            )
+            write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        except (OSError, ValueError) as e:
+            print(f"  -> WARNING: threat intelligence matching failed: {e}", flush=True)
+        print("  ----------------------------------------\n  -> Completed Threat Intelligence Phase.\n", flush=True)
+
+    # ========== PHASE 4c: STACKING (least frequency of occurrence across hosts) ==========
+    if analysis and mounted_data:
+        try:
+            from rivendell.analysis.stacking import stack_case
+
+            stacked = stack_case(output_directory, stackbaseline)
+            if stacked is None:
+                print("     Stacking skipped: it compares hosts, and this case has one", flush=True)
+            else:
+                entry, prnt = "{},{},stacking,{} hosts; {} values; {} rare\n".format(
+                    datetime.now().isoformat(), case, stacked["hosts"], stacked["values"], stacked["rows"]
+                ), " -> {} -> stacked {} values across {} hosts: {} rare, in stacking.csv".format(
+                    datetime.now().isoformat().replace("T", " "), stacked["values"], stacked["hosts"], stacked["rows"]
+                )
+                write_audit_log_entry(verbosity, output_directory, entry, prnt)
+        except (OSError, ValueError, KeyError) as e:
+            print(f"  -> WARNING: stacking failed: {e}", flush=True)
 
     # ========== PHASE 5: SIEM INDEXING (Splunk/Elastic/Navigator) ==========
     if splunk or elastic:

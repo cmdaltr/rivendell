@@ -1655,23 +1655,12 @@ table input[type="checkbox"] {
   grid-template-columns: repeat(6, 1fr) !important;
 }
 
-/* Analysis grid layout (8 items):
-   Row 1: Automated Analysis | Extract IOCs | Memory Collection (span 2 each)
-   Row 2: Disk Image Timeline | Memory Timeline (span 3 each)
-   Row 3: Keywords Search | YARA Rules | Collect Specific Files (span 2 each) */
-.wizard-options.analysis-grid .wizard-option-item:nth-child(1),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(2),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(3),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(6),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(7),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(8) {
+/* Analysis grid layout (9 items, span 2 each):
+   Row 1: Automated Analysis | Extract IOCs | Threat Intelligence
+   Row 2: Memory Collection | Disk Image Timeline | Memory Timeline
+   Row 3: Keywords Search | YARA Rules | Collect Specific Files */
+.wizard-options.analysis-grid .wizard-option-item {
   grid-column: span 2 !important;
-}
-
-/* Analysis grid: items 4-5 span 3 columns each (50% width, row 2) */
-.wizard-options.analysis-grid .wizard-option-item:nth-child(4),
-.wizard-options.analysis-grid .wizard-option-item:nth-child(5) {
-  grid-column: span 3 !important;
 }
 
 /* Collection grid layout (18 items):
@@ -2576,6 +2565,8 @@ select.large-select:disabled {
   border-radius: 4px;
   display: flex;
   align-items: center;
+  gap: 0.45rem;
+  font-size: inherit;
   transition: all 0.3s ease;
   outline: none;
   box-shadow: none;
@@ -3061,7 +3052,7 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
   overflow: auto;
 }
 .guide { width: min(1400px, 100%); padding: 1.25rem 1.5rem 1rem; }
-.start-offer { width: min(640px, 100%); padding: 1.5rem 1.75rem 1.25rem; }
+.start-offer { width: min(980px, 100%); padding: 1.5rem 1.75rem 1.25rem; }
 
 .guide h2, .start-offer h2 { color: #c3e88d; font-family: 'Cinzel', 'Times New Roman', serif; margin: 0; }
 .guide h3, .start-offer h3 { color: #f0dba5; font-family: 'Cinzel', 'Times New Roman', serif; margin: 0 0 0.5rem; }
@@ -3140,8 +3131,13 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
 .guide-check { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; color: #a09580; font-size: 0.95rem; cursor: pointer; }
 .guide-check input { width: auto; margin: 0; }
 
-.start-offer-part { padding: 1.1rem 0; border-top: 1px solid #2a2a5a; }
-.start-offer-part:first-of-type { margin-top: 1rem; }
+.start-offer-quote { margin: 1rem 0 0; padding: 0.9rem 0 0; border-top: 1px solid #2a2a5a; font-style: italic; color: #cdbb8a; line-height: 1.55; }
+.start-offer-quote cite { display: block; margin-top: 0.35rem; font-style: normal; font-size: 0.9rem; color: #a09580; }
+.start-offer-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 1rem; border-top: 1px solid #2a2a5a; }
+.start-offer-part { padding: 1.1rem 0; display: flex; flex-direction: column; }
+.start-offer-part .guide-check { margin-top: auto; padding-top: 1rem; }
+.start-offer-part > button { align-self: flex-start; }
+@media (max-width: 720px) { .start-offer-columns { grid-template-columns: 1fr; gap: 0; } }
 .start-offer-part p { margin: 0 0 0.9rem; line-height: 1.55; }
 .start-offer-tip { border-left: 3px solid #c3e88d; padding-left: 0.9rem; }
 .start-offer-actions { display: flex; align-items: center; gap: 1rem; }
