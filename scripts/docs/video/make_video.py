@@ -15,8 +15,10 @@ built at when the real one is too long, and says only that it can't find phontab
 
 --case-dir is a finished Elrond case: its directory and techniques appear on screen, and
 its case and most recent job are the ones Eru and the Job page show. Scenes are kept in
---out/scenes/, and a scene whose narration and visual haven't changed isn't rendered
-again; --only renders just the named scenes (then joins everything).
+--out/scenes/<section>/, and a scene whose narration and visual haven't changed isn't
+rendered again; --only renders just the named sections or scenes (then joins everything).
+Each section is joined into --out/scenes/<section>.mp4, fading in from black and out to
+black, so adding or reordering sections re-encodes the sections but films nothing again.
 """
 import argparse
 import csv
@@ -33,11 +35,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO / "scripts" / "docs" / "guide"))
 from capture import latest_job, sign_in  # noqa: E402
-from scenes import SCENES, SPOKEN  # noqa: E402
+from scenes import SECTIONS, SPOKEN  # noqa: E402
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 30
 PAGE_VIEW = (1440, 810)
 GAP = 0.6  # seconds of quiet after each scene's narration
+FADE = 0.8  # seconds from black at a section's start, and to black after its last frame
 # What the lab's Windows machine was seeded with, and the IOCs it planted
 SEEDED = ["T1070.006", "T1564.004", "T1546.003"]
 PLANTED = "rivendell-lab.test"
@@ -420,30 +423,35 @@ def main() -> None:
     timeline = []
     with sync_playwright() as p:
         browser = p.chromium.launch()
-        for number, scene in enumerate(SCENES):
-            scene = fill(scene, fills)
-            mp4 = scenes_dir / f"{number:02}-{scene['id']}.mp4"
-            stamp_file = mp4.with_suffix(".json")
-            key = fingerprint(scene, {"pace": args.pace, "voice": args.voice, "preview": args.preview,
-                                      "view": PAGE_VIEW if scene["visual"]["kind"] == "page" else None})
-            wanted = not args.only or scene["id"] in args.only
-            known = json.loads(stamp_file.read_text()) if stamp_file.exists() else {}
-            if mp4.exists() and (known.get("key") == key or not wanted):
-                timeline.append((scene, mp4, known["spoken"]))
-                continue
-            if not wanted:
-                sys.exit(f"{scene['id']} hasn't been rendered yet: leave it out of --only")
-            print(f"  {scene['id']}")
-            wav = mp4.with_suffix(".wav")
-            seconds = narrate(scene, wav, args)
-            webm = mp4.with_suffix(".webm")
-            start = film(scene, seconds, webm, args, session, browser)
-            encode(webm, wav, start, seconds, mp4)
-            webm.unlink()
-            wav.unlink()
-            spoken = seconds - GAP
-            stamp_file.write_text(json.dumps({"key": key, "spoken": spoken}))
-            timeline.append((scene, mp4, spoken))
+        for section in SECTIONS:
+            section_dir = scenes_dir / section["id"]
+            section_dir.mkdir(exist_ok=True)
+            rendered = []
+            for scene in section["scenes"]:
+                scene = fill(scene, fills)
+                mp4 = section_dir / f"{scene['id']}.mp4"
+                stamp_file = mp4.with_suffix(".json")
+                key = fingerprint(scene, {"pace": args.pace, "voice": args.voice, "preview": args.preview,
+                                          "view": PAGE_VIEW if scene["visual"]["kind"] == "page" else None})
+                wanted = not args.only or scene["id"] in args.only or section["id"] in args.only
+                known = json.loads(stamp_file.read_text()) if stamp_file.exists() else {}
+                if mp4.exists() and (known.get("key") == key or not wanted):
+                    rendered.append((scene, mp4, known["spoken"], known["key"]))
+                    continue
+                if not wanted:
+                    sys.exit(f"{scene['id']} hasn't been rendered yet: leave it out of --only")
+                print(f"  {section['id']}/{scene['id']}")
+                wav = mp4.with_suffix(".wav")
+                seconds = narrate(scene, wav, args)
+                webm = mp4.with_suffix(".webm")
+                start = film(scene, seconds, webm, args, session, browser)
+                encode(webm, wav, start, seconds, mp4)
+                webm.unlink()
+                wav.unlink()
+                spoken = seconds - GAP
+                stamp_file.write_text(json.dumps({"key": key, "spoken": spoken}))
+                rendered.append((scene, mp4, spoken, key))
+            timeline.append(join_section(section, rendered, scenes_dir))
         thumbnail(browser, args.out)
         browser.close()
 
@@ -466,18 +474,44 @@ def thumbnail(browser, out: Path) -> None:
     (out / "thumbnail.png").unlink()
 
 
+def join_section(section: dict, rendered: list, scenes_dir: Path) -> tuple:
+    """A section's scenes as one MP4 that fades in from black and, holding its last frame, out
+    to black; re-encoded only when a scene in it changed. Returns (section, mp4, [(scene,
+    start in the section, spoken seconds)])."""
+    mp4 = scenes_dir / f"{section['id']}.mp4"
+    stamp_file = mp4.with_suffix(".json")
+    key = hashlib.sha256(json.dumps([[k for *_, k in rendered], FADE]).encode()).hexdigest()[:16]
+    lengths = [duration(scene_mp4) for _, scene_mp4, _, _ in rendered]
+    starts = [sum(lengths[:i]) for i in range(len(lengths))]
+    parts = [(scene, start, spoken) for (scene, _, spoken, _), start in zip(rendered, starts)]
+    known = json.loads(stamp_file.read_text()) if stamp_file.exists() else {}
+    if mp4.exists() and known.get("key") == key:
+        return section, mp4, parts
+    print(f"  joining {section['id']}")
+    listing = scenes_dir / f"{section['id']}.txt"
+    listing.write_text("".join(f"file '{section['id']}/{scene_mp4.name}'\n" for _, scene_mp4, _, _ in rendered))
+    total = sum(lengths)
+    run("ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
+        "-vf", f"tpad=stop_mode=clone:stop_duration={FADE},fade=in:st=0:d={FADE},fade=out:st={total:.3f}:d={FADE}",
+        "-af", "apad", "-t", f"{total + FADE:.3f}",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p", "-r", str(FPS),
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000", str(mp4))
+    listing.unlink()
+    stamp_file.write_text(json.dumps({"key": key}))
+    return section, mp4, parts
+
+
 def join(timeline: list, out: Path) -> None:
-    """One MP4 with chapters, plus the SRT and the description's chapter list."""
+    """One MP4 with a chapter per section, plus the SRT and the description's chapter list."""
     listing = out / "scenes" / "concat.txt"
     listing.write_text("".join(f"file '{mp4.name}'\n" for _, mp4, _ in timeline))
     metadata = [";FFMETADATA1", "title=Rivendell: the full walkthrough"]
     chapters, cues, at = [], [], 0.0
-    lengths = [duration(mp4) for _, mp4, _ in timeline]
-    for (scene, _, spoken), length in zip(timeline, lengths):
-        if scene.get("chapter"):
-            chapters.append((at, scene["chapter"]))
-        cues += captions(scene["text"], at, spoken)
-        at += length
+    for section, mp4, parts in timeline:
+        chapters.append((at, section["chapter"]))
+        for scene, start, spoken in parts:
+            cues += captions(scene["text"], at + start, spoken)
+        at += duration(mp4)
     for i, (begin, title) in enumerate(chapters):
         end = chapters[i + 1][0] if i + 1 < len(chapters) else at
         metadata += ["[CHAPTER]", "TIMEBASE=1/1000", f"START={int(begin * 1000)}", f"END={int(end * 1000)}", f"title={title}"]
