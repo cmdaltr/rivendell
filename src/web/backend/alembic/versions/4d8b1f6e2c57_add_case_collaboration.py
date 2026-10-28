@@ -2,7 +2,8 @@
 
 Findings, notes, host assignments and an activity feed per case (job), for the case browser
 (case_routes.py). A finding references a row of the case's output by file, row and hash;
-nothing here copies or changes evidence.
+nothing here copies or changes evidence. Databases that ran this branch before Alembic was in
+the images got these tables through create_all, so each is skipped when it exists.
 
 Revision ID: 4d8b1f6e2c57
 Revises: 7c41d2e9a0b3
@@ -20,6 +21,18 @@ depends_on = None
 
 
 def upgrade():
+    existing = set(sa.inspect(op.get_bind()).get_table_names())
+    if 'case_findings' not in existing:
+        _findings()
+    if 'case_notes' not in existing:
+        _notes()
+    if 'case_hosts' not in existing:
+        _hosts()
+    if 'case_activity' not in existing:
+        _activity()
+
+
+def _findings():
     op.create_table(
         'case_findings',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
@@ -37,6 +50,9 @@ def upgrade():
         sa.Column('updated_at', sa.DateTime(), nullable=True),
     )
     op.create_index(op.f('ix_case_findings_job_id'), 'case_findings', ['job_id'])
+
+
+def _notes():
     op.create_table(
         'case_notes',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
@@ -48,6 +64,9 @@ def upgrade():
     )
     op.create_index(op.f('ix_case_notes_job_id'), 'case_notes', ['job_id'])
     op.create_index(op.f('ix_case_notes_finding_id'), 'case_notes', ['finding_id'])
+
+
+def _hosts():
     op.create_table(
         'case_hosts',
         sa.Column('job_id', sa.String(), primary_key=True),
@@ -57,6 +76,9 @@ def upgrade():
         sa.Column('updated_by', sa.String(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
     )
+
+
+def _activity():
     op.create_table(
         'case_activity',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),

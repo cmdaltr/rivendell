@@ -51,6 +51,14 @@ class MigrationTest(unittest.TestCase):
         self.assertEqual(jobs.get_job("j1").case_number, "CASE01")
         self.assertIn("job_access", inspect(create_engine(url)).get_table_names())
 
+    def test_database_built_by_create_all_migrates(self):
+        """Images without Alembic created every table with create_all and no alembic_version; the
+        first start with Alembic must adopt them, not fail on the first table that exists."""
+        url = self.url("create_all")
+        storage.Base.metadata.create_all(create_engine(url))
+        storage.JobStorage(url)
+        self.assertEqual(heads(url), [HEAD])
+
     def test_starting_twice_changes_nothing(self):
         url = self.url("twice")
         storage.JobStorage(url)

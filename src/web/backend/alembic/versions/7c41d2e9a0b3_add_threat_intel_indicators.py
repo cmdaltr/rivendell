@@ -4,6 +4,8 @@ Threat intelligence indicators in the fixed 10-column schema (rivendell/threat_i
 the Iran APT workbook, STIX, TAXII and MITRESaw, as imported through /api/threat-intel.
 Duplicates are dropped on import, by the indicator's key, rather than by a unique index: an
 index over the long text columns could exceed Postgres's btree row size on a long command line.
+Databases that ran this branch before Alembic was in the images got it through create_all,
+so it's skipped when it exists.
 
 Revision ID: 7c41d2e9a0b3
 Revises: b7e4c2d9a810
@@ -21,6 +23,8 @@ depends_on = None
 
 
 def upgrade():
+    if 'threat_intel_indicators' in sa.inspect(op.get_bind()).get_table_names():
+        return
     op.create_table(
         'threat_intel_indicators',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
