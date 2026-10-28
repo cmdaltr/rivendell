@@ -29,6 +29,7 @@ Gandalf (acquisition) → Elrond (analysis) → Eru (AI analyst)
 - AI analyst: **Eru**
 - Administration: **Aragorn**; its Docker manager: **Andúril** (`anduril` in code)
 - Attack datasets and the lab's recordings: **Mordor**
+- Threat intelligence (the web app's page): **Pippin**, who looked into the palantír
 - All Tolkien names are intentional and load-bearing for docs, CLI output, and logging
 
 ## Layout
@@ -78,14 +79,19 @@ Eru is the AI layer. It reads Elrond's case output and provides:
 - Fixed questions answered straight from the case files when Ollama or the model isn't available (`eru_offline.py`): hosts, ATT&CK techniques, persistence, logins, IOCs, suspicious commands
 - ATT&CK mapping itself is Elrond's (`post/mitre/`), not Eru's
 
+## Threat intelligence, collaboration, stacking
+
+- Threat intelligence: `src/analysis/rivendell/threat_intel/` (Iran APT loader `iran_apt_loader.py`, STIX/TAXII, MITRESaw, matching, `enrich_artefact()` as the Eru-facing function); fixed 10-column schema: Evidential Element, Threat Group, Procedure Example, Technique ID, Technique Name, Tactic, Contextual Evidence, Reference URL, Navigation Layer URL, Source Type; table `threat_intel_indicators` — don't rename or restructure without asking. Elrond `--threatIntel`, API `/api/threat-intel`, the Intel page
+- Case browser and collaboration: `src/web/backend/case_routes.py` + `case_files.py` (read-only over cooked/ and analysis/, never raw/), tables `case_findings`, `case_notes`, `case_hosts`, `case_activity`
+- Stacking across hosts: `src/analysis/rivendell/analysis/stacking.py` (stdlib; run by `--Analysis` on 2+ hosts); the isolation forest waits on a scikit-learn decision
+
 ## Planned, not in the repo yet
 
 - Eru MCP tool server (FastMCP). When it's built, register every Eru capability through that one server — no parallel registration system
-- Iran APT threat-intel XLSX integration: loader at `rivendell/threat_intel/iran_apt_loader.py` (path to be settled, since `rivendell` is now the launcher script); 10-column schema: Evidential Element, Threat Group, Procedure Example, Technique ID, Technique Name, Tactic, Contextual Evidence, Reference URL, Navigation Layer URL, Source Type; `enrich_artefact()` as the Eru-facing function (process name, command or file path in, matching indicators out); table `threat_intel_indicators` — don't rename or restructure without asking
 
 ## What not to do
 
-- Do not rename Gandalf, Elrond, Eru, Aragorn, Andúril or Mordor
+- Do not rename Gandalf, Elrond, Eru, Aragorn, Andúril, Mordor or Pippin
 - Do not restructure the execution graph model without explicit instruction
 - Do not add new Python dependencies without checking `requirements/` (and `src/web/backend/requirements.txt`) first
 - Do not convert subprocess tool calls to library imports — the subprocess boundary is intentional (isolation)

@@ -65,7 +65,7 @@ Forensic commands keep the directory you call them from, so relative evidence an
 | Gandalf | `src/acquisition/python/gandalf.py`, `src/acquisition/bash/gandalf.sh`, `src/acquisition/windows/Invoke-Gandalf.ps1` | Live acquisition, local or remote |
 | Elrond | `src/analysis/elrond.py` | Collection, processing and analysis of images and acquisitions |
 | MITRE tools | `src.analysis.mitre.cli`, `src.analysis.mitre.coverage_cli` | ATT&CK data, technique mapping, coverage |
-| Cloud tools | `src.analysis.rivendell.cloud.cli` | AWS, Azure and GCP acquisition and log analysis |
+| Cloud tools | `src.analysis.rivendell.cloud.cli` | AWS, Azure and GCP acquisition and log analysis; Kubernetes audit logs |
 | AI tools (Eru) | `src.analysis.rivendell.ai.cli` | Natural-language queries over case output |
 
 The web UI and API (see [API.md](API.md)) drive Elrond through the same command line.
@@ -270,6 +270,8 @@ On Linux, both collectors also take, into `linux/` (Elrond's image collection ta
 | SSH and accounts | `authorized_keys`, `known_hosts`, `sshd_config`, `passwd` with `shadow` | `ssh_keys.csv` (forced commands, root keys, keys whose comment names another host: **T1098.004**), `sshd_config.csv`, `accounts.csv` (password state and hash type only, never the hash; a second UID 0 tags **T1136.001**) |
 | Web | web-root scripts (`/var/www`, `/srv/www`, `/srv/http`, nginx html; up to 5,000 of 1 MB) and nginx/Apache configs | `webshells.csv` (**T1505.003**) |
 | Histories | zsh, vim (`.viminfo`), less, python, mysql, psql, wget HSTS, `recently-used.xbel` | `shell_histories.csv`, `viminfo.csv`, `wget_hsts.csv`, `recently_used.csv` |
+| Docker | each container's `config.v2.json` and `hostconfig.json`, its `json-file` log (up to 64 MB); each container's writable layer (everything changed since its image, deleted files included) listed with hashes, not copied | `docker_containers.csv` (privileged, a runtime socket or a sensitive host path mounted, the host's namespaces, escape capabilities: **T1611**, and **T1610** when it was also told to run a shell or fetch something), `container_logs.csv`, `container_changes.csv` (executables dropped in temp or hidden paths **T1105**; cron, SSH keys, accounts, `ld.so.preload` or shell start-up changed inside a container tag their technique) |
+| Kubernetes node | static pod manifests (`/etc/kubernetes/manifests`), pod logs (`/var/log/pods`), the API server's audit log (`/var/log/kubernetes`) | `static_pods.csv` (a static pod that isn't the control plane's: **T1543.005**, **T1611** if it can reach the host), `container_logs.csv`, `k8s_audit.csv` (secrets read **T1552.007**, exec into pods **T1609**, cluster-admin bindings **T1098.006**, service-account tokens **T1528**, jobs **T1053.007**, privileged pods **T1611**, cluster-wide discovery **T1613**) |
 
 Endpoint antivirus on the analysis machine may quarantine or block collected web shells (and archives holding them), so they can be missing from `webshells.csv`; Elrond logs the file as unreadable ("Operation not permitted") and carries on. Exclude the case directory from scanning if that matters.
 
@@ -328,7 +330,8 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 | Option | Does |
 |---|---|
 | `--Process` | Parse collected artefacts (always runs) |
-| `--Analysis` | MFT analysis: extended attributes other than Windows' own, and timestomping ($SI created before $FN created) of executables and scripts in user-writable paths; hits under `Users\Default` and `ProgramData\Microsoft` are marked likely benign (Windows setup copies them with their original times). Alternate data streams from the raw `$MFT`; Mark of the Web, WOF compression and other Windows streams are marked likely benign |
+| `--Analysis` | MFT analysis: extended attributes other than Windows' own, and timestomping ($SI created before $FN created) of executables and scripts in user-writable paths; hits under `Users\Default` and `ProgramData\Microsoft` are marked likely benign (Windows setup copies them with their original times). Alternate data streams from the raw `$MFT`; Mark of the Web, WOF compression and other Windows streams are marked likely benign. On a case of two or more hosts, also stacking: processes, parent and child pairs, services, scheduled tasks, autoruns, WMI consumers and kernel modules found on few of the hosts of the same OS, ranked in the case's `stacking.csv` with the reasons for each score (rare, user path, generated name, not in baseline). Nothing is tagged with a technique on a score |
+| `--stackBaseline FILE` | A baseline of clean hosts for stacking; values absent from it score higher. Build one with `python3 -m rivendell.analysis.stacking --baseline OUT CASE_DIR ...` (from `src/analysis`) |
 | `--Memory` | Volatility 3 analysis of memory images |
 | `--Timeline` | Plaso timeline of the disk image. Very slow (105 min on a 12 GB E01) |
 | `--memorytimeline` | Volatility timeliner on memory images |
@@ -343,6 +346,7 @@ Memory analysis reads memory images from `SOURCE_DIR` alongside the disk images;
 | `--symlinks` | Follow symbolic links when copying folders. Slow |
 | `--extractIocs` | Extract IOCs from processed files. Slow |
 | `--iocsFile FILE` | Match extracted IOCs against a watchlist |
+| `--threatIntel FILE [FILE ...]` | Match the case against threat intelligence: the Iran APT workbook, STIX 2.1 bundles, MITRESaw procedures, Rivendell's CSV or a text watchlist. Writes `<host>/analysis/threat_intel_matches.csv`, fills `watchlist_match` in `iocs.csv`, and ranks groups in the case's `threat_groups.csv` with the basis for each rank. Runs after the analysis phase |
 | `--Keywords FILE` | Search for keywords. Remove blank and `#` lines first: they match every line |
 | `--Yara DIR` | Scan with YARA rules, against the whole mounted image or only collected files. Symbolic links are not followed (`yara -N`). A rule whose `meta` has `attack = "T1059.001, T1105"` (or `mitre`, `technique`) tags those techniques when it matches; any match on a web-root script tags **T1505.003** |
 | `--misplacedBinaries` | Find Windows system binaries in unexpected locations (**T1036.005**) |
@@ -483,7 +487,7 @@ The ATT&CK Navigator layer for a case comes from Elrond (`--Navigator`) or the A
 ## Cloud Forensics
 
 ```bash
-python3 -m src.analysis.rivendell.cloud.cli {aws|azure|gcp} COMMAND [OPTIONS]
+python3 -m src.analysis.rivendell.cloud.cli {aws|azure|gcp|k8s} COMMAND [OPTIONS]
 ```
 
 | Command | Options | Does |
@@ -495,11 +499,14 @@ python3 -m src.analysis.rivendell.cloud.cli {aws|azure|gcp} COMMAND [OPTIONS]
 
 `--region` applies to AWS (and Azure location), `--resource-group` to Azure, `--zone` to GCP.
 
+`k8s` takes only `analyze-logs`, with no credentials: an API server audit log exported from EKS, AKS, GKE or a self-managed cluster (JSON lines, a JSON array or an `EventList`), written as `k8s_audit.csv` and `k8s_audit_analysis.json` with the same flags and techniques as a node's collected audit log.
+
 ```bash
 python3 -m src.analysis.rivendell.cloud.cli aws list -c aws_creds.json --region eu-west-2
 python3 -m src.analysis.rivendell.cloud.cli aws acquire-disk -i i-1234567890abcdef0 -o ./snapshots/AWS-001 --wait
 python3 -m src.analysis.rivendell.cloud.cli azure acquire-logs --days 30 -o ./logs/AZURE-001 --analyze
 python3 -m src.analysis.rivendell.cloud.cli gcp acquire-disk -i myinstance --zone europe-west2-a -o ./snapshots/GCP-001
+python3 -m src.analysis.rivendell.cloud.cli k8s analyze-logs -f eks-audit.json -o ./logs/K8S-001
 ```
 
 ---

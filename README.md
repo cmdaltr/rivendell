@@ -229,6 +229,7 @@ Process and analyze forensic evidence with integrated tools.
 - Registry analysis
 - Event log parsing
 - IOC detection
+- Stacking across hosts: rare processes, services, tasks and autoruns, with the reasons for each score
 - Browser artifact extraction
 - Multi-OS support (Windows, Linux, macOS)
 
@@ -362,7 +363,7 @@ python3 -m src.analysis.rivendell.cloud.cli aws analyze-logs \
 
 ### Feature 5: Eru, the AI Analyst
 
-Query investigation data using natural language with local AI. In the web app, **Ask Eru** talks to Ollama; when Ollama isn't running or the model isn't pulled, Eru says why and offers fixed questions (hosts, techniques, persistence, logins, IOCs, commands) answered straight from Elrond's output. See [docs/ERU.md](docs/ERU.md).
+Query investigation data using natural language with local AI. In the web app, **Ask Eru** talks to Ollama; when Ollama isn't running or the model isn't pulled, Eru says why and offers fixed questions (hosts, techniques, persistence, logins, IOCs, commands, threat intelligence, confirmed findings) answered straight from Elrond's output. See [docs/ERU.md](docs/ERU.md).
 
 **Features:**
 - Natural language queries of forensic data
@@ -399,6 +400,55 @@ python3 -m src.analysis.rivendell.ai.web_interface
 - "What persistence mechanisms were found?"
 
 [Full Documentation →](docs/ERU.md)
+
+---
+
+### Feature 6: Container Forensics
+
+Docker hosts and Kubernetes nodes, from a disk image or a Gandalf collection.
+
+**Features:**
+- Every Docker container's configuration, mounts, capabilities and log (`docker_containers.csv`, `container_logs.csv`)
+- The writable layer listed and hashed, not copied (`container_changes.csv`): dropped executables, cron, SSH keys and `ld.so.preload` in a container
+- Static pod manifests, pod logs, and the API server's audit log (`static_pods.csv`, `k8s_audit.csv`)
+- Exported EKS, AKS or GKE audit logs: `python3 -m src.analysis.rivendell.cloud.cli k8s analyze-logs --log-file audit.json --output ./analysis`
+
+**Detected Techniques:** **T1611** (escape to host), **T1610** (deploy container), **T1609** (container administration command), **T1552.007** (container API), **T1613** (container and resource discovery), **T1543.005** (container service) and more.
+
+[Full Documentation →](docs/CLI.md#gandalf---acquisition)
+
+---
+
+### Feature 7: Threat Intelligence
+
+Match a case against the Iran APT workbook, STIX 2.1 bundles, TAXII 2.1 collections, MITRESaw procedures or a watchlist, in **Pippin** (the web app's threat intelligence page) or from a shell.
+
+**Features:**
+- Every cooked artefact and IOC matched, with the groups, techniques and reference behind each element (`threat_intel_matches.csv`)
+- Groups ranked by what matched (`threat_groups.csv`), each with the basis for its rank: atomic indicators, specific procedures, common tooling or technique overlap only
+- Elements dozens of groups share are marked common, and built-ins and ordinary words never match, so a shared PowerShell switch never reads like attribution
+- Single values checked in Pippin, and an offline Eru question
+
+**Usage:**
+```bash
+python3 src/analysis/elrond.py IR-2026-004 /evidence/IR-2026-004 /cases/IR-2026-004 --Gandalf --Process --Analysis --extractIocs --threatIntel iran_apt.xlsx mitre_procedures.csv
+```
+
+[Full Documentation →](docs/ROADMAP.md#threat-intelligence-integration)
+
+---
+
+### Feature 8: Collaborative Investigation
+
+Work a case together from **Browse Case** on a completed job, on one machine or a team server.
+
+**Features:**
+- Every host's cooked artefacts and analysis, read-only, in paged tables you can filter on any field
+- Rows flagged as findings (lead, confirmed, benign), pinned by file, row and hash so a re-run can't silently re-point them
+- Notes on the case and on findings, hosts assigned to analysts, and an activity feed
+- A report and an ATT&CK Navigator layer from confirmed findings only, and an Eru question about them
+
+[Full Documentation →](docs/ROADMAP.md#collaborative-investigation)
 
 ---
 
@@ -542,19 +592,20 @@ And 25+ additional tools. See [REQUIREMENTS.md](docs/REQUIREMENTS.md) for the co
 
 ## 🗺️ Roadmap
 
-**v2.2 (Planned):**
-- Mobile device forensics (iOS, Android)
-- Network forensics integration
-- Automated reporting enhancements
-- Additional SIEM integrations
+**v2.3 (in progress):** plans in [docs/ROADMAP.md](docs/ROADMAP.md)
+- Container forensics (Docker, Kubernetes): built
+- Threat intelligence integration: built
+- Collaborative investigation features: built
+- ML-based anomaly detection: stacking built; the model waits on lab evaluation
 
-**v2.3 (Future):** plans in [docs/ROADMAP.md](docs/ROADMAP.md)
-- Collaborative investigation features
-- Lab VM consoles in the browser for team servers (docs/SERVER.md)
-- Desktop app RPM for Rocky Linux 9 / RHEL 9 (app/README.md)
-- Advanced ML-based anomaly detection
-- Container forensics (Docker, Kubernetes)
-- Threat intelligence integration
+**Feature requests:** [docs/FEATURE_REQUESTS.md](docs/FEATURE_REQUESTS.md)
+- Team servers on Linux beyond Ubuntu (RHEL, Rocky, Alma) and on Windows Server
+- Desktop app RPM for Rocky Linux 9 / RHEL 9
+- Lab VM consoles in the browser
+- Mobile device forensics (iOS, Android)
+- Network forensics (PCAP, Zeek, NetFlow)
+- Automated reporting
+- More SIEM integrations (Sentinel, OpenSearch, Wazuh, Chronicle)
 
 ---
 

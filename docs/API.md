@@ -17,12 +17,14 @@
 6. [File System](#file-system)
 7. [Docker Administration (Anduril)](#docker-administration-anduril)
 8. [Mordor: Recorded Attack Telemetry](#mordor-recorded-attack-telemetry)
-9. [Eru (AI Analyst)](#eru-ai-analyst)
-10. [Lab](#lab)
-11. [Health Check](#health-check)
-12. [Request/Response Formats](#requestresponse-formats)
-13. [Error Handling](#error-handling)
-14. [Code Examples](#code-examples)
+9. [Threat Intelligence](#threat-intelligence)
+10. [Case Browser and Collaboration](#case-browser-and-collaboration)
+11. [Eru (AI Analyst)](#eru-ai-analyst)
+12. [Lab](#lab)
+13. [Health Check](#health-check)
+14. [Request/Response Formats](#requestresponse-formats)
+15. [Error Handling](#error-handling)
+16. [Code Examples](#code-examples)
 
 ---
 
@@ -1090,6 +1092,47 @@ A job returns `202` with a lab run (`id`, `label`, `status`); poll `/api/lab/run
 
 ---
 
+## Threat Intelligence
+
+**Authentication:** none to read; `ADMIN` to import, pull or delete on a team server
+
+The indicators in `threat_intel_indicators`, in the fixed ten-column schema (Evidential Element, Threat Group, Procedure Example, Technique ID, Technique Name, Tactic, Contextual Evidence, Reference URL, Navigation Layer URL, Source Type). Parsing and matching are Elrond's (`src/analysis/rivendell/threat_intel/`); the backend mounts that package. A job with `"threat_intel": true` exports them for Elrond's `--threatIntel`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/threat-intel` | `total`, `groups`, and `sources`: `[{source, count}]` |
+| `GET` | `/api/threat-intel/indicators?q=&source=&limit=&offset=` | Indicators whose element, group or technique ID contains `q`; `limit` up to 500 |
+| `POST` | `/api/threat-intel/import` | Multipart `file`: the Iran APT workbook (XLSX), a STIX 2.1 bundle (JSON), Rivendell's or MITRESaw's CSV, or a `.txt` watchlist. Up to 200 MB. Returns `read`, `added`, `duplicates` and `sources`; indicators already stored under the same element, group, technique and source are skipped |
+| `POST` | `/api/threat-intel/taxii` | `{"url", "username", "password", "added_after"}`: every object in a TAXII 2.1 collection. `502` when the collection can't be read |
+| `DELETE` | `/api/threat-intel/sources/{source}` | Every indicator from one source |
+| `GET` | `/api/threat-intel/enrich?value=` | What the indicators say about one process name, command line, path, IP, domain or hash: per element, its `kind`, `breadth` (groups using it), `common` (more than 15), `groups`, `techniques` and `sources` |
+
+`503` means the package isn't mounted in the backend (`docker compose up -d backend` after pulling).
+
+---
+
+## Case Browser and Collaboration
+
+**Authentication:** whoever can see the job (its owner, the people it's shared with, admins); everyone in local mode
+
+A job's output, read-only, and the team's findings, notes, host assignments and activity on it (`case_routes.py`, `case_files.py`). Only `<host>/artefacts/cooked/`, `<host>/analysis/` and the case's top-level CSVs are readable; `raw/` never is, and nothing writes to the case directory. Findings reference a row by file, row (`2` onwards for a CSV line, `#0` onwards for a JSON record) and the SHA-256 of the row, so a re-run that changes it shows up.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/jobs/{job_id}/case` | `hosts` (each with `files`, `assignee`, `status`), `case_files`, and `findings` counted by status. `404` until the job has output |
+| `GET` | `/api/jobs/{job_id}/case/rows?host=&path=&q=&offset=&limit=` | Rows of one table containing `q` in any field: `columns`, `rows` (`ref`, `hash`, `cells`), `total`, and `exact` (false when the count stopped early). `host` is `(case)` for the case's own files |
+| `GET` | `/api/jobs/{job_id}/case/findings?status=&verify=` | Findings; with `verify=true`, `intact` says whether each row still hashes the same |
+| `POST` | `/api/jobs/{job_id}/case/findings` | `{"host", "artefact", "row_ref", "title", "technique", "status"}`; the row is read server-side for its hash and excerpt. `status` is `lead` (default), `confirmed` or `benign`; `technique` an ATT&CK ID. `409` if the row is already flagged |
+| `PATCH` | `/api/jobs/{job_id}/case/findings/{id}` | Change `title`, `technique` or `status`; pass the `updated_at` you loaded and a change someone else made first returns `409` instead of being overwritten |
+| `DELETE` | `/api/jobs/{job_id}/case/findings/{id}` | Remove a finding and its notes |
+| `GET` `POST` | `/api/jobs/{job_id}/case/notes` | Notes, Markdown: `{"body", "finding_id"}`, `finding_id` null for the case |
+| `PUT` | `/api/jobs/{job_id}/case/hosts/{host}` | `{"assignee", "status"}`; status is `to do`, `in progress` or `done` |
+| `GET` | `/api/jobs/{job_id}/case/activity?since=` | Who did what, newest first; `since` (the highest `id` seen) for polling |
+| `GET` | `/api/jobs/{job_id}/case/report` | Markdown: case notes, then confirmed findings by host with their notes |
+| `GET` | `/api/jobs/{job_id}/case/layer` | An ATT&CK Navigator layer of confirmed findings' techniques only |
+
+---
+
 ## Eru (AI Analyst)
 
 **Authentication:** none
@@ -1099,7 +1142,7 @@ Ask Eru's back end. Free-text answers come from Ollama at `OLLAMA_HOST` (default
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/ai/status` | `llm_available`, `ollama_running`, `model_name`, `models`, `ollama_host`, `data_dir`, and `reason`: why free text won't work (empty when it will) |
-| `GET` | `/api/ai/offline/questions` | The fixed questions: `id`, `question`, `needs_case` |
+| `GET` | `/api/ai/offline/questions` | The fixed questions: `id`, `question`, `needs_case` (including `threat_intel` and `findings`) |
 | `POST` | `/api/ai/offline/answer` | `{"question_id": "techniques", "case_id": "CASE-001"}` (`case_id` only where `needs_case`). Returns `{"answer", "offline": true}`; `404` for an unknown question |
 | `GET` | `/api/ai/cases` | Cases Eru can see: indexed vector stores and completed jobs, with `indexed` and `has_artifacts` |
 | `POST` | `/api/ai/chat` | `{"message": "..."}` without case context. Returns `{"response", "model", "processing_time"}` |
