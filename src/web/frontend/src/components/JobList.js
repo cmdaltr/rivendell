@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { listJobs, bulkDeleteJobs, bulkArchiveJobs, bulkRestartJobs, bulkCancelJobs } from '../api';
+import { listJobs, bulkDeleteJobs, bulkArchiveJobs, bulkRestartJobs, bulkCancelJobs, countFindings } from '../api';
 
 const heroImage = `${process.env.PUBLIC_URL}/images/rivendell.png`;
 
@@ -268,9 +268,16 @@ function JobList() {
       return;
     }
 
+    const counts = await Promise.all(restartableJobs.map(job => countFindings(job.id)));
+    const withFindings = counts.filter(Boolean).length;
+    const findingsNote = withFindings
+      ? ` ${withFindings} of them ha${withFindings === 1 ? 's' : 've'} findings (${counts.reduce((a, b) => a + b, 0)} in all): `
+        + 'restarting rewrites their output, so changed rows will show "row changed" in the case browser.'
+      : '';
+
     setConfirmModalData({
       title: '🔄 Restart Confirmation',
-      message: `Are you sure you want to restart ${restartableJobs.length} job(s)?`,
+      message: `Are you sure you want to restart ${restartableJobs.length} job(s)?${findingsNote}`,
       actionType: 'restart',
       action: async () => {
         try {

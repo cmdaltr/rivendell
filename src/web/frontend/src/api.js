@@ -412,3 +412,13 @@ export const getCaseReport = async (jobId) =>
   (await api.get(`${caseBase(jobId)}/report`, { responseType: 'text' })).data;
 
 export const getConfirmedLayer = async (jobId) => (await api.get(`${caseBase(jobId)}/layer`)).data;
+
+// How many findings a job's case has (0 when it has no output to flag yet): restarting rewrites the
+// rows they point at, so the restart buttons warn first
+export const countFindings = async (jobId) => {
+  try {
+    return (await getFindings(jobId)).length;
+  } catch {
+    return 0;
+  }
+};
