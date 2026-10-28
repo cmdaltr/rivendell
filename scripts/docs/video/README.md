@@ -48,7 +48,7 @@ These are set as environment variables. The defaults are what the current video 
 | `CASE_DIR` | `/Volumes/Portable6TB/Data/rivendell/claude_testing/threatintel_demo` | The finished Elrond case shown in the video |
 | `CASE_ID` | `THREATINTEL-DEMO-01` | Its case ID in the web UI. Eru and the Job page use this case's newest job |
 | `INTEGRITY` | `…/volatility_order_win3/elrond_intake/LAB-WIN11/gandalf_integrity.csv` | A `gandalf_integrity.csv`, used when the case has none |
-| `OUT` | `~/Desktop` | Where the video goes |
+| `OUT` | `scripts/docs/video/output` | Where the video goes (git-ignored with the rest of this folder) |
 
 The narration expects the lab's Windows machine: the techniques **T1070.006**, **T1564.004**
 and **T1546.003**, and IOCs under `rivendell-lab.test`.
