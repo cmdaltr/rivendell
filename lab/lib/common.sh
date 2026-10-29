@@ -306,6 +306,7 @@ build_lab_images() {
     case "$d" in ubuntu) base=ubuntu:24.04 ;; rocky) base=rockylinux:9 ;; esac
     build_image "rivendell-lab-target:$d" "$LAB_ROOT/linux-targets" "BASE=$base" || return 1
   done
+  build_image rivendell-lab-target:ubuntu-clean "$LAB_ROOT/linux-targets" "BASE=ubuntu:24.04" "SEED=0" || return 1
   build_image rivendell-lab-controller "$LAB_ROOT/controller"
 }
 

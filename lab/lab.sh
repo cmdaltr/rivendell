@@ -13,7 +13,7 @@ load_config
 
 VAGRANT_DIR="$LAB_ROOT/vagrant"
 TESTS_ENV="$LAB_CONFIG_DIR/rivendell-tests.env"
-LINUX_CONTAINERS="lab-ubuntu lab-rocky"
+LINUX_CONTAINERS="lab-ubuntu lab-rocky lab-ubuntu-clean1 lab-ubuntu-clean2"
 
 vagrant_env() {
   require_password
@@ -204,15 +204,17 @@ cmd_linux_targets() {
   export REPO_ROOT ACQ_ROOT
   mkdir -p "$ACQ_ROOT"
   if [ -z "$sub" ]; then
-    menu "Linux container targets ($DOCKER_CONTEXT)" "Build and start" "Stop" "Rebuild from scratch (re-seed)" "Status"
-    case "$MENU_CHOICE" in 1) sub=up ;; 2) sub=down ;; 3) sub=reset ;; 4) sub=status ;; *) return ;; esac
+    menu "Linux container targets ($DOCKER_CONTEXT)" "Build and start" "Build and start, with two clean Ubuntu hosts for stacking" "Stop" "Rebuild from scratch (re-seed)" "Status"
+    case "$MENU_CHOICE" in 1) sub=up ;; 2) sub=stacking ;; 3) sub=down ;; 4) sub=reset ;; 5) sub=status ;; *) return ;; esac
   fi
   case "$sub" in
-    up)     build_lab_images && lab_compose up -d --no-build && ok "Targets up: $LINUX_CONTAINERS (SSH on 127.0.0.1:2221-2222)" ;;
-    down)   lab_compose down && ok "Targets stopped" ;;
-    reset)  lab_compose down -v; build_lab_images && lab_compose up -d --no-build --force-recreate && ok "Targets rebuilt and re-seeded" ;;
-    status) lab_compose ps ;;
-    *) die "linux-targets up|down|reset|status" ;;
+    up)     build_lab_images && lab_compose up -d --no-build && ok "Targets up: lab-ubuntu lab-rocky (SSH on 127.0.0.1:2221-2222)" ;;
+    stacking) build_lab_images && lab_compose --profile stacking up -d --no-build \
+              && ok "Targets up, with two clean Ubuntu hosts for stacking (SSH on 127.0.0.1:2221-2224)" ;;
+    down)   lab_compose --profile stacking down && ok "Targets stopped" ;;
+    reset)  lab_compose --profile stacking down -v; build_lab_images && lab_compose up -d --no-build --force-recreate && ok "Targets rebuilt and re-seeded" ;;
+    status) lab_compose --profile stacking ps ;;
+    *) die "linux-targets up|stacking|down|reset|status" ;;
   esac
 }
 
@@ -674,7 +676,7 @@ Usage: ./lab.sh [command]
   check               Host, tools and settings report
   install             Install prerequisites for this Mac (Homebrew)
   configure           Data location, VM sizes, lab password
-  linux-targets [up|down|reset|status]   Four seeded Linux containers
+  linux-targets [up|stacking|down|reset|status]   Two seeded Linux containers (stacking: plus two clean Ubuntu)
   linux-vm [create|start|stop|delete|status]
   macos-vm [create|start|stop|delete|status|move <dir>]   (Apple silicon)
   windows-vm [create|start|stop|provision|gui|delete|status]
