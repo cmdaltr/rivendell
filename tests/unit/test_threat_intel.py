@@ -125,6 +125,9 @@ def test_matching_rules():
         ("vssadmin delete shadows /all /quiet", "Conti", "T1490", "cmd"),
         ("vssadmin delete shad", "Wizard Spider", "T1490", "cmd"),  # a truncated copy
         ("C:\\ProgramData\\Microsoft", "APT1", "T1074", "file"),     # a directory near the root
+        ("HKEY_LOCAL_MACHINE", "Threat Group-3390", "T1027.011", "software"),  # a hive: in every registry path
+        ("HKLM\\SOFTWARE", "APT1", "T1012", "reg"),
+        ("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "APT29", "T1547.001", "reg"),
     ))
     def elements(text):
         return [e["element"] for e in enrich_artefact(text, index)]
@@ -133,6 +136,9 @@ def test_matching_rules():
     assert elements("net user /domain && powershell -w hidden") == []
     assert elements("C:\\Windows\\System32\\winmm.dll photo.jpg C:\\ProgramData\\Microsoft\\x.dat") == []
     assert elements("vssadmin delete shadows /all /quiet") == ["vssadmin delete shadows /all /quiet"]
+    assert elements("reg save HKLM\\SAM C:\\Users\\Public\\s.hiv") == []
+    assert elements("reg add HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v x") == \
+        ["HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"]
 
 
 def test_case_scope_keeps_only_tools_and_commands_from_procedures():

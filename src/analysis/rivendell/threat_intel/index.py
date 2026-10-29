@@ -48,6 +48,8 @@ EXECUTABLE_SUFFIXES = (".exe", ".dll", ".sys", ".ps1", ".psm1", ".bat", ".cmd", 
 PROGRAM_SUFFIXES = (".exe", ".ps1", ".py", ".sh", ".bat", ".cmd", ".vbs", ".js", ".hta", ".jar", ".elf", ".bin")
 REGISTRY_HIVES = (("hkey_local_machine", "hklm"), ("hkey_current_user", "hkcu"), ("hkey_users", "hku"),
                   ("hkey_classes_root", "hkcr"), ("hkey_current_config", "hkcc"))
+# A hive, or a hive's top-level key, on its own: in every registry path, so never an indicator
+HIVE_ROOT = re.compile(r"(?:hklm|hkcu|hku|hkcr|hkcc)(?:\\(?:software|system|sam|security|hardware|classes))?\\?")
 TOKEN = re.compile(r"[a-z0-9_$~@#-]+(?:\.[a-z0-9_$~@#-]+)*")
 URL = re.compile(r"\b(?:https?|ftp)://[^\s'\"<>|]+", re.I)
 GAP = "…"  # where a placeholder stood in a procedure's command
@@ -162,7 +164,7 @@ def usable(value: str, kind: str) -> Optional[str]:
     original = str(value).strip()
     if kind == "software" and original.isalpha() and original.islower():
         return None  # a word from a command line ("hidden" from -w hidden); tool names are proper nouns
-    if v in GENERIC_PHRASES:
+    if v in GENERIC_PHRASES or HIVE_ROOT.fullmatch(v):
         return None
     if kind == "cmd":
         words = v.replace(GAP, " ").split()
