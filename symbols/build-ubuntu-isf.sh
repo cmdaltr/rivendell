@@ -22,7 +22,7 @@ docker run --rm -v "$scratch:/work" -v "$here/linux:/out" -e URL="$url" -e DDEB=
     golang:1.22 bash -euo pipefail -c '
         apt-get -qq update >/dev/null && apt-get -qq install -y xz-utils >/dev/null
         cd /work
-        [ -s "$DDEB" ] || wget -q "$URL"
+        [ -s "$DDEB" ] || wget -nv "$URL" || { echo "download failed: $URL" >&2; exit 1; }
         rm -rf x && mkdir x && dpkg-deb -x "$DDEB" x
         vmlinux=$(find x -name "vmlinux-$KERNEL" | head -1)
         [ -n "$vmlinux" ] || { echo "no vmlinux-$KERNEL in $DDEB" >&2; exit 1; }
