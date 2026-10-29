@@ -109,6 +109,17 @@ Container forensics goes first because half of it is written. ML goes last becau
 - **Phase 3, the isolation forest: decision deferred (Ben, 29 October 2026).** It would score how unusual each host's values are, not only how many hosts have them, catching what counting can't, such as a process every host runs but with an odd parent or command line on one. Against: `scikit-learn` (with numpy and scipy, about 30–40 MB) in the worker image, which the dependency rule needs agreed, and a score that's harder to explain than stacking's named reasons. Stacking found every plant with no noise on the lab case, so there's nothing yet for a forest to improve on. **Revisit when** a lab or real case has something planted that stacking misses (an odd parent or command line on a common process is the likely first one); measure the forest against stacking on that case with `precision_at_k` before adding the dependency.
 - **Eru's "What's rare in this case?"** is held back, as the plan says, until the lab numbers hold up. Until then `stacking.csv` is in the case browser.
 
+## Outstanding (29 October 2026)
+
+What's left after the four features above were built, tested in the lab and documented. Each feature's own "Still to do" holds its longer-term work; this list is the near-term loose ends.
+
+| Item | What it needs |
+|---|---|
+| Collect `/etc/os-release` in Gandalf's bash and Python collectors | Stacking now groups Linux hosts by distribution family; without os-release it reads the family from fingerprints (`apt-daily`, `dnf-makecache`, `etc/bashrc`). Collecting the file makes it exact, including for distros with no fingerprint yet. |
+| Video sections for stacking and container forensics | Narration to draft and approve, then a section each in the walkthrough's `scenes.py` (local, git-ignored; `scripts/docs/video/README.md`). The case browser and Pippin sections are done. |
+| Guide photograph of job sharing | The Job page's Sharing section exists only in server mode, so it has to be photographed against a server-mode install (`capture.py --url <server> --username admin --only job`). Every other guide section now has its photograph. |
+| Stacking on Windows in the lab | One seeded Windows host among clean ones, as the Linux targets now do, to measure precision on Windows families (processes, services, WMI). Needs clean Windows VMs. |
+
 ## Decisions needed
 
 - `scikit-learn` in the worker image, for Phase 3 of anomaly detection: deferred on 29 October 2026 until stacking misses something (see Phase 3 above for what would reopen it).
