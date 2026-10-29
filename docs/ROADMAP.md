@@ -116,7 +116,6 @@ What's left after the four features above were built, tested in the lab and docu
 | Item | What it needs |
 |---|---|
 | Video sections for stacking and container forensics | Narration to draft and approve, then a section each in the walkthrough's `scenes.py` (local, git-ignored; `scripts/docs/video/README.md`). The case browser and Pippin sections are done. |
-| Ranking of Windows stacking ties | Measured in the lab on 29 October (`lab/README.md`, clean siblings): the four planted persistence values are found, but share score 2.0 with 66 programs from Prefetch and Amcache that differ only because the seeded VM is days older, and ties sort by family name. Decide whether a rare persistence value (autorun, service, task, WMI consumer, kernel module) should outrank a rare program at the same score. |
 
 ## Decisions needed
 

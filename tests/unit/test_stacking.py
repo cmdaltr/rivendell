@@ -15,11 +15,14 @@ from rivendell.analysis.stacking import (build_baseline, looks_generated, precis
 PROGRAMS = ["svchost.exe", "explorer.exe", "msedge.exe", "onedrive.exe", "teams.exe"]
 
 
-def windows_host(case: Path, name: str, extra=(), wmi=None) -> None:
+def windows_host(case: Path, name: str, extra=(), wmi=None, folder="\\PROGRAM FILES\\APP") -> None:
     cooked = case / name / "artefacts" / "cooked"
     (cooked / "prefetch").mkdir(parents=True, exist_ok=True)
+    # As Elrond cooks Prefetch: the program's own path is among the files it loaded, in a list's text
     (cooked / "prefetch" / "prefetch.json").write_text(json.dumps(
-        [{"filename": p.upper()} for p in PROGRAMS + list(extra)]))
+        [{"filename": p.upper(), "accessed_files": str([f"\\VOLUME{{01dd-c21d}}\\WINDOWS\\SYSTEM32\\NTDLL.DLL",
+                                                       f"\\VOLUME{{01dd-c21d}}{folder}\\{p.upper()}"])}
+         for p in PROGRAMS + list(extra)]))
     if wmi:
         (cooked / "wbem.json").write_text(json.dumps([wmi]))
 
@@ -153,8 +156,24 @@ def test_windows_task_files_and_run_keys(tmp_path):
                      run=[("LabUpdater", "powershell.exe -w hidden -enc AAAA")], tasks=["\\LabSync"])
     persistence_host(case, "WIN2", "S-1-5-21-2002875499-1599582934-1328388-1000", "bb77e3eb-ce2c-4d5e-8f90-0123456789ab")
     persistence_host(case, "WIN3", "S-1-5-21-3569195859-2801478039-1125735-1001", "d87d86eb-50de-4920-8a1b-0123456789ab")
+    windows_host(case, "WIN1", extra=["archer.exe"])  # a program only the busier host has run
+    for name in ("WIN2", "WIN3"):
+        windows_host(case, name)
     stack_case(str(case))
     rows = read(case / "stacking.csv")
-    # Each install names its Edge update and SoftLanding tasks for itself: those stack together
-    assert sorted((r["Family"], r["Value"]) for r in rows) == \
-        [("autorun (Windows)", "labupdater"), ("scheduled task", "labsync")]
+    # Each install names its Edge update and SoftLanding tasks for itself: those stack together.
+    # At the same score, persistence ranks above a program
+    assert [(r["Family"], r["Value"]) for r in rows] == \
+        [("autorun (Windows)", "labupdater"), ("scheduled task", "labsync"), ("process", "archer.exe")]
+
+
+def test_windows_folders_vouch_for_consonant_names(tmp_path):
+    case = tmp_path / "NAMES"
+    windows_host(case, "OLD", extra=["mscorsvw.exe"], folder="\\WINDOWS\\MICROSOFT.NET\\FRAMEWORK64\\V4.0.30319")
+    windows_host(case, "ODD", extra=["ngrxbcpvt.exe"], folder="\\USERS\\ALICE\\APPDATA\\LOCAL")
+    windows_host(case, "NEW")
+    stack_case(str(case))
+    rows = {r["Value"]: (r["Reasons"], r["Example"]) for r in read(case / "stacking.csv")}
+    assert rows["mscorsvw.exe"][0] == "rare"
+    assert rows["ngrxbcpvt.exe"][0] == "rare, generated name"
+    assert rows["ngrxbcpvt.exe"][1].endswith("\\USERS\\ALICE\\APPDATA\\LOCAL\\NGRXBCPVT.EXE")

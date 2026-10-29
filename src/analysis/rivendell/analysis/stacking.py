@@ -21,6 +21,10 @@ otherwise a lone Rocky host among Ubuntu ones makes every unit of its distro rar
 which family they were compared in. With fewer than MIN_HOSTS hosts of that OS nothing in the family is called rare: on two
 hosts, "on one of them" is a diff of their builds, not a long tail. A baseline still applies.
 
+Rows rank by score, then the fewest hosts, then persistence (autoruns, services, tasks, WMI
+consumers, kernel modules) before execution (processes, parent and child pairs): at the same score
+a rare way back in is the stronger lead, where a rare program is often just an older or busier host.
+
 A score is a lead, never a verdict: nothing here tags a technique. Stacking needs two or more
 hosts; with one, stack_case returns None and writes nothing.
 
@@ -43,6 +47,8 @@ MAX_JSON_BYTES = 256 << 20
 MAX_ROWS = 2000
 USER_PATH = re.compile(r"(?i)(?:\\users\\|\\appdata\\|\\temp\\|\\programdata\\|^/tmp/|^/dev/shm/|^/home/|^/var/tmp/|"
                        r"/users/[^/]+/(?:downloads|desktop|library/caches)/)")
+# Windows' own folders, where consonant-heavy names are Microsoft's (mscorsvw, comppkgsrv), not machine-made
+SYSTEM_PATH = re.compile(r"(?i)\\windows\\(?!temp\\)")
 MIN_HOSTS = 3  # hosts of an OS before a value on few of them counts as rare
 WEIGHTS = {"rare": 2.0, "user path": 1.5, "generated name": 1.0, "not in baseline": 1.0}
 VOWELS = set("aeiouy")
@@ -50,6 +56,9 @@ FAMILY_OS = {"process": "windows", "parent > child": "windows", "scheduled task"
              "wmi consumer": "windows", "service (Windows)": "windows", "autorun (Windows)": "windows",
              "service (systemd)": "linux", "autorun (Linux)": "linux", "kernel module": "linux",
              "autorun (macOS)": "macos"}
+
+PERSISTENCE = {"scheduled task", "wmi consumer", "service (Windows)", "autorun (Windows)", "service (systemd)",
+               "autorun (Linux)", "kernel module", "autorun (macOS)"}
 
 Value = Tuple[str, str, str]  # (family, value, example)
 
@@ -114,7 +123,11 @@ def _prefetch(path: str) -> Iterable[Value]:
     for r in _json_records(path):
         name = (r.get("filename") or "").lower()
         if name:
-            yield "process", name, name
+            # The program's own path is among the files it loaded; the example carries it. The list arrives
+            # as its Python text, backslashes doubled
+            loaded = re.findall(r"[^'\",\[\]]+", str(r.get("accessed_files") or "").replace("\\\\", "\\"))
+            full = next((f.strip() for f in loaded if f.strip().lower().endswith("\\" + name)), name)
+            yield "process", name, full
 
 
 def _amcache(path: str) -> Iterable[Value]:
@@ -305,13 +318,17 @@ def looks_generated(name: str) -> bool:
     return bool(re.search(r"[bcdfghjklmnpqrstvwxz]{6,}", stem))
 
 
-def reasons(family: str, value: str, with_it: int, hosts: int, baseline: Optional[Set[Tuple[str, str]]]) -> List[str]:
+def reasons(family: str, value: str, with_it: int, hosts: int, baseline: Optional[Set[Tuple[str, str]]],
+            example: str = "") -> List[str]:
+    """The named features behind a value's score. A process from Prefetch is valued by its name alone, so its
+    example, the path it ran from, says whether a Windows folder vouches for the name."""
     found = []
     if with_it <= max(1, hosts // 5):
         found.append("rare")
     if USER_PATH.search(value):
         found.append("user path")
-    if looks_generated(_base(value.split(" > ")[-1].split(": ")[-1])):
+    where = example if family == "process" and re.search(r"[\\/]", example) else value
+    if looks_generated(_base(value.split(" > ")[-1].split(": ")[-1])) and not SYSTEM_PATH.search(where):
         found.append("generated name")
     if baseline is not None and (family, value) not in baseline:
         found.append("not in baseline")
@@ -343,18 +360,19 @@ def stack(per_host: Dict[str, Dict[Tuple[str, str], Tuple[str, str]]],
         total = len(of_os[compared])
         if total < MIN_HOSTS and baseline is None:
             continue
-        why = reasons(family, value, len(with_it), total, baseline)
+        artefact, example = per_host[with_it[0]][(family, value)]
+        why = reasons(family, value, len(with_it), total, baseline, example)
         if total < MIN_HOSTS:
             why = [r for r in why if r != "rare"]
         if "rare" not in why and "not in baseline" not in why:
             continue
-        artefact, example = per_host[with_it[0]][(family, value)]
         score = sum(WEIGHTS[r] for r in why)
         shown = f"{family}, {compared.split(':')[1]}" if ":" in compared else family
         rows.append({"Score": f"{score:.1f}", "Family": shown, "Value": value, "Hosts With It": str(len(with_it)),
                      "Hosts In Case": str(total), "Hosts": "; ".join(sorted(with_it)[:10]), "Reasons": ", ".join(why),
                      "Artefact": artefact, "Example": example})
-    rows.sort(key=lambda r: (-float(r["Score"]), int(r["Hosts With It"]), r["Family"], r["Value"]))
+    rows.sort(key=lambda r: (-float(r["Score"]), int(r["Hosts With It"]), r["Family"].split(",")[0] not in PERSISTENCE,
+                             r["Family"], r["Value"]))
     for number, row in enumerate(rows, start=1):
         row["Rank"] = str(number)
     return rows[:MAX_ROWS]
