@@ -85,19 +85,19 @@ Container forensics goes first because half of it is written. ML goes last becau
   - processes (Prefetch, Amcache, 4688, Sysmon 1);
   - parent and child pairs;
   - services (7045, systemd units);
-  - scheduled tasks (4698);
-  - autoruns (startup items, Linux autostart, BTM);
+  - scheduled tasks (4698, the task files);
+  - autoruns (Run keys, startup items, Linux autostart, BTM);
   - WMI consumers;
   - kernel modules.
 
-  A value on at most a fifth of the hosts of its OS (one, in a small case) goes to the case's `stacking.csv`, which the case browser shows. Families are compared across hosts of the same OS only. A Windows host's programs aren't rare because the case also holds Linux, but a WMI consumer on one of five Windows hosts is rare even when the other four have none. User folders are normalised, so `C:\Users\alice\x` and `C:\Users\bob\x` stack together. A single-host case writes nothing and says so in the log.
+  A value on at most a fifth of the hosts of its OS (one, in a small case) goes to the case's `stacking.csv`, which the case browser shows. Families are compared across hosts of the same OS only. A Windows host's programs aren't rare because the case also holds Linux, but a WMI consumer on one of five Windows hosts is rare even when the other four have none. User folders are normalised, so `C:\Users\alice\x` and `C:\Users\bob\x` stack together, and so are the GUIDs and SIDs in task names. A single-host case writes nothing and says so in the log.
 - **Features.** Each row's score is the sum of named reasons, and the row lists them:
   - **rare**;
   - **user path** (Users, AppData, Temp, ProgramData, `/tmp`, `/dev/shm`, `/home`);
   - **generated name**;
   - **not in baseline**.
 
-  "Generated name" looks at shape: few vowels, a long consonant run, digits and letters interleaved, or long hex. Entropy alone flagged every long English compound (`backgroundtaskhost.exe`) on the demo case.
+  "Generated name" looks at shape: few vowels, a long consonant run, digits and letters interleaved, or long hex. Entropy alone flagged every long English compound (`backgroundtaskhost.exe`) on the demo case, and a program under `\Windows\` (not `\Windows\Temp\`) isn't called generated, so `mscorsvw.exe` stays quiet. At equal score, persistence (services, tasks, autoruns, WMI, kernel modules) ranks above programs.
 - **Baseline.** `python3 -m rivendell.analysis.stacking --baseline OUT CASE...` (from `src/analysis`) writes every value from clean cases. `--stackBaseline OUT` then scores what's absent from it, and with a baseline even a one-OS-host family is scored. It stays a lab-built, local file.
 - **Measurement.** `precision_at_k(stacking.csv, seeded values, k)` is the lab's yardstick. `tests/unit/test_stacking.py` seeds an eight-host case (five Windows, three Linux) and requires the seeded values in the top three, plus a mixed-distro case.
 - **In the lab, Windows (29 October 2026).** Three Windows 11 hosts, one seeded (`lab/README.md`, clean siblings): all four planted persistence values rare on the seeded host, ranked 1, 2, 6 and 8 of 74 once persistence ranks above programs at equal score. The other rows are what the seeded VM gained from four days' use.

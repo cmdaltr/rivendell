@@ -597,7 +597,7 @@ And 25+ additional tools. See [REQUIREMENTS.md](docs/REQUIREMENTS.md) for the co
 - Container forensics (Docker, Kubernetes): built
 - Threat intelligence integration: built
 - Collaborative investigation features: built
-- ML-based anomaly detection: stacking built; the model waits on lab evaluation
+- Anomaly detection: stacking across hosts built and measured in the lab; no learned model
 
 **Feature requests:** [docs/FEATURE_REQUESTS.md](docs/FEATURE_REQUESTS.md)
 - Team servers on Linux beyond Ubuntu (RHEL, Rocky, Alma) and on Windows Server
