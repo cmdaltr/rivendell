@@ -25,7 +25,7 @@ Container forensics goes first because half of it is written. ML goes last becau
 - **The lab.** The Linux targets seed a Docker host's and a Kubernetes node's state on disk (`lab/linux-targets/seed/seed-containers.sh`), with the expected results in their `expected.json`. `tests/unit/test_containers.py` runs that seed through collection and processing.
 
 **Still to do.**
-- **The bash collector against the seed.** `gandalf.py`'s copy of the container lists ran against the rebuilt targets on 29 October (the containers video section shows its output). `gandalf.sh` collected the seed the same day, layer copy included; Elrond and `verify-expected.py` over its result haven't run yet.
+- **The bash collector against the seed.** `gandalf.py`'s copy of the container lists ran against the rebuilt targets on 29 October (the containers video section shows its output). `gandalf.sh` collected the seed the same day, layer copy included, and Elrond over its result passed every container row of `verify-expected.py` on both targets (the one miss, `status.php`, needs YARA, which that run didn't use).
 - **containerd's own metadata** (`/var/lib/containerd`, a bbolt database) is collected by all three collectors since 29 October, with Podman/CRI-O's `containers.json`, but isn't parsed yet. On a containerd or CRI-O node, the pod logs, static pods and audit log are covered, but per-container settings come only from Docker.
 - **Live container capture** (`docker export`, CRIU checkpoints) stays out of scope. It changes the running state, so if it's ever added it must be an explicit opt-in, recorded in the audit log.
 
@@ -116,7 +116,7 @@ Each feature's "Still to do" above, as work to schedule, then the Eru MCP server
 
 ### Container forensics
 
-1. **The bash collector against the seed** (an hour). `./lab.sh linux-targets reset`, `./lab.sh gandalf-collect bash`, Elrond over the result, then `lab/verify-expected.py` against each target's `expected.json`. Done when `docker_containers.csv`, `container_changes.csv`, `static_pods.csv` and `k8s_audit.csv` match for `gandalf.sh` as they already do for `gandalf.py`.
+1. **The bash collector against the seed** (done 29 October). `./lab.sh linux-targets reset`, `./lab.sh gandalf-collect bash`, Elrond over the result, then `lab/verify-expected.py` against each target's `expected.json`. Done when `docker_containers.csv`, `container_changes.csv`, `static_pods.csv` and `k8s_audit.csv` match for `gandalf.sh` as they already do for `gandalf.py`.
 2. **containerd's metadata** (two to three days). On a containerd or CRI-O node, per-container settings (image, mounts, privileges, namespaces) live in `/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db`, a bbolt database.
    - Collect `meta.db` in all three collectors, read-only, beside the Docker files. Done 29 October.
    - Parse it into the existing `docker_containers.csv` columns, adding a `Runtime` column (`docker`, `containerd`) so one table covers both; the technique rules then apply unchanged.
