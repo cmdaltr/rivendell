@@ -245,13 +245,19 @@
  "aragorn": {
   "image": "aragorn.jpg",
   "width": 1440,
-  "height": 98,
+  "height": 1347,
   "boxes": {
    "aragorn.tabs": [
     30,
     24,
     1379,
     50
+   ],
+   "aragorn.lab": [
+    30,
+    600,
+    1379,
+    722
    ]
   }
  },
