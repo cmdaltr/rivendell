@@ -16,13 +16,16 @@ scratch="${4:-${TMPDIR:-/tmp}/rivendell-isf}"
 here="$(cd "$(dirname "$0")" && pwd)"
 ddeb="linux-image-unsigned-${kernel}-dbgsym_${version}_amd64.ddeb"
 url="http://ddebs.ubuntu.com/pool/main/l/${source_package}/${ddeb}"
+# ddebs.ubuntu.com drops old kernels; Launchpad keeps every published ddeb
+fallback="https://launchpad.net/ubuntu/+archive/primary/+files/${ddeb}"
 
 mkdir -p "$scratch" "$here/linux"
-docker run --rm -v "$scratch:/work" -v "$here/linux:/out" -e URL="$url" -e DDEB="$ddeb" -e KERNEL="$kernel" \
+docker run --rm -v "$scratch:/work" -v "$here/linux:/out" -e URL="$url" -e FALLBACK="$fallback" -e DDEB="$ddeb" -e KERNEL="$kernel" \
     golang:1.22 bash -euo pipefail -c '
         apt-get -qq update >/dev/null && apt-get -qq install -y xz-utils >/dev/null
         cd /work
-        [ -s "$DDEB" ] || wget -nv "$URL" || { echo "download failed: $URL" >&2; exit 1; }
+        [ -s "$DDEB" ] || wget -nv -O "$DDEB" "$URL" || wget -nv -O "$DDEB" "$FALLBACK" || \
+            { rm -f "$DDEB"; echo "download failed: $URL and $FALLBACK" >&2; exit 1; }
         rm -rf x && mkdir x && dpkg-deb -x "$DDEB" x
         vmlinux=$(find x -name "vmlinux-$KERNEL" | head -1)
         [ -n "$vmlinux" ] || { echo "no vmlinux-$KERNEL in $DDEB" >&2; exit 1; }
