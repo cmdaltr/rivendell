@@ -30,6 +30,16 @@ scripts/docs/video/regenerate.sh --video-only --preview          # silent, to ch
 The guide's photographs (`src/web/frontend/public/guide/`) are part of the app, so commit them
 when they change. The script reminds you.
 
+To retake only some of the guide's pages, run the capture directly. Page IDs come from
+`src/web/frontend/src/guide/content.js`:
+
+```bash
+~/.cache/rivendell-video/bin/python scripts/docs/guide/capture.py --only case intel
+```
+
+Add `--username admin` (with `RIVENDELL_PASSWORD` set) for pages that need an admin: Account,
+Aragorn and Aragorn's settings.
+
 ## What it needs
 
 | What | Where |

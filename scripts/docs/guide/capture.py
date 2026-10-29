@@ -14,7 +14,8 @@ Sign in as an admin (--username, with RIVENDELL_PASSWORD in the environment) so 
 and Aragorn are photographed too. The Job page uses the most recent job, so have one.
 
 A page that now shows fewer of its sections than its last photograph did (no jobs on this
-install, the lab agent not running) keeps that photograph; --fresh replaces them all.
+install, the lab agent not running) keeps that photograph; --fresh replaces them all. --only
+retakes just the named pages (python3 scripts/docs/guide/capture.py --only case intel).
 """
 import argparse
 import json
@@ -76,6 +77,15 @@ def prepare(page, page_id: str) -> None:
         page.wait_for_timeout(1500)  # the case number is checked against existing cases
         page.check("input[name=analysisMode][value=local]")
         page.wait_for_timeout(800)
+    elif page_id == "case":
+        # A table open, and the host list held to the height of a laptop screen: in the tall window
+        # it would otherwise run to 80vh and push Findings, Notes and Activity out of the photograph
+        table = page.locator("[data-guide='case.hosts'] button:text-is('wbem.json')")
+        if table.count():
+            table.first.click()
+            page.wait_for_timeout(1500)
+        page.evaluate("(el => { el.style.maxHeight = '520px'; el.scrollTop = 0; })"
+                      "(document.querySelector(\"[data-guide='case.hosts']\"))")
 
 
 def capture(args: argparse.Namespace) -> None:
@@ -90,6 +100,9 @@ def capture(args: argparse.Namespace) -> None:
     except OSError as exc:
         print(f"  Couldn't list jobs ({exc}): the Job page is skipped")
 
+    known = [page_id for page_id, _, _ in guide_pages()]
+    if args.only and set(args.only) - set(known):
+        sys.exit(f"No guide page {', '.join(sorted(set(args.only) - set(known)))}: pick from {', '.join(known)}")
     OUT.mkdir(parents=True, exist_ok=True)
     earlier = {}
     if not args.fresh and (OUT / "boxes.json").exists():
@@ -105,6 +118,8 @@ def capture(args: argparse.Namespace) -> None:
             + (f"localStorage.setItem('user', {json.dumps(json.dumps(user))});" if user else ""))
         page = context.new_page()
         for page_id, route, sections in guide_pages():
+            if args.only and page_id not in args.only:
+                continue
             if ":first" in route:
                 if not job_id:
                     print(f"  {page_id}: no jobs yet, skipped")
@@ -152,6 +167,8 @@ def main() -> None:
     parser.add_argument("--token", help="an API token (or RIVENDELL_TOKEN)")
     parser.add_argument("--username", help="sign in as this user (password in RIVENDELL_PASSWORD)")
     parser.add_argument("--fresh", action="store_true", help="replace every photograph, even with fewer sections")
+    parser.add_argument("--only", nargs="+", metavar="PAGE",
+                        help="retake just these pages (ids from guide/content.js: case, intel, home, ...); the rest are kept")
     capture(parser.parse_args())
 
 
