@@ -83,7 +83,7 @@ Eru is the AI layer. It reads Elrond's case output and provides:
 
 - Threat intelligence: `src/analysis/rivendell/threat_intel/` (Iran APT loader `iran_apt_loader.py`, STIX/TAXII, MITRESaw, matching, `enrich_artefact()` as the Eru-facing function); fixed 10-column schema: Evidential Element, Threat Group, Procedure Example, Technique ID, Technique Name, Tactic, Contextual Evidence, Reference URL, Navigation Layer URL, Source Type; table `threat_intel_indicators` — don't rename or restructure without asking. Elrond `--threatIntel`, API `/api/threat-intel`, the Intel page
 - Case browser and collaboration: `src/web/backend/case_routes.py` + `case_files.py` (read-only over cooked/ and analysis/, never raw/), tables `case_findings`, `case_notes`, `case_hosts`, `case_activity`
-- Stacking across hosts: `src/analysis/rivendell/analysis/stacking.py` (stdlib; run by `--Analysis` on 2+ hosts, rarity needs 3+ of an OS, Linux grouped by distro family); the isolation forest waits on a scikit-learn decision
+- Stacking across hosts: `src/analysis/rivendell/analysis/stacking.py` (stdlib; run by `--Analysis` on 2+ hosts, rarity needs 3+ of an OS, Linux grouped by distro family, persistence ranked above programs at equal score); no learned model (scikit-learn was dropped)
 
 ## Planned, not in the repo yet
 

@@ -28,8 +28,8 @@ a rare way back in is the stronger lead, where a rare program is often just an o
 A score is a lead, never a verdict: nothing here tags a technique. Stacking needs two or more
 hosts; with one, stack_case returns None and writes nothing.
 
-Stdlib only, as the plan requires (docs/ROADMAP.md, Phase 1 and 2); the isolation forest of
-Phase 3 waits for scikit-learn to be agreed.
+Stdlib only, as the plan requires (docs/ROADMAP.md). A learned model (an isolation forest) was
+considered and dropped on 29 October 2026: stacking found every plant in the lab.
 """
 
 import csv

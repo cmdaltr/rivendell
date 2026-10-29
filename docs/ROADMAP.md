@@ -7,7 +7,7 @@ Plans for four of the README's v2.3 items: what already exists, what each one ne
 | Container forensics | Built (see below) | Done | 1 |
 | Threat intelligence | Built (see below) | Done | 2 |
 | Collaborative investigation | Built (see below) | Done | 3 |
-| ML-based anomaly detection | Stacking, features and baseline built; model and lab evaluation to do | Evaluation left | 4 |
+| ML-based anomaly detection | Stacking, features and baseline built and measured in the lab; no learned model | Done | 4 |
 
 Container forensics goes first because half of it is written. ML goes last because it needs multi-host cases and the lab's ground truth to measure it against, and an unmeasured anomaly score is worse than none.
 
@@ -25,7 +25,7 @@ Container forensics goes first because half of it is written. ML goes last becau
 - **The lab.** The Linux targets seed a Docker host's and a Kubernetes node's state on disk (`lab/linux-targets/seed/seed-containers.sh`), with the expected results in their `expected.json`. `tests/unit/test_containers.py` runs that seed through collection and processing.
 
 **Still to do.**
-- **Rebuild the lab targets** (`./lab.sh linux-targets reset`) and run `gandalf-collect`. That exercises the two Gandalf collectors' copies of the container lists against the seed. So far only Elrond's copy has run against it, in the unit test.
+- **The bash collector against the seed.** `gandalf.py`'s copy of the container lists ran against the rebuilt targets on 29 October (the containers video section shows its output); `gandalf.sh`'s hasn't yet.
 - **containerd's own metadata** (`/var/lib/containerd`, a bbolt database) isn't parsed. On a containerd or CRI-O node, the pod logs, static pods and audit log are covered, but per-container settings come only from Docker.
 - **Live container capture** (`docker export`, CRIU checkpoints) stays out of scope. It changes the running state, so if it's ever added it must be an explicit opt-in, recorded in the audit log.
 
@@ -50,7 +50,6 @@ Container forensics goes first because half of it is written. ML goes last becau
 - **Tests.** `tests/unit/test_threat_intel.py`, and the Eru question in `test_eru_offline.py`.
 
 **Still to do.**
-- **Rebuild the images.** The worker image needs a rebuild for `--threatIntel`. The backend image needs one for `openpyxl` (workbook uploads), and the backend container needs recreating for the package mount.
 - **Expiry.** Archer expires IPs and domains after 90 days. Here, STIX `valid_until` and confidence aren't kept, because the schema has no column for them. Re-import and delete by source for now.
 - **Online lookups** (VirusTotal and the like) stay out. They would be opt-in per case, after the threat model's review of Eru's outbound access.
 
@@ -101,20 +100,97 @@ Container forensics goes first because half of it is written. ML goes last becau
   "Generated name" looks at shape: few vowels, a long consonant run, digits and letters interleaved, or long hex. Entropy alone flagged every long English compound (`backgroundtaskhost.exe`) on the demo case.
 - **Baseline.** `python3 -m rivendell.analysis.stacking --baseline OUT CASE...` (from `src/analysis`) writes every value from clean cases. `--stackBaseline OUT` then scores what's absent from it, and with a baseline even a one-OS-host family is scored. It stays a lab-built, local file.
 - **Measurement.** `precision_at_k(stacking.csv, seeded values, k)` is the lab's yardstick. `tests/unit/test_stacking.py` seeds an eight-host case (five Windows, three Linux) and requires the seeded values in the top three, plus a mixed-distro case.
-- **In the lab (29 October 2026).** `./lab.sh linux-targets stacking` adds two clean Ubuntu targets to the seeded `lab-ubuntu` and `lab-rocky`. Over all four as one case, stacking returned four rows, every one planted on `lab-ubuntu` (`lab-sync.service`, `lab-agent.service` system and user, the `lab updater` autostart): precision@3 of 1.0, no noise. Before Linux hosts were grouped by distro, the same case gave twenty rows, all Rocky's own units.
+- **In the lab, Windows (29 October 2026).** Three Windows 11 hosts, one seeded (`lab/README.md`, clean siblings): all four planted persistence values rare on the seeded host, ranked 1, 2, 6 and 8 of 74 once persistence ranks above programs at equal score. The other rows are what the seeded VM gained from four days' use.
+- **In the lab, Linux (29 October 2026).** `./lab.sh linux-targets stacking` adds two clean Ubuntu targets to the seeded `lab-ubuntu` and `lab-rocky`. Over all four as one case, stacking returned four rows, every one planted on `lab-ubuntu` (`lab-sync.service`, `lab-agent.service` system and user, the `lab updater` autostart): precision@3 of 1.0, no noise. Before Linux hosts were grouped by distro, the same case gave twenty rows, all Rocky's own units.
 - **On real data.** Across the two Windows images in `claude_testing`, the two hosts differ in almost everything, which shows how little two hosts give. The list still surfaced `bcwipe service` on the nfury Windows 7 image, a disk wiper.
 
 **Still to do.**
-- **Evaluate in the lab per release.** The lab run above is the method; report precision at 20 each release, and add Windows hosts (one seeded among clean ones) when the lab has them. Signed or unsigned, and time of day against the host's logons, aren't features yet, because the cooked artefacts don't carry signatures and logon patterns need a per-host model of their own.
-- **Phase 3, the isolation forest: decision deferred (Ben, 29 October 2026).** It would score how unusual each host's values are, not only how many hosts have them, catching what counting can't, such as a process every host runs but with an odd parent or command line on one. Against: `scikit-learn` (with numpy and scipy, about 30–40 MB) in the worker image, which the dependency rule needs agreed, and a score that's harder to explain than stacking's named reasons. Stacking found every plant with no noise on the lab case, so there's nothing yet for a forest to improve on. **Revisit when** a lab or real case has something planted that stacking misses (an odd parent or command line on a common process is the likely first one); measure the forest against stacking on that case with `precision_at_k` before adding the dependency.
-- **Eru's "What's rare in this case?"** is held back, as the plan says, until the lab numbers hold up. Until then `stacking.csv` is in the case browser.
+- **Evaluate in the lab per release.** The Linux and Windows runs above are the method. Signed or unsigned, and time of day against the host's logons, aren't features yet, because the cooked artefacts don't carry signatures and logon patterns need a per-host model of their own.
+- **No learned model (Ben, 29 October 2026).** An isolation forest was considered and dropped, with `scikit-learn`, because stacking found every plant in the lab. The note below is kept for the record.
+- **The isolation forest, as considered.** It would score how unusual each host's values are, not only how many hosts have them, catching what counting can't, such as a process every host runs but with an odd parent or command line on one. Against: `scikit-learn` (with numpy and scipy, about 30–40 MB) in the worker image, which the dependency rule needs agreed, and a score that's harder to explain than stacking's named reasons. Stacking found every plant with no noise on the lab case, so there was nothing for a forest to improve on.
+- **Eru's "What's rare in this case?"** was held back until the lab numbers held up. They now have (Linux and Windows above); see the plan below.
 
-## Outstanding (29 October 2026)
+## Plan for what's left (29 October 2026)
 
-What's left after the four features above were built, tested in the lab and documented. Each feature's own "Still to do" holds its longer-term work; this list is the near-term loose ends.
+Each feature's "Still to do" above, as work to schedule, then the Eru MCP server. Sizes are for one person with the lab to hand. Nothing here is started; the decisions at the end come first where an item depends on one.
 
-Nothing: the video sections for containers and stacking were rendered on 29 October (chapters at 12:04 and 13:39 of the walkthrough).
+### Container forensics
+
+1. **The bash collector against the seed** (an hour). `./lab.sh linux-targets reset`, `./lab.sh gandalf-collect bash`, Elrond over the result, then `lab/verify-expected.py` against each target's `expected.json`. Done when `docker_containers.csv`, `container_changes.csv`, `static_pods.csv` and `k8s_audit.csv` match for `gandalf.sh` as they already do for `gandalf.py`.
+2. **containerd's metadata** (two to three days). On a containerd or CRI-O node, per-container settings (image, mounts, privileges, namespaces) live in `/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db`, a bbolt database.
+   - Collect `meta.db` in all three collectors, read-only, beside the Docker files.
+   - Parse it into the existing `docker_containers.csv` columns, adding a `Runtime` column (`docker`, `containerd`) so one table covers both; the technique rules then apply unchanged.
+   - Seed a containerd-only node in the lab (`ctr` with a privileged container) with its rows in `expected.json`, and a unit test from that seed.
+   - Decision 2 below: how to read bbolt.
+3. **Live capture** stays out of scope, as recorded above. No work planned.
+
+### Threat intelligence
+
+1. **Expiry and confidence** (a day). The ten-column schema stays as it is. A side table, `threat_intel_validity` (indicator id, `valid_until`, `confidence`, `first_seen`), added by an Alembic migration:
+   - STIX imports fill it from `valid_until` and `confidence`; other sources get a default lifetime per kind (90 days for IPs and domains, as Archer does; none for hashes and tool names).
+   - Matching skips expired indicators and says how many it skipped; Pippin shows the expiry and lets an admin extend or clear it.
+   - Tests: an expired STIX indicator doesn't match; a refreshed import revives it.
+   - Decision 3 below.
+2. **Online lookups** stay out until the threat model's review of Eru's outbound access. If that review approves them, the shape is: one provider interface, keys only in `.env`, off by default and switched on per case, every lookup in the case's audit log, and nothing sent from `raw/`.
+
+### Collaborative investigation
+
+1. **Restart with findings** (half a day). `POST /api/jobs/{id}/restart` answers 409 with the number of findings when there are any, unless the request says `confirm`; the Job page shows the count and asks before restarting. Test: a restart with findings is refused without `confirm`.
+2. **Assignees checked on a team server** (half a day). In server mode, `PUT /hosts/{host}` refuses an assignee who isn't in the user directory; on one machine it stays free text.
+3. **Flagging from an Eru answer** (two days, after the MCP server's row citations). Eru's offline answers are built from specific rows, so they return those rows with the text: file, row number and SHA-256, the same reference a finding stores. The Eru page shows ⚑ beside each cited line, which opens the usual finding form on that row. With a model, the context Eru sends is numbered by row and the model is asked to cite the numbers; only cited, existing rows can be flagged, so a model can't invent a finding.
+4. **Live updates** stay as polling until someone asks.
+
+### Stacking (anomaly detection)
+
+1. **Eru's "What's rare in this case?"** (half a day). An offline question over `stacking.csv`: the top rows, persistence first, each with its hosts and reasons, and the reminder that a row is a lead, not a verdict. A test in `test_eru_offline.py`.
+2. **One command for the lab evaluation** (half a day). `./lab.sh stacking-eval` builds the stacking targets, collects, runs Elrond and prints precision at 4, 8 and 20 against the plants, appending the result to a table in `lab/README.md`. Linux every release; Windows when its clean VMs are rebuilt (about two hours), at least once per major release.
+
+### The Eru MCP server
+
+**What it is.** One MCP server, built with FastMCP, through which an MCP host (Claude Desktop, Claude Code, OpenClaw) works a Rivendell case. It registers every Eru capability; nothing else registers tools.
+
+**How it's built.** A thin client of Rivendell's own API, not a second way into the case files.
+- On a team server, every call carries the analyst's token, so job sharing (`auth/access.py`) decides what the server can see, exactly as for the web app.
+- The case browser's guarantees carry over: read-only over `cooked/`, `analysis/` and the case root, and `raw/` never reachable.
+- It calls nothing but the Rivendell API, so it adds no outbound access.
+- It runs over stdio on the analyst's machine (`src/eru_mcp/server.py`, `rivendell mcp` to start it), and optionally over streamable HTTP behind Caddy on a team server.
+
+The March 2026 prototype ("Building an MCP") kept its own case folders, ran its own acquisition and could call Anthropic's API. None of that carries over: cases are Rivendell jobs, acquisition is Gandalf's, and Eru's model is Ollama. Archer keeps its own server.
+
+**Phase 1: reading a case** (two days).
+
+| Tool | Calls |
+|---|---|
+| `list_cases` | `GET /api/jobs` |
+| `case_overview(job_id)` | the job, its hosts and their files (`GET /api/jobs/{id}`, `GET /api/jobs/{id}/case`) |
+| `read_rows(job_id, host, file, filter, offset, limit)` | `GET /api/jobs/{id}/case/rows`, with each row's reference for citing |
+| `ask_offline(job_id, question)` | `POST /api/ai/offline/answer`: the eleven fixed questions, plus "What's rare?" once it's built |
+| `ask_eru(job_id, question)`, `case_summary`, `suggestions` | `/api/ai/cases/{case}/…`, when Ollama is up; otherwise they say so and point to `ask_offline` |
+| `check_indicator(value)` | `GET /api/threat-intel/enrich` (`enrich_artefact()`) |
+| `rare_across_hosts(job_id)` | `stacking.csv` through the case rows |
+| `findings`, `report`, `navigator_layer` | the case browser's routes |
+
+The server's instructions: start from a job id; cite file and row for every claim; a stacking row or a threat intelligence match is a lead, not a verdict.
+
+**Phase 2: writing leads** (a day, after review). `flag_lead` (a lead on a cited row, never a confirmed finding: confirming stays with an analyst) and `add_note`. Each write lands in `case_activity` as "Eru (for <user>)". Decision 4 below.
+
+**Never exposed:** starting, restarting or deleting jobs, Gandalf acquisition, importing or deleting threat intelligence, and anything under `raw/`.
+
+**Before it goes near a live case**, the threat model's review:
+- the tool list against the never-exposed list;
+- a test that a user can't reach a job that isn't theirs or shared with them;
+- a test that no tool reaches `raw/`;
+- confirmation that it makes no outbound calls.
+
+**Tests and docs.** Unit tests drive the tools through FastMCP's in-memory client against the FastAPI test client; the lab run uses THREATINTEL-DEMO-01. `docs/ERU.md` gets a section, and `.claude/CLAUDE.md` moves it out of "Planned".
+
+### Suggested order
+
+The small items first: restart warning, assignees, "What's rare?", bash collector, lab evaluation command (about three days together). Then the MCP server's phase 1, then flagging from Eru answers (it uses the server's row citations), then threat intelligence expiry, then containerd, then the MCP server's phase 2 after its review.
 
 ## Decisions needed
 
-- `scikit-learn` in the worker image, for Phase 3 of anomaly detection: deferred on 29 October 2026 until stacking misses something (see Phase 3 above for what would reopen it).
+1. **The `mcp` package** for the Eru MCP server. It would sit in its own `requirements/mcp.txt`, installed only where the server runs, not in the worker or backend images.
+2. **Reading containerd's bbolt database.** A stdlib reader in `process/extractions/` (read-only page walking; no new dependency, a few hundred lines) or the `bbolt` command-line tool as a forensic tool definition, called as a subprocess like the others. The subprocess is the project's usual boundary; the stdlib reader needs nothing installed.
+3. **Threat intelligence expiry** in a side table and migration, leaving the ten columns alone.
+4. **The MCP server's phase 2**, letting Eru flag leads and add notes, or keep it read-only.
