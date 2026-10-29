@@ -113,9 +113,7 @@ Container forensics goes first because half of it is written. ML goes last becau
 
 What's left after the four features above were built, tested in the lab and documented. Each feature's own "Still to do" holds its longer-term work; this list is the near-term loose ends.
 
-| Item | What it needs |
-|---|---|
-| Video sections for stacking and container forensics | Narration to draft and approve, then a section each in the walkthrough's `scenes.py` (local, git-ignored; `scripts/docs/video/README.md`). The case browser and Pippin sections are done. |
+Nothing: the video sections for containers and stacking were rendered on 29 October (chapters at 12:04 and 13:39 of the walkthrough).
 
 ## Decisions needed
 
