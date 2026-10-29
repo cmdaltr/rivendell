@@ -1,6 +1,6 @@
 # How Rivendell compares
 
-Rivendell sits among a well-established set of DFIR tools, free and commercial. This page compares what each does, says where Rivendell is strong and where it isn't, and lists what nothing else does in the same way. It was written in October 2026 from each project's public documentation and release notes; vendors ship often, so if a row is out of date, open an issue and it'll be corrected.
+Rivendell sits among a well-established set of DFIR tools, free and commercial. This page compares what each does, says where Rivendell is strong and where it isn't, and lists what nothing else does in the same way. It was written in October 2026 from each project's public documentation, release notes and published prices; vendors ship often, so if a row is out of date, open an issue and it'll be corrected.
 
 **Legend:** ✓ built in · ◐ partial, an add-on, or one platform only · — not offered, or not found in the public documentation
 
@@ -9,18 +9,18 @@ Rivendell sits among a well-established set of DFIR tools, free and commercial. 
 | | Rivendell | Velociraptor | Autopsy | KAPE + EZ Tools | Plaso + Timesketch | Dissect |
 |---|---|---|---|---|---|---|
 | Remote collection | ✓ Windows, Linux, macOS; agentless (SSH, PowerShell remoting) | ✓ agent-based, fleet scale | — | ◐ Windows | — | ◐ `acquire` |
-| Disk images (E01, raw, VMDK) | ✓ | ◐ | ✓ | ✓ mounted | ✓ | ✓ |
+| Disk images (E01, raw, VMDK) | ✓ | ✓ raw and E01 | ✓ | ✓ mounted | ✓ | ✓ |
 | Memory analysis | ✓ Volatility 3 | ◐ collection | ◐ Volatility module | — | — | — |
 | Super-timeline | ✓ Plaso | ◐ | ✓ | ◐ CSV | ✓ | ◐ |
-| ATT&CK mapping of findings | ✓ 600+ techniques, Navigator layer | ◐ tagged artefacts, Sigma | — | — | ◐ Sigma analyser | — |
+| ATT&CK mapping of findings | ✓ 600+ techniques, Navigator layer | ◐ built-in Sigma rules | — | — | ◐ Sigma analyser | — |
 | Stacking across hosts | ✓ with a reason per row | ✓ hunts | — | — | — | — |
 | Threat intelligence matching | ✓ STIX 2.1, TAXII 2.1, MITRESaw, watchlists | ◐ IOC and YARA hunts | ◐ hash sets | — | ◐ analysers | ◐ YARA |
-| Containers and Kubernetes | ✓ Docker, static pods, audit logs | ◐ | — | — | ◐ Docker parsers | ✓ Docker |
-| Cloud | ◐ CloudTrail, Azure Activity, GCP Logging, EKS/AKS/GKE audit | — | — | — | ◐ cloud log parsers | — |
+| Containers and Kubernetes | ✓ Docker, static pods, audit logs | ◐ | — | — | ◐ Docker logs | ✓ Docker containers as targets |
+| Cloud | ◐ CloudTrail, Azure Activity, GCP Logging, EKS/AKS/GKE audit | — | — | — | ◐ CloudTrail, Azure Activity, GCP logs | — |
 | AI analyst | ✓ local model (Ollama), and fixed answers without one | — | — | — | ◐ agentic features announced (Sec-Gemini) | — |
-| Several analysts on one case | ✓ findings, notes, host assignment, sharing, SSO | ✓ notebooks | ◐ multi-user cases | — | ✓ | — |
-| SIEM export | ✓ Splunk, Elasticsearch | ✓ | — | — | — | ◐ `rdump` |
-| Mobile devices | — | — | ◐ Android | — | ◐ some parsers | — |
+| Several analysts on one case | ✓ findings, notes, host assignment, sharing, SSO | ✓ notebooks | ✓ multi-user cases | — | ✓ | — |
+| SIEM export | ✓ Splunk, Elasticsearch | ✓ | — | — | — | ◐ `rdump` to Splunk |
+| Mobile devices | — | — | ◐ Android and iOS extractions (ALEAPP, iLEAPP) | — | ◐ some parsers | — |
 | File system and file viewer | ◐ case tables, no hex or file viewer | ✓ VFS | ✓ | ◐ Explorer tools | ◐ timeline only | ◐ shell |
 | Licence | MIT | AGPL-3.0 | Apache 2.0 | KAPE: free for non-commercial use only, enterprise licence for client or business work; EZ Tools: free | Apache 2.0 | AGPL-3.0 |
 
@@ -30,11 +30,11 @@ Hayabusa and Chainsaw aren't in the table because they do one job, Windows event
 
 | | Rivendell | Binalyze AIR | Cyber Triage | Magnet AXIOM Cyber | Belkasoft X Corporate | X-Ways Forensics |
 |---|---|---|---|---|---|---|
-| Remote collection | ✓ agentless | ✓ agent; Windows, Linux, macOS, ESXi, ChromeOS | ◐ Windows-focused | ✓ agent | ✓ Belkasoft R | ◐ |
+| Remote collection | ✓ agentless | ✓ agent; Windows, Linux, macOS, ESXi, ChromeOS | ◐ Windows-focused | ✓ agent | ✓ Belkasoft R | ◐ with F-Response |
 | Disk images | ✓ | ◐ | ✓ | ✓ | ✓ | ✓ |
-| Memory analysis | ✓ | ◐ acquisition | ✓ | ✓ | ✓ | ◐ |
-| Super-timeline | ✓ | ◐ | ✓ | ✓ | ✓ | ✓ |
-| ATT&CK mapping of findings | ✓ | ✓ ATT&CK Analyzer | ✓ with Navigator export | — | — | — |
+| Memory analysis | ✓ | ◐ acquisition | ✓ Windows | ✓ | ✓ | ◐ |
+| Super-timeline | ✓ | ✓ multi-user | ✓ | ✓ | ✓ | ✓ |
+| ATT&CK mapping of findings | ✓ | ✓ ATT&CK Analyzer | ✓ with Navigator export | ✓ Sigma rules, Windows and Linux | ◐ Sigma rules on event logs | — |
 | Stacking or baselining | ✓ | ◐ | ✓ baselining | — | — | — |
 | Threat intelligence matching | ✓ | ◐ YARA, Sigma, IOCs | ◐ reputation lookups | ◐ hash sets, YARA | ◐ hash sets | ◐ hash sets |
 | Containers and Kubernetes | ✓ | — | — | — | — | — |
@@ -46,7 +46,7 @@ Hayabusa and Chainsaw aren't in the table because they do one job, Windows event
 | File system and file viewer | ◐ | ◐ | ✓ | ✓ | ✓ | ✓ |
 | Court track record and validation | — | ◐ | ◐ | ✓ | ✓ | ✓ |
 | Vendor support and training | — community | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Price | Free | Quote, per endpoint | Lite free; paid from about $3,500 a year per investigator | Quote | Quote | Perpetual licence per user |
+| Price | Free | Quote, per endpoint | Lite free; paid from about $3,500 a year per investigator | Quote | Quote | About $4,000 perpetual, or a yearly licence |
 
 Prices are the vendors' own where published; check with them before relying on a figure.
 
@@ -66,7 +66,7 @@ It isn't a replacement for a forensic suite when the job is reviewing one device
 
 **Stacking that explains itself.** Rare processes, services, tasks, autoruns, WMI consumers and kernel modules across hosts, each row with its reasons. Hosts are compared only with the same operating system, Linux hosts only with the same distribution family, and nothing counts as rare on fewer than three.
 
-**Containers and Kubernetes from the disk.** Container configurations, the writable layer (listed and hashed), static pods and the API server's audit log, from a disk image or a collection, mapped to the container techniques such as **T1611** and **T1609**. None of the tools above does this from dead-box evidence.
+**Containers and Kubernetes from the disk.** Container configurations, the writable layer (listed and hashed), static pods and the API server's audit log, from a disk image or a collection, mapped to the container techniques such as **T1611** and **T1609**. Dissect also opens a disk image's Docker containers as evidence of their own; none of the tools above documents reading Kubernetes static pods or the audit log from dead-box evidence, or mapping either to ATT&CK.
 
 **Integrity checked at both ends.** Gandalf collects in order of volatility and hashes everything with SHA-256 into `log.meta`; Elrond re-checks every hash on arrival before it parses anything.
 
