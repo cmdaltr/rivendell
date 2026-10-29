@@ -1006,7 +1006,7 @@ def main(
                         sha256,
                         nsrl,
                     )
-                if img.split("::")[0] not in str(imgs_metad):
+                if img.split("::")[0] not in imgs_metad:
                     imgs_metad.append(img.split("::")[0])
                 print(
                     "     Completed collection of metadata from processed artefacts for '{}'".format(
