@@ -5,14 +5,6 @@ import { markOffered, nextTip, offeredThisStart, setStartPref, startPrefs } from
 import Guide from './Guide';
 import { randomQuote } from '../guide/quotes';
 
-// The welcome's colours: A (parchment) unless ?tone=b or ?tone=c asks for one of the alternatives,
-// kept while they're being tried; drop the switch and the other tones once settled
-const TONES = ['a', 'b', 'c'];
-const toneFromUrl = () => {
-  const asked = new URLSearchParams(window.location.search).get('tone');
-  return TONES.includes(asked) ? asked : 'a';
-};
-
 // Pages where nobody's settled in yet: the offer waits until they're past them
 const NOT_YET = ['/login', '/register', '/forgot-password', '/reset-password'];
 
@@ -29,7 +21,6 @@ function StartOffer({ guideRequested, onGuideClosed, offerRequested, onOfferClos
   const [tip, setTip] = useState(null);
   const [guide, setGuide] = useState(false);
   const [quote] = useState(randomQuote);
-  const tone = toneFromUrl();
 
   useEffect(() => {
     if (loading || offeredThisStart() || NOT_YET.some((p) => pathname.startsWith(p))) return;
@@ -72,7 +63,7 @@ function StartOffer({ guideRequested, onGuideClosed, offerRequested, onOfferClos
   return (
     <div className="guide-backdrop" role="dialog" aria-modal="true" aria-label="Welcome to Rivendell"
          onClick={() => setOffer(false)}>
-      <div className={`start-offer tone-${tone}`} onClick={(e) => e.stopPropagation()}>
+      <div className="start-offer tone-a" onClick={(e) => e.stopPropagation()}>
         <button type="button" className="guide-close" onClick={() => setOffer(false)} aria-label="Close">×</button>
         <div className="start-offer-head">
           <h2>Welcome to Rivendell</h2>

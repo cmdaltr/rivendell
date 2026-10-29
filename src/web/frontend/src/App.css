@@ -3187,15 +3187,15 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
 .start-offer-actions { display: flex; align-items: center; gap: 1rem; }
 .start-offer-actions .guide-link { margin-top: 0; }
 
-/* The welcome's tones: A (parchment) is the default; B and C stay selectable with ?tone=b|c while they're tried */
-.start-offer[class*="tone-"] p, .start-offer[class*="tone-"] .start-offer-quote, .start-offer[class*="tone-"] .guide-check {
+/* The welcome's type: a serif body, sentence case, for reading rather than the Cinzel of the rest */
+.start-offer.tone-a p, .start-offer.tone-a .start-offer-quote, .start-offer.tone-a .guide-check {
   font-family: 'Georgia', 'Garamond', serif; letter-spacing: 0; text-transform: none;
 }
-.start-offer[class*="tone-"] .start-offer-part p { font-size: 1.02rem; line-height: 1.6; }
-.start-offer[class*="tone-"] .start-offer-quote { max-width: 46ch; font-size: 0.98rem; }
-.start-offer[class*="tone-"] .guide-check { font-size: 0.92rem; }
+.start-offer.tone-a .start-offer-part p { font-size: 1.02rem; line-height: 1.6; }
+.start-offer.tone-a .start-offer-quote { max-width: 46ch; font-size: 0.98rem; }
+.start-offer.tone-a .guide-check { font-size: 0.92rem; }
 
-/* A: parchment. Gold display type, warm cream body, one green accent for actions */
+/* The welcome's colours (tone A, parchment): gold display type, warm cream body, one green accent for actions */
 .start-offer.tone-a { background: #1c1b26; border-color: #3a3550; }
 .start-offer.tone-a h2 { color: #f0dba5; }
 .start-offer.tone-a h3 { color: #d9c48f; font-size: 1.05rem; letter-spacing: 0.06em; }
@@ -3206,30 +3206,3 @@ a.mt-pill-link:hover { border-color: #66d9ef; }
 .start-offer.tone-a .guide-check { color: #9d957f; }
 .start-offer.tone-a .guide-check input { accent-color: #a7db6c; }
 .start-offer.tone-a .start-offer-columns, .start-offer.tone-a .start-offer-head + * { border-top-color: #34304a; }
-
-/* B: Rivendell green. The app's green leads; neutral light body; gold only for the quote */
-.start-offer.tone-b { background: #151a12; border-color: #3f4b2a; }
-.start-offer.tone-b h2 { color: #c3e88d; }
-.start-offer.tone-b h3 { color: #a7db6c; font-size: 1.05rem; letter-spacing: 0.06em; }
-.start-offer.tone-b p { color: #e4e2d8; }
-.start-offer.tone-b .start-offer-quote { color: #d6c48f; }
-.start-offer.tone-b .start-offer-quote cite { color: #8a9178; font-family: 'Cinzel', serif; letter-spacing: 0.04em; }
-.start-offer.tone-b .start-offer-tip { border-left-color: #6b8e3f; }
-.start-offer.tone-b .guide-secondary { border-color: #3f4b2a; color: #e4e2d8; }
-.start-offer.tone-b .guide-check { color: #8a9178; }
-.start-offer.tone-b .guide-check input { accent-color: #8abf4d; }
-.start-offer.tone-b .start-offer-columns { border-top-color: #2c3520; }
-
-/* C: quiet. Near-white body on slate, gold reserved for the title, everything else muted */
-.start-offer.tone-c { background: #1a1d24; border-color: #2e333f; }
-.start-offer.tone-c h2 { color: #f0dba5; }
-.start-offer.tone-c h3 { color: #c9ccd3; font-size: 1rem; letter-spacing: 0.08em; }
-.start-offer.tone-c p { color: #eceae4; }
-.start-offer.tone-c .start-offer-quote { color: #b9b4a6; }
-.start-offer.tone-c .start-offer-quote cite { color: #7d808a; font-family: 'Cinzel', serif; letter-spacing: 0.04em; }
-.start-offer.tone-c .start-offer-tip { border-left-color: #f0dba5; }
-.start-offer.tone-c .guide-secondary { border-color: #3b404d; color: #eceae4; }
-.start-offer.tone-c .guide-link, .start-offer.tone-c .start-offer-actions .guide-link { color: #f0dba5; }
-.start-offer.tone-c .guide-check { color: #8a8d96; }
-.start-offer.tone-c .guide-check input { accent-color: #f0dba5; }
-.start-offer.tone-c .start-offer-columns { border-top-color: #2e333f; }
