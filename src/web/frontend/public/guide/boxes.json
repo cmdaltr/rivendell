@@ -2,7 +2,7 @@
  "home": {
   "image": "home.jpg",
   "width": 1440,
-  "height": 1500,
+  "height": 2209,
   "boxes": {
    "home.hero": [
     30,
@@ -15,6 +15,12 @@
     536,
     1379,
     1050
+   ],
+   "home.mordor": [
+    30,
+    1639,
+    1379,
+    547
    ]
   }
  },

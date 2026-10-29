@@ -36,6 +36,9 @@ OUT = FRONTEND / "public" / "guide"
 WIDTH, HEIGHT = 1440, 2400
 MARGIN = 24  # around the sections, in pixels
 MAX_HEIGHT = 1500  # a photograph taller than this is unreadable in the guide
+# Pages whose sections can't be brought closer: Home's four portrait cards put Mordor at about
+# 1,650px. The guide scrolls the photograph to the selected section, so these stay readable
+PAGE_MAX_HEIGHT = {"home": 2300}
 
 
 def guide_pages() -> list:
@@ -144,7 +147,7 @@ def capture(args: argparse.Namespace) -> None:
                 continue
             top = max(0, min(b[1] for b in found.values()) - MARGIN)
             bottom = max(b[1] + b[3] for b in found.values()) + MARGIN
-            bottom = min(bottom, top + MAX_HEIGHT)
+            bottom = min(bottom, top + PAGE_MAX_HEIGHT.get(page_id, MAX_HEIGHT))
             clip = {"x": 0, "y": top, "width": WIDTH, "height": min(bottom, HEIGHT) - top}
             image = f"{page_id}.jpg"
             page.screenshot(path=str(OUT / image), clip=clip, type="jpeg", quality=82)
