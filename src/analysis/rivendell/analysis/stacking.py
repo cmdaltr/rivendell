@@ -2,7 +2,7 @@
 
 Each host contributes the set of values it has in a few families: processes (Prefetch, Amcache,
 4688 and Sysmon 1), parent and child pairs, services (7045, systemd units), scheduled tasks
-(4698), autoruns (startup items, Linux autostart, BTM), WMI consumers and kernel modules. A value
+(4698, task files), autoruns (Run keys, startup items, Linux autostart, BTM), WMI consumers and kernel modules. A value
 on few of the case's hosts is the long tail; <case>/stacking.csv lists it, ranked by a score
 that is the sum of named features, so every row says why it's there:
 
@@ -133,7 +133,7 @@ def _security(path: str) -> Iterable[Value]:
             if data.get("ParentProcessName"):
                 yield "parent > child", f"{_base(data['ParentProcessName'])} > {_base(child)}", data.get("CommandLine", "")
         elif event_id == 4698 and data.get("TaskName"):
-            yield "scheduled task", data["TaskName"].lower(), data["TaskName"]
+            yield "scheduled task", _norm_name(data["TaskName"].strip("\\")), data["TaskName"]
 
 
 def _sysmon(path: str) -> Iterable[Value]:
@@ -162,6 +162,29 @@ def _startup_items(path: str) -> Iterable[Value]:
         target = r.get("Target") or r.get("Item") or ""
         if target:
             yield "autorun (Windows)", _norm_path(target), f"{r.get('Item', '')}: {target}"
+
+
+def _norm_name(name: str) -> str:
+    """A name with the install's GUIDs and SIDs taken out: Edge's update tasks and SoftLanding's are named
+    for the machine or user, so every host's own would otherwise be rare."""
+    name = re.sub(r"\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}", "{*}", name.lower())
+    return re.sub(r"s-1-5-21(?:-\d+){3,4}", "s-1-5-21-*", name)
+
+
+def _task_file(path: str) -> Iterable[Value]:
+    # A collection carries every task, where 4698 only shows the ones created while Security was auditing
+    for r in _json_records(path):
+        for task in r.get("tasks") or []:
+            name = ((task.get("registration_info") or {}).get("uri") or "").strip("\\")
+            if name:
+                run = ((task.get("actions") or {}).get("exec") or [{}])[0]
+                yield "scheduled task", _norm_name(name), f"{run.get('command') or ''} {run.get('arguments') or ''}".strip()
+
+
+def _run_keys(path: str) -> Iterable[Value]:
+    for r in _json_records(path):
+        if r.get("Plugin") == "run" and r.get("AppName"):
+            yield "autorun (Windows)", r["AppName"].lower(), f"{r.get('RegistryKey', '')}: {r.get('AppLocation', '')}"
 
 
 def _autostart(path: str) -> Iterable[Value]:
@@ -198,6 +221,8 @@ SOURCES: List[Tuple[Callable[[str], bool], Callable[[str], Iterable[Value]]]] = 
     (lambda p: p.startswith("evt/") and "Sysmon" in p and p.endswith(".json"), _sysmon),
     (lambda p: p == "evt/System.json", _system),
     (lambda p: p.startswith("services/") and p.endswith(".json"), _systemd),
+    (lambda p: p.startswith("tasks/") and p.endswith(".json"), _task_file),
+    (lambda p: p.startswith("registry/") and p.endswith(".json"), _run_keys),
     (lambda p: p.endswith("startup_items.csv"), _startup_items),
     (lambda p: p.endswith("autostart.csv"), _autostart),
     (lambda p: p.endswith("btm_items.csv"), _btm),

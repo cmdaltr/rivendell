@@ -10,6 +10,8 @@
 # creates the VM through UTM's AppleScript API and keeps it under
 # $LAB_VM_DIR/utm. Windows installs itself, provisions the lab target on first
 # logon and starts an SSH server, forwarded to 127.0.0.1:2232.
+# WINDOWS_CLEAN=<n> works on clean sibling n instead (rivendell-lab-win11-clean<n>,
+# SSH on 2232+n, nothing seeded), for stacking one seeded host among clean ones.
 # The Windows 11 ARM64 ISO is the one manual download (Microsoft only hands out
 # links through its web form); put it in $LAB_DATA_DIR/isos/.
 set -euo pipefail
@@ -22,14 +24,20 @@ uses_tart || die "The UTM VM is for Apple silicon. On x86-64 hosts the lab uses 
 
 VM="$WINDOWS_UTM_VM"
 PORT=2232
+COMPUTERNAME="LAB-WIN11"
+CLEAN="${WINDOWS_CLEAN:-}"
+if [ -n "$CLEAN" ]; then
+  case "$CLEAN" in [1-9]) ;; *) die "WINDOWS_CLEAN is a number from 1 to 9" ;; esac
+  # NetBIOS names stop at 15 characters
+  VM="rivendell-lab-win11-clean$CLEAN"; PORT=$((2232 + CLEAN)); COMPUTERNAME="LAB-WINCLEAN$CLEAN"
+fi
 UTM_DIR="$LAB_VM_DIR/utm"
 BUNDLE="$UTM_DIR/$VM.utm"
 ISO_DIR="$LAB_DATA_DIR/isos"
-CFG_ISO="$UTM_DIR/labcfg.iso"
+CFG_ISO="$UTM_DIR/labcfg-$VM.iso"
 VIRTIO_URL="https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"
 OPENSSH_URL="https://github.com/PowerShell/Win32-OpenSSH/releases/latest/download/OpenSSH-ARM64.zip"
 SSH="$LAB_ROOT/lib/ssh.exp"
-COMPUTERNAME="LAB-WIN11"
 
 utm() { osascript -e "tell application \"UTM\"" -e "$1" -e "end tell"; }
 vm_registered() { utm_up; utmctl list --hide 2>/dev/null | awk '{print $3}' | grep -qx "$VM"; }
@@ -64,6 +72,7 @@ stage_lab_files() {
 build_config_iso() {
   local stage="$UTM_DIR/labcfg"
   stage_lab_files "$stage"
+  [ -z "$CLEAN" ] || : > "$stage/clean.txt"
   local pw_xml
   pw_xml="$(printf '%s' "$LAB_PASSWORD" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')"
   python3 - "$LAB_ROOT/windows/utm/autounattend.xml" "$stage/autounattend.xml" "$pw_xml" "$COMPUTERNAME" <<'PY'
@@ -430,8 +439,8 @@ record() {
 
 case "$action" in
   create)
-    # create always builds the lab's own VM, whatever WINDOWS_UTM_VM says
-    VM="rivendell-lab-win11"; BUNDLE="$UTM_DIR/$VM.utm"
+    # create always builds the lab's own VM (or a clean sibling), whatever WINDOWS_UTM_VM says
+    [ -n "$CLEAN" ] || { VM="rivendell-lab-win11"; BUNDLE="$UTM_DIR/$VM.utm"; }
     require_password
     win="$(windows_iso)"
     if [ -z "$win" ] || [ ! -f "$win" ]; then
@@ -468,7 +477,7 @@ case "$action" in
       start_vm
       wait_ready "${WINDOWS_BOOT_WAIT:-30}" "boot"
     fi
-    WINDOWS_UTM_VM="$VM"; save_config >/dev/null
+    [ -n "$CLEAN" ] || { WINDOWS_UTM_VM="$VM"; save_config >/dev/null; }
     ;;
   adopt) require_password; mkdir -p "$UTM_DIR"; adopt_vm "${2:-}" ;;
   start) start_vm; wait_ready "${WINDOWS_BOOT_WAIT:-30}" "boot" ;;

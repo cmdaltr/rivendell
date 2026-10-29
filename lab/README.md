@@ -109,6 +109,15 @@ Two UTM details shape how this works. The system disk is VirtIO, not NVMe, becau
 
 To watch an install, set `WINDOWS_VM_VNC=1` before `create`: QEMU then also serves the VM's screen over VNC on `127.0.0.1:5959` (loopback only, no password), which any VNC client can open (`open vnc://127.0.0.1:5959`). Automatic updates are turned off in the answer file; a first-boot update run on a slow disk otherwise adds hours. `WINDOWS_INSTALL_WAIT` sets how many minutes `create` waits (default 90), and running `create` again on an existing VM just resumes waiting. `WINDOWS_BOOT_WAIT` (default 30) is the wait for SSH after `start` or a reboot; on a USB HDD, Windows took about 15 minutes to answer.
 
+**Clean siblings, for stacking.** `WINDOWS_CLEAN=<n>` before any `windows-vm` action, or before `windows/utm-vm.sh collect`, works on `rivendell-lab-win11-clean<n>` instead: computer name `LAB-WINCLEAN<n>`, SSH on `127.0.0.1:2232+n`, provisioned with the `gandalf` user and remoting but nothing seeded (`Provision-GandalfTarget.ps1 -Clean`). It doesn't change which VM the lab drives by default. Two of them with `rivendell-lab-win11` make three Windows hosts, one seeded; run them one at a time on a 16 GB Mac:
+
+```bash
+WINDOWS_CLEAN=1 ./lab.sh windows-vm create
+WINDOWS_CLEAN=1 ./windows/utm-vm.sh collect
+```
+
+On 29 October 2026 the two took 43 and 57 minutes to build and about 25 minutes each to collect (USB HDD). Stacked with the seeded VM, all four planted persistence values were rare on `LAB-WIN11` alone: the `LabUpdater` Run key, the `LabSync` task, the `LabHelper` service and the `LabUpdaterConsumer` WMI consumer. They share score 2.0 with 70 other rows, though. Four are persistence the seeded VM gained from use: OneDrive's per-user tasks and a Defender driver service. The other 66 are programs in Prefetch and Amcache, because that VM has run for four days (Gandalf, RawCopy, Atomic Red Team, Defender updates) and the clean ones for an hour. Ties sort by family name, so those processes come first.
+
 **Bringing your own (`windows-vm adopt`).** Put an installed Windows 11 ARM `.utm` in `$LAB_VM_DIR/utm/`, open it in place rather than dragging it into UTM (UTM keeps a separate copy of anything imported into its library, and the lab can't reach that copy), and run:
 
 ```bash

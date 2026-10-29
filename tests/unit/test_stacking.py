@@ -130,3 +130,31 @@ def test_linux_hosts_compared_within_their_distro(tmp_path):
     rows = read(case / "stacking.csv")
     assert [(r["Value"], r["Family"], r["Hosts In Case"]) for r in rows] == \
         [("lab-sync.service", "service (systemd), debian", "3")]
+
+
+def persistence_host(case: Path, name: str, sid: str, guid: str, run=(), tasks=()) -> None:
+    """A Windows host as a Gandalf collection cooks it: a file per scheduled task, RegRipper's Run keys."""
+    cooked = case / name / "artefacts" / "cooked"
+    (cooked / "tasks").mkdir(parents=True)
+    (cooked / "registry").mkdir()
+    machine = [f"\\MicrosoftEdgeUpdateTaskMachineCore{{{guid}}}", f"\\Microsoft\\Windows\\SoftLanding\\{sid}"]
+    for uri in machine + list(tasks):
+        (cooked / "tasks" / f"{uri.strip(chr(92)).replace(chr(92), '+')}.json").write_text(json.dumps({"tasks": [
+            {"registration_info": {"uri": uri}, "actions": {"exec": [{"command": "x.exe", "arguments": None}]}}]}))
+    (cooked / "registry" / "SOFTWARE.json").write_text(json.dumps([
+        {"Plugin": "run", "RegistryKey": "Microsoft/Windows/CurrentVersion/Run", "AppName": app, "AppLocation": cmd}
+        for app, cmd in [("SecurityHealth", "SecurityHealthSystray.exe")] + list(run)]))
+
+
+def test_windows_task_files_and_run_keys(tmp_path):
+    case = tmp_path / "WIN"
+    persistence_host(case, "WIN1", "S-1-5-21-1427200393-1219812842-290434903-1000",
+                     "25735260-67f1-4a1b-9c2d-0123456789ab",
+                     run=[("LabUpdater", "powershell.exe -w hidden -enc AAAA")], tasks=["\\LabSync"])
+    persistence_host(case, "WIN2", "S-1-5-21-2002875499-1599582934-1328388-1000", "bb77e3eb-ce2c-4d5e-8f90-0123456789ab")
+    persistence_host(case, "WIN3", "S-1-5-21-3569195859-2801478039-1125735-1001", "d87d86eb-50de-4920-8a1b-0123456789ab")
+    stack_case(str(case))
+    rows = read(case / "stacking.csv")
+    # Each install names its Edge update and SoftLanding tasks for itself: those stack together
+    assert sorted((r["Family"], r["Value"]) for r in rows) == \
+        [("autorun (Windows)", "labupdater"), ("scheduled task", "labsync")]
