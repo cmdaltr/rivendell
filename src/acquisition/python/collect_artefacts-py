@@ -823,10 +823,15 @@ def collect_linux_extras(gandalf_artefact_destination, gandalf_host):
     """
     Linux persistence, login-record and history artefacts the system_artefacts walk
     misses (preload, PAM, sudoers.d, udev, generators, autostart, utmp/wtmp/btmp,
-    lastlog, web roots, extra shell histories).
+    lastlog, web roots, extra shell histories), and os-release for the distribution.
     """
     linux = os.path.join(gandalf_artefact_destination, "linux")
     seen = set()
+    # The distribution, as gandalf.sh takes it (etc+os-release, raw/os-release in Elrond); usually a
+    # symlink to /usr/lib/os-release, which take() would skip, so it's copied through the link here
+    for source in ("/etc/os-release", "/usr/lib/os-release"):
+        if _collect_one(source, os.path.join(gandalf_artefact_destination, "etc+os-release"), gandalf_host):
+            break
 
     def take(source, destination, limit=None):
         try:
