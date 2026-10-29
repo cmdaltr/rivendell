@@ -120,7 +120,7 @@ parser.add_argument(
     "--stackBaseline",
     nargs=1,
     metavar="FILE",
-    help="A baseline of clean hosts for stacking (Analysis on a case of two or more hosts writes stacking.csv); "
+    help="A baseline of clean hosts for stacking (Analysis on a case of two or more hosts writes stacking.csv; rarity needs three of an OS); "
     "values absent from it score higher. Build one with python3 -m rivendell.analysis.stacking --baseline OUT CASE...",
 )
 parser.add_argument(

@@ -45,6 +45,7 @@ def make_case(root: Path) -> Path:
                  wmi={"consumer_class": "CommandLineEventConsumer", "consumer_name": "Updater", "consumer_values": ["x"]})
     linux_host(case, "WEB01", autostart=[("tracker", "/usr/bin/tracker")])
     linux_host(case, "WEB02", modules=("ext4", "xfs", "diamorphine"), autostart=[("tracker", "/usr/bin/tracker")])
+    linux_host(case, "WEB03", autostart=[("tracker", "/usr/bin/tracker")])
     return case
 
 
@@ -62,7 +63,7 @@ def test_generated_names():
 def test_stacking_finds_the_seeded_values(tmp_path):
     case = make_case(tmp_path)
     totals = stack_case(str(case))
-    assert totals["hosts"] == 7
+    assert totals["hosts"] == 8
     rows = read(case / "stacking.csv")
     values = [r["Value"] for r in rows]
     # The generated name outranks a merely rare one; the rest are rare on their own
@@ -71,7 +72,7 @@ def test_stacking_finds_the_seeded_values(tmp_path):
     # Windows programs aren't rare for being absent from the Linux hosts, nor Linux modules from Windows
     assert not any(v in values for v in ("svchost.exe", "ext4", "tracker"))
     diamorphine = next(r for r in rows if r["Value"] == "diamorphine")
-    assert (diamorphine["Hosts With It"], diamorphine["Hosts In Case"], diamorphine["Hosts"]) == ("1", "2", "WEB02")
+    assert (diamorphine["Hosts With It"], diamorphine["Hosts In Case"], diamorphine["Hosts"]) == ("1", "3", "WEB02")
     assert precision_at_k(str(case / "stacking.csv"), ["a7f3k9qz2m", "updater", "diamorphine"], k=3) == 1.0
 
 
@@ -89,3 +90,43 @@ def test_baseline_and_single_host(tmp_path):
     single = tmp_path / "ONE"
     windows_host(single, "WS01")
     assert stack_case(str(single)) is None and not (single / "stacking.csv").exists()
+
+
+def test_two_hosts_of_an_os_are_a_diff_not_a_tail(tmp_path):
+    case = tmp_path / "PAIR"
+    linux_host(case, "UBUNTU", modules=("ext4", "overlay"))
+    linux_host(case, "ROCKY", modules=("ext4", "xfs"))
+    stack_case(str(case))
+    assert read(case / "stacking.csv") == []
+    baseline = tmp_path / "baseline.csv"
+    build_baseline([str(tmp_path / "PAIR")], str(baseline))
+    linux_host(case, "NEW", modules=("ext4", "diamorphine"))
+    stack_case(str(case), str(baseline))
+    rows = {r["Value"]: r["Reasons"] for r in read(case / "stacking.csv")}
+    assert rows["diamorphine"] == "rare, not in baseline"
+
+
+def systemd_host(case: Path, name: str, units, os_release: str = "") -> None:
+    services = case / name / "artefacts" / "cooked" / "services"
+    services.mkdir(parents=True)
+    for unit in units:
+        (services / f"{unit}.json").write_text("{}")
+    if os_release:
+        raw = case / name / "artefacts" / "raw" / "conf"
+        raw.mkdir(parents=True)
+        (raw / "etc+os-release").write_text(os_release)
+
+
+def test_linux_hosts_compared_within_their_distro(tmp_path):
+    case = tmp_path / "MIXED"
+    debian = ["apt-daily.service", "dpkg-db-backup.service", "cron.service", "ssh.service"]
+    systemd_host(case, "UB1", debian)
+    systemd_host(case, "UB2", debian)
+    systemd_host(case, "UB3", debian + ["lab-sync.service"])
+    # One RHEL host, known only from its os-release: its own units aren't rare among Debian ones
+    systemd_host(case, "ROCKY", ["crond.service", "sshd.service", "chronyd.service"],
+                 os_release='NAME="Rocky Linux"\nID="rocky"\nID_LIKE="rhel centos fedora"\n')
+    stack_case(str(case))
+    rows = read(case / "stacking.csv")
+    assert [(r["Value"], r["Family"], r["Hosts In Case"]) for r in rows] == \
+        [("lab-sync.service", "service (systemd), debian", "3")]

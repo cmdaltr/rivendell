@@ -15,7 +15,11 @@ that is the sum of named features, so every row says why it's there:
 A family is compared across the hosts of its operating system (a host's OS is that of the
 families it has values in), so a Windows host's processes aren't rare because the case also holds
 a Linux host, while a WMI consumer on one of five Windows hosts is, even when the other four have
-none. With fewer than two hosts of that OS, the family isn't stacked.
+none. Linux hosts are compared within their distribution family (Debian, RHEL, SUSE, Arch, Alpine),
+from a collected os-release or, failing that, the distro's fingerprints in what was collected:
+otherwise a lone Rocky host among Ubuntu ones makes every unit of its distro rare. Its rows say
+which family they were compared in. With fewer than MIN_HOSTS hosts of that OS nothing in the family is called rare: on two
+hosts, "on one of them" is a diff of their builds, not a long tail. A baseline still applies.
 
 A score is a lead, never a verdict: nothing here tags a technique. Stacking needs two or more
 hosts; with one, stack_case returns None and writes nothing.
@@ -39,6 +43,7 @@ MAX_JSON_BYTES = 256 << 20
 MAX_ROWS = 2000
 USER_PATH = re.compile(r"(?i)(?:\\users\\|\\appdata\\|\\temp\\|\\programdata\\|^/tmp/|^/dev/shm/|^/home/|^/var/tmp/|"
                        r"/users/[^/]+/(?:downloads|desktop|library/caches)/)")
+MIN_HOSTS = 3  # hosts of an OS before a value on few of them counts as rare
 WEIGHTS = {"rare": 2.0, "user path": 1.5, "generated name": 1.0, "not in baseline": 1.0}
 VOWELS = set("aeiouy")
 FAMILY_OS = {"process": "windows", "parent > child": "windows", "scheduled task": "windows",
@@ -47,6 +52,18 @@ FAMILY_OS = {"process": "windows", "parent > child": "windows", "scheduled task"
              "autorun (macOS)": "macos"}
 
 Value = Tuple[str, str, str]  # (family, value, example)
+
+# Fingerprints of a distribution family, looked for in a host's raw file names and its values
+DISTRO_MARKERS = {
+    "debian": ("apt-daily", "dpkg-db-backup", "etc+bash.bashrc", "etc+apt+", "unattended-upgrades"),
+    "rhel": ("dnf-makecache", "rpmdb-rebuild", "etc+bashrc", "etc+yum", "etc+dnf+", "crond.service"),
+    "suse": ("zypper", "etc+zypp+"),
+    "arch": ("pacman", "etc+pacman"),
+    "alpine": ("etc+apk+", "openrc"),
+}
+OS_RELEASE_FAMILY = {"debian": "debian", "ubuntu": "debian", "rhel": "rhel", "fedora": "rhel", "centos": "rhel",
+                     "rocky": "rhel", "almalinux": "rhel", "ol": "rhel", "amzn": "rhel", "suse": "suse",
+                     "opensuse": "suse", "sles": "suse", "arch": "arch", "alpine": "alpine"}
 
 
 def _json_records(path: str) -> Iterator[dict]:
@@ -208,6 +225,36 @@ def host_values(host_dir: str) -> Dict[Tuple[str, str], Tuple[str, str]]:
     return found
 
 
+def _os_release_family(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            fields = dict(line.strip().split("=", 1) for line in fh if "=" in line)
+    except OSError:
+        return ""
+    for name in [fields.get("ID", "")] + fields.get("ID_LIKE", "").split():
+        family = OS_RELEASE_FAMILY.get(name.strip('"').lower())
+        if family:
+            return family
+    return ""
+
+
+def linux_distro(host_dir: str, values: Iterable[Tuple[str, str]]) -> str:
+    """A Linux host's distribution family: from os-release when one was collected, else the family
+    whose fingerprints are most present; '' when nothing says."""
+    names = []
+    for root, _, files in os.walk(os.path.join(host_dir, "artefacts", "raw")):
+        for name in files:
+            if name.endswith("os-release"):
+                family = _os_release_family(os.path.join(root, name))
+                if family:
+                    return family
+            names.append(name.lower())
+    text = " ".join(names + [value for _, value in values])
+    hits = {family: sum(marker in text for marker in markers) for family, markers in DISTRO_MARKERS.items()}
+    best = max(hits, key=lambda family: hits[family])
+    return best if hits[best] else ""
+
+
 def entropy(text: str) -> float:
     if not text:
         return 0.0
@@ -252,27 +299,34 @@ def hosts(output_directory: str) -> List[str]:
 
 
 def stack(per_host: Dict[str, Dict[Tuple[str, str], Tuple[str, str]]],
-          baseline: Optional[Set[Tuple[str, str]]] = None) -> List[Dict[str, str]]:
-    """Ranked rows for every value that's rare across the hosts (or new against the baseline)."""
-    on: Dict[Tuple[str, str], List[str]] = defaultdict(list)
+          baseline: Optional[Set[Tuple[str, str]]] = None,
+          distros: Optional[Dict[str, str]] = None) -> List[Dict[str, str]]:
+    """Ranked rows for every value that's rare across the hosts (or new against the baseline).
+    distros ({host: distribution family}) splits the Linux hosts into one comparison per family."""
+    def group(host: str, family: str) -> str:
+        os_name = FAMILY_OS[family]
+        return f"{os_name}:{distros[host]}" if os_name == "linux" and distros and distros.get(host) else os_name
+
+    on: Dict[Tuple[str, str, str], List[str]] = defaultdict(list)
     of_os: Dict[str, Set[str]] = defaultdict(set)
     for host, values in per_host.items():
         for family, value in values:
-            on[(family, value)].append(host)
-            of_os[FAMILY_OS[family]].add(host)
+            on[(group(host, family), family, value)].append(host)
+            of_os[group(host, family)].add(host)
     rows = []
-    for (family, value), with_it in on.items():
-        total = len(of_os[FAMILY_OS[family]])
-        if total < 2 and baseline is None:
+    for (compared, family, value), with_it in on.items():
+        total = len(of_os[compared])
+        if total < MIN_HOSTS and baseline is None:
             continue
         why = reasons(family, value, len(with_it), total, baseline)
-        if total < 2:
+        if total < MIN_HOSTS:
             why = [r for r in why if r != "rare"]
         if "rare" not in why and "not in baseline" not in why:
             continue
         artefact, example = per_host[with_it[0]][(family, value)]
         score = sum(WEIGHTS[r] for r in why)
-        rows.append({"Score": f"{score:.1f}", "Family": family, "Value": value, "Hosts With It": str(len(with_it)),
+        shown = f"{family}, {compared.split(':')[1]}" if ":" in compared else family
+        rows.append({"Score": f"{score:.1f}", "Family": shown, "Value": value, "Hosts With It": str(len(with_it)),
                      "Hosts In Case": str(total), "Hosts": "; ".join(sorted(with_it)[:10]), "Reasons": ", ".join(why),
                      "Artefact": artefact, "Example": example})
     rows.sort(key=lambda r: (-float(r["Score"]), int(r["Hosts With It"]), r["Family"], r["Value"]))
@@ -305,8 +359,10 @@ def stack_case(output_directory: str, baseline_path: str = "") -> Optional[Dict[
     if len(host_dirs) < 2:
         return None
     per_host = {os.path.basename(h): host_values(h) for h in host_dirs}
+    distros = {os.path.basename(h): linux_distro(h, per_host[os.path.basename(h)]) for h in host_dirs
+               if any(FAMILY_OS[family] == "linux" for family, _ in per_host[os.path.basename(h)])}
     baseline = read_baseline(baseline_path) if baseline_path else None
-    rows = stack(per_host, baseline)
+    rows = stack(per_host, baseline, distros)
     with open(os.path.join(output_directory, "stacking.csv"), "w", newline="", encoding="utf-8") as out:
         writer = csv.DictWriter(out, fieldnames=HEADER)
         writer.writeheader()

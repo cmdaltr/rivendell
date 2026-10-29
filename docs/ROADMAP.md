@@ -80,7 +80,7 @@ Container forensics goes first because half of it is written. ML goes last becau
 
 "ML-based" is easy to oversell. This plan builds the frequency analysis practitioners already trust first, then features, then a model, and measures each step against the lab before it ships.
 
-**Built: Phases 1, 2 and 4.** The code is `src/analysis/rivendell/analysis/stacking.py`, stdlib only. `--Analysis` runs it on any case with two or more hosts.
+**Built: Phases 1, 2 and 4.** The code is `src/analysis/rivendell/analysis/stacking.py`, stdlib only. `--Analysis` runs it on any case with two or more hosts; a value is only called rare among three or more hosts of its OS (`MIN_HOSTS`), since on two, "on one of them" is a diff of their builds. A baseline still applies below that. Linux hosts are compared within their distribution family (Debian, RHEL, SUSE, Arch, Alpine), from os-release or the distro's fingerprints, so a lone Rocky host among Ubuntu ones doesn't make its whole distro rare.
 
 - **Stacking.** For each host, it collects the values the host has in each family:
   - processes (Prefetch, Amcache, 4688, Sysmon 1);
@@ -100,14 +100,15 @@ Container forensics goes first because half of it is written. ML goes last becau
 
   "Generated name" looks at shape: few vowels, a long consonant run, digits and letters interleaved, or long hex. Entropy alone flagged every long English compound (`backgroundtaskhost.exe`) on the demo case.
 - **Baseline.** `python3 -m rivendell.analysis.stacking --baseline OUT CASE...` (from `src/analysis`) writes every value from clean cases. `--stackBaseline OUT` then scores what's absent from it, and with a baseline even a one-OS-host family is scored. It stays a lab-built, local file.
-- **Measurement.** `precision_at_k(stacking.csv, seeded values, k)` is the lab's yardstick. `tests/unit/test_stacking.py` seeds a seven-host case (five Windows, two Linux) and requires the seeded values in the top three.
+- **Measurement.** `precision_at_k(stacking.csv, seeded values, k)` is the lab's yardstick. `tests/unit/test_stacking.py` seeds an eight-host case (five Windows, three Linux) and requires the seeded values in the top three, plus a mixed-distro case.
+- **In the lab (29 October 2026).** `./lab.sh linux-targets stacking` adds two clean Ubuntu targets to the seeded `lab-ubuntu` and `lab-rocky`. Over all four as one case, stacking returned four rows, every one planted on `lab-ubuntu` (`lab-sync.service`, `lab-agent.service` system and user, the `lab updater` autostart): precision@3 of 1.0, no noise. Before Linux hosts were grouped by distro, the same case gave twenty rows, all Rocky's own units.
 - **On real data.** Across the two Windows images in `claude_testing`, the two hosts differ in almost everything, which shows how little two hosts give. The list still surfaced `bcwipe service` on the nfury Windows 7 image, a disk wiper.
 
 **Still to do.**
-- **Evaluate in the lab.** Run Elrond over the seeded lab hosts as one case and report precision at 20 per release. Signed or unsigned, and time of day against the host's logons, aren't features yet, because the cooked artefacts don't carry signatures and logon patterns need a per-host model of their own.
-- **Phase 3, the isolation forest.** It waits on adding `scikit-learn` to the worker image, which is still to be decided.
+- **Evaluate in the lab per release.** The lab run above is the method; report precision at 20 each release, and add Windows hosts (one seeded among clean ones) when the lab has them. Signed or unsigned, and time of day against the host's logons, aren't features yet, because the cooked artefacts don't carry signatures and logon patterns need a per-host model of their own.
+- **Phase 3, the isolation forest: decision deferred (Ben, 29 October 2026).** It would score how unusual each host's values are, not only how many hosts have them, catching what counting can't, such as a process every host runs but with an odd parent or command line on one. Against: `scikit-learn` (with numpy and scipy, about 30–40 MB) in the worker image, which the dependency rule needs agreed, and a score that's harder to explain than stacking's named reasons. Stacking found every plant with no noise on the lab case, so there's nothing yet for a forest to improve on. **Revisit when** a lab or real case has something planted that stacking misses (an odd parent or command line on a common process is the likely first one); measure the forest against stacking on that case with `precision_at_k` before adding the dependency.
 - **Eru's "What's rare in this case?"** is held back, as the plan says, until the lab numbers hold up. Until then `stacking.csv` is in the case browser.
 
 ## Decisions needed
 
-- `scikit-learn` in the worker image, for Phase 3 of anomaly detection.
+- `scikit-learn` in the worker image, for Phase 3 of anomaly detection: deferred on 29 October 2026 until stacking misses something (see Phase 3 above for what would reopen it).
