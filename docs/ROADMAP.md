@@ -116,7 +116,6 @@ What's left after the four features above were built, tested in the lab and docu
 | Item | What it needs |
 |---|---|
 | Video sections for stacking and container forensics | Narration to draft and approve, then a section each in the walkthrough's `scenes.py` (local, git-ignored; `scripts/docs/video/README.md`). The case browser and Pippin sections are done. |
-| Guide photograph of job sharing | The Job page's Sharing section exists only in server mode, so it has to be photographed against a server-mode install (`capture.py --url <server> --username admin --only job`). Every other guide section now has its photograph. |
 | Stacking on Windows in the lab | One seeded Windows host among clean ones, as the Linux targets now do, to measure precision on Windows families (processes, services, WMI). Needs clean Windows VMs. |
 
 ## Decisions needed

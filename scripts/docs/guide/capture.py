@@ -91,6 +91,26 @@ def prepare(page, page_id: str) -> None:
                       "(document.querySelector(\"[data-guide='case.hosts']\"))")
 
 
+TEAM = [{"username": "admin"}, {"username": "alice", "full_name": "Alice Brandybuck"},
+        {"username": "bob", "full_name": "Bob Took"}]
+
+
+def as_team_server(page, job_id: str, on: bool) -> None:
+    """Show the Job page as a team server would, with its Access panel.
+
+    The panel only appears in server mode, so the auth config, the job's sharing and the user
+    directory are answered here rather than restarting the backend with invented users.
+    """
+    routes = {
+        "**/api/auth/config": lambda route: route.fulfill(json={**route.fetch().json(), "server_mode": True}),
+        f"**/api/jobs/{job_id}/sharing": lambda route: route.fulfill(
+            json={"owner": "admin", "shared_with": ["alice"], "can_manage": True}),
+        "**/api/auth/directory": lambda route: route.fulfill(json=TEAM),
+    }
+    for pattern, handler in routes.items():
+        page.route(pattern, handler) if on else page.unroute(pattern)
+
+
 def capture(args: argparse.Namespace) -> None:
     from playwright.sync_api import sync_playwright
 
@@ -128,6 +148,8 @@ def capture(args: argparse.Namespace) -> None:
                     print(f"  {page_id}: no jobs yet, skipped")
                     continue
                 route = route.replace(":first", job_id)
+            if page_id == "job":
+                as_team_server(page, job_id, True)
             page.goto(f"{args.url}{route}", wait_until="networkidle")
             page.wait_for_timeout(1500)
             prepare(page, page_id)
@@ -142,6 +164,8 @@ def capture(args: argparse.Namespace) -> None:
                 }
                 return out;
             }""", sections)
+            if page_id == "job":
+                as_team_server(page, job_id, False)
             if not found or len(found) < len(earlier.get(page_id, {}).get("boxes", {})):
                 print(f"  {page_id}: {len(found)} sections on the page now, fewer than before: kept the earlier photograph")
                 continue
