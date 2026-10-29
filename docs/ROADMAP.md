@@ -18,15 +18,15 @@ Container forensics goes first because half of it is written. ML goes last becau
 - **Collection.** All three collectors take the same set: `gandalf.sh`, `gandalf.py`, and Elrond's image collection in `collect/linux.py`. It covers:
   - each Docker container's `config.v2.json`, `hostconfig.json` and log;
   - static pod manifests, pod logs and the API server's audit log.
-- **The writable layer.** Each container's writable layer is listed with hashes, not copied, as `gandalf+container_changes.csv`. That makes the change set the container version of misplaced binaries, without the tens of gigabytes of image layers that `gandalf.py` used to risk.
+- **The writable layer.** Each container's writable layer is listed with hashes as `gandalf+container_changes.csv`, and the executables and scripts in it are copied (up to 500 per container, 64 MB each) into `container_layer/<id>/`, where Elrond reads them as staged files. That makes the change set the container version of misplaced binaries, without the tens of gigabytes of image layers that `gandalf.py` used to risk.
 - **Parsing.** `process/extractions/containers.py` and `k8s_audit.py`, routed from `linux_artefacts.py`.
 - **Techniques.** A technique is tagged only where a row justifies it. A container is tagged for what it can reach, not for existing; a Kubernetes component doing its job is never a finding.
 - **Exported audit logs.** `python3 -m src.analysis.rivendell.cloud.cli k8s analyze-logs` handles audit logs exported from EKS, AKS or GKE.
 - **The lab.** The Linux targets seed a Docker host's and a Kubernetes node's state on disk (`lab/linux-targets/seed/seed-containers.sh`), with the expected results in their `expected.json`. `tests/unit/test_containers.py` runs that seed through collection and processing.
 
 **Still to do.**
-- **The bash collector against the seed.** `gandalf.py`'s copy of the container lists ran against the rebuilt targets on 29 October (the containers video section shows its output); `gandalf.sh`'s hasn't yet.
-- **containerd's own metadata** (`/var/lib/containerd`, a bbolt database) isn't parsed. On a containerd or CRI-O node, the pod logs, static pods and audit log are covered, but per-container settings come only from Docker.
+- **The bash collector against the seed.** `gandalf.py`'s copy of the container lists ran against the rebuilt targets on 29 October (the containers video section shows its output). `gandalf.sh` collected the seed the same day, layer copy included; Elrond and `verify-expected.py` over its result haven't run yet.
+- **containerd's own metadata** (`/var/lib/containerd`, a bbolt database) is collected by all three collectors since 29 October, with Podman/CRI-O's `containers.json`, but isn't parsed yet. On a containerd or CRI-O node, the pod logs, static pods and audit log are covered, but per-container settings come only from Docker.
 - **Live container capture** (`docker export`, CRIU checkpoints) stays out of scope. It changes the running state, so if it's ever added it must be an explicit opt-in, recorded in the audit log.
 
 ## Threat intelligence integration
@@ -112,16 +112,16 @@ Container forensics goes first because half of it is written. ML goes last becau
 
 ## Plan for what's left (29 October 2026)
 
-Each feature's "Still to do" above, as work to schedule, then the Eru MCP server. Sizes are for one person with the lab to hand. Nothing here is started; the decisions at the end come first where an item depends on one.
+Each feature's "Still to do" above, as work to schedule, then the Eru MCP server. Sizes are for one person with the lab to hand. Nothing here is started; the decisions at the end are made.
 
 ### Container forensics
 
 1. **The bash collector against the seed** (an hour). `./lab.sh linux-targets reset`, `./lab.sh gandalf-collect bash`, Elrond over the result, then `lab/verify-expected.py` against each target's `expected.json`. Done when `docker_containers.csv`, `container_changes.csv`, `static_pods.csv` and `k8s_audit.csv` match for `gandalf.sh` as they already do for `gandalf.py`.
 2. **containerd's metadata** (two to three days). On a containerd or CRI-O node, per-container settings (image, mounts, privileges, namespaces) live in `/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db`, a bbolt database.
-   - Collect `meta.db` in all three collectors, read-only, beside the Docker files.
+   - Collect `meta.db` in all three collectors, read-only, beside the Docker files. Done 29 October.
    - Parse it into the existing `docker_containers.csv` columns, adding a `Runtime` column (`docker`, `containerd`) so one table covers both; the technique rules then apply unchanged.
    - Seed a containerd-only node in the lab (`ctr` with a privileged container) with its rows in `expected.json`, and a unit test from that seed.
-   - Decision 2 below: how to read bbolt.
+   - Read bbolt with a stdlib reader in `process/extractions/` (decision 2). The container records inside are protobuf, decoded by hand either way, so the `bbolt` CLI would only save the page walking.
 3. **Live capture** stays out of scope, as recorded above. No work planned.
 
 ### Threat intelligence
@@ -130,7 +130,7 @@ Each feature's "Still to do" above, as work to schedule, then the Eru MCP server
    - STIX imports fill it from `valid_until` and `confidence`; other sources get a default lifetime per kind (90 days for IPs and domains, as Archer does; none for hashes and tool names).
    - Matching skips expired indicators and says how many it skipped; Pippin shows the expiry and lets an admin extend or clear it.
    - Tests: an expired STIX indicator doesn't match; a refreshed import revives it.
-   - Decision 3 below.
+   - Agreed (decision 3).
 2. **Online lookups** stay out until the threat model's review of Eru's outbound access. If that review approves them, the shape is: one provider interface, keys only in `.env`, off by default and switched on per case, every lookup in the case's audit log, and nothing sent from `raw/`.
 
 ### Collaborative investigation
@@ -172,7 +172,7 @@ The March 2026 prototype ("Building an MCP") kept its own case folders, ran its 
 
 The server's instructions: start from a job id; cite file and row for every claim; a stacking row or a threat intelligence match is a lead, not a verdict.
 
-**Phase 2: writing leads** (a day, after review). `flag_lead` (a lead on a cited row, never a confirmed finding: confirming stays with an analyst) and `add_note`. Each write lands in `case_activity` as "Eru (for <user>)". Decision 4 below.
+**Phase 2: writing leads** (a day, after review). `flag_lead` (a lead on a cited row, never a confirmed finding: confirming stays with an analyst) and `add_note`. Each write lands in `case_activity` as "Eru (for <user>)". Deferred (decision 4).
 
 **Never exposed:** starting, restarting or deleting jobs, Gandalf acquisition, importing or deleting threat intelligence, and anything under `raw/`.
 
@@ -188,9 +188,9 @@ The server's instructions: start from a job id; cite file and row for every clai
 
 The small items first: restart warning, assignees, "What's rare?", bash collector, lab evaluation command (about three days together). Then the MCP server's phase 1, then flagging from Eru answers (it uses the server's row citations), then threat intelligence expiry, then containerd, then the MCP server's phase 2 after its review.
 
-## Decisions needed
+## Decisions (Ben, 29 October 2026)
 
-1. **The `mcp` package** for the Eru MCP server. It would sit in its own `requirements/mcp.txt`, installed only where the server runs, not in the worker or backend images.
-2. **Reading containerd's bbolt database.** A stdlib reader in `process/extractions/` (read-only page walking; no new dependency, a few hundred lines) or the `bbolt` command-line tool as a forensic tool definition, called as a subprocess like the others. The subprocess is the project's usual boundary; the stdlib reader needs nothing installed.
-3. **Threat intelligence expiry** in a side table and migration, leaving the ten columns alone.
-4. **The MCP server's phase 2**, letting Eru flag leads and add notes, or keep it read-only.
+1. **The `mcp` package: yes,** in its own `requirements/mcp.txt`, installed only where the MCP server runs, not in the worker or backend images.
+2. **containerd's bbolt database: a stdlib reader** in `process/extractions/`, read-only, no new dependency. The records inside are protobuf and need decoding by hand whichever way the file is read.
+3. **Threat intelligence expiry: yes,** as the `threat_intel_validity` side table and an Alembic migration; the ten columns stay as they are.
+4. **The MCP server's phase 2: deferred.** Phase 1 ships read-only; flagging leads and adding notes are decided once phase 1 has been used.

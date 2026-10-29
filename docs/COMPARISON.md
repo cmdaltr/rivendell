@@ -66,7 +66,7 @@ It isn't a replacement for a forensic suite when the job is reviewing one device
 
 **Stacking that explains itself.** Rare processes, services, tasks, autoruns, WMI consumers and kernel modules across hosts, each row with its reasons. Hosts are compared only with the same operating system, Linux hosts only with the same distribution family, nothing counts as rare on fewer than three, and at equal score persistence ranks above programs.
 
-**Containers and Kubernetes from the disk.** Container configurations, the writable layer (listed and hashed), static pods and the API server's audit log, from a disk image or a collection, mapped to the container techniques such as **T1611** and **T1609**. Dissect also opens a disk image's Docker containers as evidence of their own; none of the tools above documents reading Kubernetes static pods or the audit log from dead-box evidence, or mapping either to ATT&CK.
+**Containers and Kubernetes from the disk.** Container configurations, the writable layer (listed and hashed, its executables copied), static pods and the API server's audit log, from a disk image or a collection, mapped to the container techniques such as **T1611** and **T1609**. Dissect also opens a disk image's Docker containers as evidence of their own; none of the tools above documents reading Kubernetes static pods or the audit log from dead-box evidence, or mapping either to ATT&CK.
 
 **Integrity checked at both ends.** Gandalf collects in order of volatility and hashes everything with SHA-256 into `log.meta`; Elrond re-checks every hash on arrival before it parses anything.
 

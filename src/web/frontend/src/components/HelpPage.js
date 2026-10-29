@@ -542,8 +542,8 @@ python3 -m rivendell.mitre.dashboard -o /output`}
 
           <h4>Container Forensics</h4>
           <p>
-            Gandalf and Elrond collect a Docker host's containers (configuration, mounts, logs and a hashed
-            listing of each writable layer) and a Kubernetes node's static pods, pod logs and audit log.
+            Gandalf and Elrond collect a Docker host's containers (configuration, mounts, logs, a hashed
+            listing of each writable layer and copies of the executables in it) and a Kubernetes node's static pods, pod logs and audit log.
             Containers are tagged for what they can reach, such as the host's root or the Docker socket.
           </p>
           <pre className="code-block">

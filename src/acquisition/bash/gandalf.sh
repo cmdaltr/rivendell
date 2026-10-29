@@ -352,6 +352,7 @@ MAP
     collect_directory "/etc/systemd" "${acq_dir}/artefacts/conf" "$hostname" "$audit_log" "$meta_log" || true
 
     collect_linux_extras "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_container_layers "$acq_dir" "$hostname" "$audit_log" "$meta_log"
 
     # User directories (limited to key files)
     for user_home in /home/* /root; do
@@ -386,7 +387,9 @@ collect_linux_extras() {
 
     for source in /etc/ld.so.preload /etc/ld.so.conf /etc/environment /etc/profile /etc/bash.bashrc \
         /etc/bashrc /etc/rc.local /etc/sudoers /run/utmp /var/run/utmp /var/log/wtmp /var/log/btmp \
-        /var/log/lastlog /var/log/faillog /var/lib/wtmpdb/wtmp.db /var/lib/lastlog/lastlog2.db; do
+        /var/log/lastlog /var/log/faillog /var/lib/wtmpdb/wtmp.db /var/lib/lastlog/lastlog2.db \
+        /var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db \
+        /var/lib/containers/storage/overlay-containers/containers.json; do
         take "$source" "$(flat "$source")" 67108864
     done
     # directory|depth|largest file|file name suffix (empty: any)
@@ -523,6 +526,65 @@ collect_linux_volatile_files() {
         printf 'Container,Path,Size,Mode,Kind,SHA256,MTime\n%s' "$rows" > "$listing"
         log_audit "$audit_log" "$hostname" "container writable layers"
     fi
+}
+
+# The executables and scripts each container gained since its image, into
+# container_layer/<id>/ with '/' as '+': at most 500 per container, each up to 64 MB
+collect_container_layers() {
+    local acq_dir="$1" hostname="$2" audit_log="$3" meta_log="$4"
+    local docker=/var/lib/docker cid mount_id upper taken head source inside
+    for cid in $(ls "$docker/containers" 2>/dev/null); do
+        mount_id=$(cat "$docker/image/overlay2/layerdb/mounts/$cid/mount-id" 2>/dev/null) || continue
+        upper="$docker/overlay2/$mount_id/diff"
+        [ -d "$upper" ] || continue
+        taken=0
+        while IFS= read -r -d '' source; do
+            [ "$taken" -lt 500 ] || break
+            head=$(head -c 4 "$source" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+            [ "$head" = "7f454c46" ] || [ "${head:0:4}" = "2321" ] || [ -x "$source" ] || continue
+            inside="${source#"$upper"/}"
+            if collect_file "$source" "${acq_dir}/artefacts/container_layer/${cid:0:12}/$(printf '%s' "$inside" | tr '/' '+')" \
+                "$hostname" "$meta_log"; then
+                log_audit "$audit_log" "$hostname" "$source"
+                taken=$((taken + 1))
+            fi
+        done < <(find "$upper" -mindepth 1 -maxdepth 12 -type f -size -65537k -print0 2>/dev/null)
+    done
+}
+
+# The raw unified-log store (uuidtext first, then tracev3 newest first) up to
+# GANDALF_UNIFIED_LOG_STORE_MAX bytes (default 2 GB; 0 turns it off), layout kept under
+# unified_log_store/; Spotlight's index stores up to GANDALF_SPOTLIGHT_MAX bytes each
+# (default 1 GB; 0 turns it off), into spotlight/
+collect_macos_stores() {
+    local acq_dir="$1" hostname="$2" audit_log="$3" meta_log="$4"
+    local a="${acq_dir}/artefacts" budget="${GANDALF_UNIFIED_LOG_STORE_MAX:-2147483648}"
+    local limit="${GANDALF_SPOTLIGHT_MAX:-1073741824}" top label source size top_spot
+    for top in /private/var/db/uuidtext /private/var/db/diagnostics; do
+        [ "$budget" -gt 0 ] && [ -d "$top" ] || continue
+        label=$(basename "$top")
+        while IFS= read -r source; do
+            size=$(stat -f '%z' "$source" 2>/dev/null || stat -c '%s' "$source" 2>/dev/null || echo 0)
+            [ "$size" -le "$budget" ] || continue
+            if collect_file "$source" "${a}/unified_log_store/${label}/${source#"$top"/}" "$hostname" "$meta_log"; then
+                log_audit "$audit_log" "$hostname" "$source"
+                budget=$((budget - size))
+            fi
+        done < <(find "$top" -maxdepth 4 -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null)
+    done
+    for top_spot in /System/Volumes/Data/.Spotlight-V100 /.Spotlight-V100; do
+        [ "$limit" -gt 0 ] && [ -d "$top_spot" ] || continue
+        while IFS= read -r -d '' source; do
+            size=$(stat -f '%z' "$source" 2>/dev/null || stat -c '%s' "$source" 2>/dev/null || echo 0)
+            [ "$size" -le "$limit" ] || continue
+            if collect_file "$source" "${a}/spotlight/$(printf '%s' "${source#"$top_spot"/}" | tr '/' '+')" \
+                "$hostname" "$meta_log"; then
+                log_audit "$audit_log" "$hostname" "$source"
+            fi
+        done < <(find "$top_spot" -maxdepth 3 -type f \( -name store.db -o -name .store.db \
+            -o -name VolumeConfiguration.plist \) -print0 2>/dev/null)
+        break
+    done
 }
 
 # SHA-256 of every collected file, by its path in the archive, once everything is
@@ -863,6 +925,7 @@ MAP
     done
 
     collect_macos_extras "$acq_dir" "$hostname" "$audit_log" "$meta_log"
+    collect_macos_stores "$acq_dir" "$hostname" "$audit_log" "$meta_log"
 }
 
 collect_macos_user_artifacts() {
