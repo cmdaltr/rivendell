@@ -359,6 +359,16 @@ collect() {
   rm -rf "${dest:?}/$host"
   mv "$tmp/$host" "$dest/"
   rmdir "$tmp" 2>/dev/null || true
+  # A file can go missing on the way (G36): fetch whatever the VM has that didn't arrive
+  local name missing=""
+  for name in $(ssh_vm "Get-ChildItem -Name -File C:\\lab\\acquisitions\\powershell_collection\\acquisitions\\$host" | tr -d '\r' | grep -E '^[A-Za-z0-9._+-]+$'); do
+    [ -e "$dest/$host/$name" ] && continue
+    warn "$name didn't arrive; fetching it again"
+    LAB_SSH_PASSWORD="$LAB_PASSWORD" expect "$SSH" pull gandalf 127.0.0.1 "$PORT" \
+      "C:/lab/acquisitions/powershell_collection/acquisitions/$host/$name" "$dest/$host/" >/dev/null || true
+    [ -e "$dest/$host/$name" ] || missing="$missing $name"
+  done
+  [ -z "$missing" ] || warn "Still missing from $dest/$host:$missing (copy them from the VM by hand)"
   ok "Windows acquisition: $dest/$host"
 }
 
