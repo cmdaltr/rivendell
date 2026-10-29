@@ -477,6 +477,7 @@ Work a case together from **Browse Case** on a completed job, on one machine or 
 - **[CLI Reference](docs/CLI.md)** - Every command, including common workflows
 - **[Requirements](docs/REQUIREMENTS.md)** - Installation requirements and dependencies
 - **[Performance](docs/PERFORMANCE.md)** - How long each option takes
+- **[How Rivendell compares](docs/COMPARISON.md)** - Against free and commercial DFIR tools, feature by feature
 
 ### User Documentation
 - **[Configuration](docs/CONFIG.md)** - Configuration options
